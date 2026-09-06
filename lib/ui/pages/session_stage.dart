@@ -99,8 +99,9 @@ class _SessionStageState extends State<SessionStage>
     // 的构造和前台服务启动都压在 Android 主线程上，一次上百毫秒，
     // 塞进转场里必然掉帧。等动画落位再开。
     _stage.forward(from: 0.0).whenComplete(() {
-      if (mounted && !_leaving && identical(_session, session))
+      if (mounted && !_leaving && identical(_session, session)) {
         session.startAudio();
+      }
     });
   }
 

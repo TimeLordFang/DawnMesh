@@ -28,10 +28,10 @@ void main() {
       scanChannel,
       'host.msknet.sunsetripple/ble_l2cap_data',
     ]) {
-      messenger.setMockMethodCallHandler(
-        MethodChannel(name),
-        (call) async { calls.add(call); return null; },
-      );
+      messenger.setMockMethodCallHandler(MethodChannel(name), (call) async {
+        calls.add(call);
+        return null;
+      });
     }
   });
   tearDown(() async {
@@ -48,8 +48,16 @@ void main() {
   Future<void> pumpUntil(WidgetTester tester, bool Function() ready) async {
     for (var i = 0; i < 100 && !ready(); i++) {
       await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
     }
-    expect(ready(), isTrue, reason: 'asynchronous BLE operation must complete: ${calls.map((c) => c.method)}');
+    expect(
+      ready(),
+      isTrue,
+      reason:
+          'asynchronous BLE operation must complete: ${calls.map((c) => c.method)}',
+    );
   }
 
   Future<void> showHome(WidgetTester tester) async {
@@ -114,7 +122,10 @@ void main() {
     await showHome(tester);
     await tester.tap(find.text('Start Bluetooth Talk'));
     await tester.pump();
-    await pumpUntil(tester, () => find.textContaining('蓝牙广播未能开启').evaluate().isNotEmpty);
+    await pumpUntil(
+      tester,
+      () => find.textContaining('蓝牙广播未能开启').evaluate().isNotEmpty,
+    );
     expect(calls.any((c) => c.method == 'startAdvertising'), isTrue);
     expect(entered, isNull);
     expect(find.textContaining('蓝牙广播未能开启'), findsOneWidget);

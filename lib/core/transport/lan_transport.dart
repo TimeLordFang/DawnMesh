@@ -227,8 +227,9 @@ class LanTransport implements RoomTransport {
           if (frame.type == FrameType.roster ||
               frame.type == FrameType.hostHandover ||
               frame.type == FrameType.hostAnnounce ||
-              frame.type == FrameType.chatSync)
+              frame.type == FrameType.chatSync) {
             continue;
+          }
           _relayControl(frame, exclude: socket);
           _deliver(frame);
         }
@@ -360,8 +361,9 @@ class LanTransport implements RoomTransport {
       return;
     }
 
-    if (frame.type != FrameType.audio && frame.type != FrameType.heartbeat)
+    if (frame.type != FrameType.audio && frame.type != FrameType.heartbeat) {
       return;
+    }
 
     if (_role == TransportRole.client) {
       if (datagram.port != audioPort) return;

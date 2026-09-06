@@ -250,8 +250,9 @@ class RoomSession {
         final opened = await secureCodec!.open(frame);
         if (opened.type == FrameType.sealed ||
             opened.type == FrameType.handshakeHello ||
-            opened.type == FrameType.handshakeConfirm)
+            opened.type == FrameType.handshakeConfirm) {
           return;
+        }
         await _dispatchIncomingFrame(opened);
       } catch (e) {
         AppLog.error('RoomSession', '解封加密帧失败，可能为伪造或重放帧', e);
@@ -1331,7 +1332,11 @@ class RoomSession {
   /// 原来是同步调用 `leave()` 之后立刻 close 三个 controller：`leave()` 跑到
   /// 第一个 await（stopCapture）就挂起了，等它恢复执行时再去 `_updateState`
   /// 和 `_notifyMembers`，写的已经是关掉的 controller，直接抛 StateError。
-  Future<void> dispose() async {
+  Future<void>? _disposeFuture;
+
+  Future<void> dispose() => _disposeFuture ??= _dispose();
+
+  Future<void> _dispose() async {
     await leave();
     await transport?.dispose();
     transport = null;

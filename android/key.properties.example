@@ -1,0 +1,5 @@
+# storeFile relative to android/app; DO NOT COMMIT key.properties or keystore.
+storeFile=../keystore/dawnmesh.jks
+storePassword=REPLACE_LOCALLY
+keyAlias=dawnmesh
+keyPassword=REPLACE_LOCALLY
