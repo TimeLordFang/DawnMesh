@@ -65,6 +65,7 @@ class _SessionStageState extends State<SessionStage>
   late final AudioIo _audioIo;
 
   RoomSession? _session;
+  bool _leaving = false;
   String _roomName = "";
 
   @override
@@ -81,6 +82,7 @@ class _SessionStageState extends State<SessionStage>
 
   @override
   void dispose() {
+    unawaited(_session?.dispose());
     _stage.dispose();
     super.dispose();
   }
@@ -97,22 +99,26 @@ class _SessionStageState extends State<SessionStage>
     // 的构造和前台服务启动都压在 Android 主线程上，一次上百毫秒，
     // 塞进转场里必然掉帧。等动画落位再开。
     _stage.forward(from: 0.0).whenComplete(() {
-      if (mounted) session.startAudio();
+      if (mounted && !_leaving && identical(_session, session))
+        session.startAudio();
     });
   }
 
   void _onLeaveRoom() {
     final session = _session;
-    if (session == null) return;
+    if (session == null || _leaving) return;
+    _leaving = true;
 
     // 点了就走：退场动画立刻起，音频与 socket 的收尾在后台并行做。
     // 早先这里是 `await session.leave()` 再反演动画，等于让用户干等一次
     // socket 关闭，手感上像是按钮没反应。
-    unawaited(session.leave());
+    final cleanup = session.dispose();
 
-    _stage.reverse().whenComplete(() {
+    _stage.reverse().whenComplete(() async {
+      await cleanup;
       if (!mounted) return;
       setState(() {
+        _leaving = false;
         _session = null;
         _roomName = "";
       });
@@ -125,10 +131,11 @@ class _SessionStageState extends State<SessionStage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => DiagnosticsSheet(
-        isNight: widget.isNight,
-        memberCount: session.members.length,
-      ),
+      builder:
+          (context) => DiagnosticsSheet(
+            isNight: widget.isNight,
+            memberCount: session.members.length,
+          ),
     );
   }
 
@@ -139,10 +146,7 @@ class _SessionStageState extends State<SessionStage>
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => RoomChatSheet(
-        session: session,
-        isNight: widget.isNight,
-      ),
+      builder: (_) => RoomChatSheet(session: session, isNight: widget.isNight),
     ).then((_) {
       session.markChatRead();
     });
@@ -178,19 +182,20 @@ class _SessionStageState extends State<SessionStage>
                   audioIo: _audioIo,
                   onEnterRoom: _onEnterRoom,
                 ),
-                builder: (context, child) => TickerMode(
-                  // 落位后首页整组进 Offstage，但 Offstage 不会暂停 ticker：
-                  // 扫描转圈这类动画会继续在看不见的地方每帧重绘，抢走
-                  // 合成器的时间。退场开始时这里再放开。
-                  enabled: _stage.value < 1.0,
-                  child: Offstage(
-                    offstage: _stage.value >= 1.0,
-                    child: IgnorePointer(
-                      ignoring: _stage.value > 0.0,
-                      child: child,
+                builder:
+                    (context, child) => TickerMode(
+                      // 落位后首页整组进 Offstage，但 Offstage 不会暂停 ticker：
+                      // 扫描转圈这类动画会继续在看不见的地方每帧重绘，抢走
+                      // 合成器的时间。退场开始时这里再放开。
+                      enabled: _stage.value < 1.0,
+                      child: Offstage(
+                        offstage: _stage.value >= 1.0,
+                        child: IgnorePointer(
+                          ignoring: _stage.value > 0.0,
+                          child: child,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
               ),
             ),
 
@@ -209,10 +214,11 @@ class _SessionStageState extends State<SessionStage>
                     stage: _stage,
                     onLeave: _onLeaveRoom,
                   ),
-                  builder: (context, child) => IgnorePointer(
-                    ignoring: _stage.value < 1.0,
-                    child: child,
-                  ),
+                  builder:
+                      (context, child) => IgnorePointer(
+                        ignoring: _stage.value < 1.0,
+                        child: child,
+                      ),
                 ),
               ),
 
@@ -224,8 +230,9 @@ class _SessionStageState extends State<SessionStage>
               right: 0,
               child: AnimatedBuilder(
                 animation: _stage,
-                builder: (context, _) =>
-                    _buildHeaderLayer(session, homeHeader, roomHeader),
+                builder:
+                    (context, _) =>
+                        _buildHeaderLayer(session, homeHeader, roomHeader),
               ),
             ),
           ],
@@ -235,7 +242,10 @@ class _SessionStageState extends State<SessionStage>
   }
 
   Widget _buildHeaderLayer(
-      RoomSession? session, double homeHeader, double roomHeader) {
+    RoomSession? session,
+    double homeHeader,
+    double roomHeader,
+  ) {
     final stage = _stage.value;
     // 背景形变走自己那一段区间，不跟着前景的进出走。
     final bg = StageChoreography.background.transform(stage);
@@ -249,7 +259,12 @@ class _SessionStageState extends State<SessionStage>
           Positioned.fill(
             child: RepaintBoundary(
               child: _buildBackground(
-                  session, headerHeight, bg, homeHeader, roomHeader),
+                session,
+                headerHeight,
+                bg,
+                homeHeader,
+                roomHeader,
+              ),
             ),
           ),
           ..._buildHomeHeaderOverlay(stage),
@@ -274,14 +289,13 @@ class _SessionStageState extends State<SessionStage>
     );
 
     Widget canvasFor(double waveIntensity) => CelestialCanvas(
-          isNight: widget.isNight,
-          waveIntensity: waveIntensity,
-          height: headerHeight,
-          celestialCenterFactorY:
-              lerpDouble(_homeCelestialY, _roomCelestialY, bg),
-          celestialRadius: radius,
-          waterLineFactor: lerpDouble(_homeWaterLine, _roomWaterLine, bg),
-        );
+      isNight: widget.isNight,
+      waveIntensity: waveIntensity,
+      height: headerHeight,
+      celestialCenterFactorY: lerpDouble(_homeCelestialY, _roomCelestialY, bg),
+      celestialRadius: radius,
+      waterLineFactor: lerpDouble(_homeWaterLine, _roomWaterLine, bg),
+    );
 
     if (session == null) return canvasFor(0.0);
 
@@ -297,18 +311,21 @@ class _SessionStageState extends State<SessionStage>
   List<Widget> _buildHomeHeaderOverlay(double stage) {
     final s = AppStrings.of(context);
     // 标题随首页元素顺畅淡出抽走
-    final t = const Interval(0.0, 0.32, curve: Curves.easeInCubic)
-        .transform(stage.clamp(0.0, 1.0));
+    final t = const Interval(
+      0.0,
+      0.32,
+      curve: Curves.easeInCubic,
+    ).transform(stage.clamp(0.0, 1.0));
     if (t >= 1.0) return const [];
 
     Widget fade(Widget child, {double drift = 16}) => Opacity(
-          opacity: (1.0 - t).clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, drift * t),
-            // 文字与按钮缓存成图层，转场帧只带透明度合成，不逐帧重光栅。
-            child: RepaintBoundary(child: child),
-          ),
-        );
+      opacity: (1.0 - t).clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(0, drift * t),
+        // 文字与按钮缓存成图层，转场帧只带透明度合成，不逐帧重光栅。
+        child: RepaintBoundary(child: child),
+      ),
+    );
 
     return [
       Positioned(
@@ -340,7 +357,9 @@ class _SessionStageState extends State<SessionStage>
                 iconSize: 28,
                 padding: const EdgeInsets.all(10),
                 icon: Icon(
-                  widget.isNight ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+                  widget.isNight
+                      ? Icons.nightlight_round
+                      : Icons.wb_sunny_rounded,
                   color: Colors.white,
                 ),
                 onPressed: widget.onToggleTheme,
@@ -387,17 +406,20 @@ class _SessionStageState extends State<SessionStage>
 
   List<Widget> _buildRoomHeaderOverlay(RoomSession session, double stage) {
     final s = AppStrings.of(context);
-    final t = const Interval(0.32, 0.85, curve: Curves.easeOutCubic)
-        .transform(stage.clamp(0.0, 1.0));
+    final t = const Interval(
+      0.32,
+      0.85,
+      curve: Curves.easeOutCubic,
+    ).transform(stage.clamp(0.0, 1.0));
     if (t <= 0.0) return const [];
 
     Widget rise(Widget child, {double from = 14}) => Opacity(
-          opacity: t.clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, from * (1.0 - t)),
-            child: RepaintBoundary(child: child),
-          ),
-        );
+      opacity: t.clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(0, from * (1.0 - t)),
+        child: RepaintBoundary(child: child),
+      ),
+    );
 
     return [
       Positioned(
@@ -443,9 +465,10 @@ class _SessionStageState extends State<SessionStage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        backgroundColor: widget.isNight
-                            ? AppTheme.darkLeaveRosePink
-                            : AppTheme.sunsetCoral,
+                        backgroundColor:
+                            widget.isNight
+                                ? AppTheme.darkLeaveRosePink
+                                : AppTheme.sunsetCoral,
                         child: const Icon(
                           Icons.chat_bubble_outline_rounded,
                           color: Colors.white,
@@ -490,7 +513,9 @@ class _SessionStageState extends State<SessionStage>
               ),
               const SizedBox(height: 6),
               Text(
-                session.isHost ? s.hostBroadcastingStatus : s.memberConnectedStatus,
+                session.isHost
+                    ? s.hostBroadcastingStatus
+                    : s.memberConnectedStatus,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

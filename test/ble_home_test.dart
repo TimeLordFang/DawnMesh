@@ -30,7 +30,7 @@ void main() {
     ]) {
       messenger.setMockMethodCallHandler(
         MethodChannel(name),
-        (_) async => null,
+        (call) async { calls.add(call); return null; },
       );
     }
   });
@@ -44,6 +44,13 @@ void main() {
       messenger.setMockMethodCallHandler(MethodChannel(name), null);
     }
   });
+
+  Future<void> pumpUntil(WidgetTester tester, bool Function() ready) async {
+    for (var i = 0; i < 100 && !ready(); i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(ready(), isTrue, reason: 'asynchronous BLE operation must complete: ${calls.map((c) => c.method)}');
+  }
 
   Future<void> showHome(WidgetTester tester) async {
     tester.view.physicalSize = const Size(900, 1400);
@@ -62,7 +69,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.text('蓝牙对讲'));
+    await tester.tap(find.text('Bluetooth Talk'));
     await tester.pump();
   }
 
@@ -84,8 +91,12 @@ void main() {
       );
       await tester.pump();
       expect(find.text('测试蓝牙房'), findsOneWidget);
-      await tester.tap(find.text('加入聊天'));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Join chat'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
       await tester.pump();
+      await pumpUntil(tester, () => entered != null);
       expect(
         calls.where((c) => c.method == 'connectL2cap').single.arguments['psm'],
         129,
@@ -101,8 +112,9 @@ void main() {
   ) async {
     advertisingWorks = false;
     await showHome(tester);
-    await tester.tap(find.text('开始蓝牙对讲'));
+    await tester.tap(find.text('Start Bluetooth Talk'));
     await tester.pump();
+    await pumpUntil(tester, () => find.textContaining('蓝牙广播未能开启').evaluate().isNotEmpty);
     expect(calls.any((c) => c.method == 'startAdvertising'), isTrue);
     expect(entered, isNull);
     expect(find.textContaining('蓝牙广播未能开启'), findsOneWidget);

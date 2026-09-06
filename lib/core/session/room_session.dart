@@ -1333,6 +1333,8 @@ class RoomSession {
   /// 和 `_notifyMembers`，写的已经是关掉的 controller，直接抛 StateError。
   Future<void> dispose() async {
     await leave();
+    await transport?.dispose();
+    transport = null;
     _chatMessages.clear();
     _seenChatKeys.clear();
     _seenChatKeyOrder.clear();

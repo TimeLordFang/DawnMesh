@@ -47,6 +47,7 @@ class _HomeContentState extends State<HomeContent> {
   final _bleDiscovery = BleL2capTransport();
   bool _busy = false;
   int _scanGeneration = 0;
+  Future<void> _scanTask = Future<void>.value();
   RoomMode _selectedMode = RoomMode.wifiFullDuplex;
   bool _isScanning = false;
   List<WifiP2pPeer> _p2pPeers = [];
@@ -87,7 +88,6 @@ class _HomeContentState extends State<HomeContent> {
       _lanDiscovery.stopAdvertising();
       WifiDirectManager.instance.removeGroup();
       _isHostingWifiDirect = false;
-      _startScan();
     }
   }
 
@@ -97,8 +97,22 @@ class _HomeContentState extends State<HomeContent> {
     _startScan();
   }
 
-  Future<void> _startScan() async {
+  Future<void> _startScan() {
     final generation = ++_scanGeneration;
+    _scanTask = _scanTask.then((_) => _runScan(generation));
+    return _scanTask;
+  }
+
+  Future<void> _stopBleScanning() async {
+    _scanGeneration++;
+    _scanTimer?.cancel();
+    await _scanTask;
+    await _bleDiscovery.stopScan();
+    if (mounted) setState(() => _isScanning = false);
+  }
+
+  Future<void> _runScan(int generation) async {
+    if (!mounted || generation != _scanGeneration) return;
     _scanTimer?.cancel();
     setState(() => _isScanning = true);
     if (_selectedMode == RoomMode.bluetoothPtt) {
@@ -171,12 +185,17 @@ class _HomeContentState extends State<HomeContent> {
   Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
     if (_busy) return;
     setState(() => _busy = true);
-    await _bleDiscovery.stopScan();
+    await _stopBleScanning();
+    if (!mounted) return;
     final transport = BleL2capTransport();
     if (!await transport.connectToHost(room)) {
       await transport.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('连接蓝牙房失败，请重新扫描后重试。');
+      return;
+    }
+    if (!mounted) {
+      await transport.dispose();
       return;
     }
     final session = RoomSession(
@@ -218,7 +237,7 @@ class _HomeContentState extends State<HomeContent> {
     _p2pSubscription?.cancel();
     _nicknameController.dispose();
     _scanGeneration++;
-    _bleDiscovery.dispose();
+    unawaited(_scanTask.then((_) => _bleDiscovery.dispose()));
     _lanDiscovery.dispose();
     super.dispose();
   }
@@ -797,7 +816,7 @@ class _HomeContentState extends State<HomeContent> {
   void _onCreateRoom() async {
     if (_busy) return;
     setState(() => _busy = true);
-    await _bleDiscovery.stopScan();
+    await _stopBleScanning();
     if (!mounted) return;
     FocusScope.of(context).unfocus();
     final s = AppStrings.of(context);
@@ -866,6 +885,8 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onJoinRoom(DiscoveredRoom room) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     FocusScope.of(context).unfocus();
     final session = RoomSession(
       audioIo: widget.audioIo,
@@ -874,7 +895,15 @@ class _HomeContentState extends State<HomeContent> {
     );
 
     final transport = LanTransport();
-    await transport.startClient(hostAddress: room.hostAddress, port: room.port);
+    if (!await transport.startClient(
+      hostAddress: room.hostAddress,
+      port: room.port,
+    )) {
+      await transport.dispose();
+      if (mounted) setState(() => _busy = false);
+      _showConnectionError('连接 Wi-Fi 房失败，请重新扫描后重试。');
+      return;
+    }
     session.transport = transport;
     session.onSendFrame = transport.send;
     transport.incoming.listen(session.handleIncomingFrame);
@@ -882,10 +911,17 @@ class _HomeContentState extends State<HomeContent> {
     // 同 _onCreateRoom：开麦推迟到转场跑完。
     await session.joinRoom(startAudio: false);
 
-    if (mounted) widget.onEnterRoom(session, room.roomName);
+    if (!mounted) {
+      await session.dispose();
+      return;
+    }
+    setState(() => _busy = false);
+    widget.onEnterRoom(session, room.roomName);
   }
 
   void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     FocusScope.of(context).unfocus();
     final s = AppStrings.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -904,6 +940,7 @@ class _HomeContentState extends State<HomeContent> {
         !connectionInfo.isConnected ||
         connectionInfo.groupOwnerAddress.isEmpty) {
       if (mounted) {
+        setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(s.directConnectPermissionFailed),
@@ -914,6 +951,7 @@ class _HomeContentState extends State<HomeContent> {
       return;
     }
 
+    if (!mounted) return;
     final hostIp = InternetAddress(connectionInfo.groupOwnerAddress);
     final session = RoomSession(
       audioIo: widget.audioIo,
@@ -922,14 +960,24 @@ class _HomeContentState extends State<HomeContent> {
     );
 
     final transport = LanTransport();
-    await transport.startClient(hostAddress: hostIp, port: 8988);
+    if (!await transport.startClient(hostAddress: hostIp, port: 8988)) {
+      await transport.dispose();
+      if (mounted) setState(() => _busy = false);
+      _showConnectionError('已连接 Wi-Fi Direct，但房间服务不可用。');
+      return;
+    }
     session.transport = transport;
     session.onSendFrame = transport.send;
     transport.incoming.listen(session.handleIncomingFrame);
 
     await session.joinRoom(startAudio: false);
 
+    if (!mounted) {
+      await session.dispose();
+      return;
+    }
     if (mounted) {
+      setState(() => _busy = false);
       final displayName =
           peer.name.isNotEmpty ? s.defaultWifiRoomTitle(peer.name) : s.wifiRoom;
       widget.onEnterRoom(session, displayName);
