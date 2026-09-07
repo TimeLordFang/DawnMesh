@@ -12,6 +12,7 @@ import 'diagnostics_sheet.dart';
 import 'about_page.dart';
 import '../theme/app_theme.dart';
 import '../widgets/room_chat_sheet.dart';
+import '../widgets/room_invite_dialog.dart';
 import '../../l10n/app_strings.dart';
 
 /// 首页与房间共用的一张"舞台"。
@@ -444,6 +445,12 @@ class _SessionStageState extends State<SessionStage>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (session.roomInvite != null)
+                IconButton(
+                  tooltip: '房间邀请码',
+                  icon: const Icon(Icons.key, color: Colors.white),
+                  onPressed: () => showRoomInvite(context, session.roomInvite!),
+                ),
               StreamBuilder<int>(
                 stream: session.unreadChatStream,
                 initialData: session.unreadChatCount,

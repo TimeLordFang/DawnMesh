@@ -7,8 +7,9 @@ import 'package:sunset_ripple/ui/pages/session_stage.dart';
 /// 房间那组要到齐，中途每一帧都不许溢出；返回时再原路退回首页。
 void main() {
   const audioChannel = MethodChannel('host.msknet.sunsetripple/audio');
-  const audioEventsChannel =
-      MethodChannel('host.msknet.sunsetripple/audio_events');
+  const audioEventsChannel = MethodChannel(
+    'host.msknet.sunsetripple/audio_events',
+  );
 
   setUp(() {
     // 单测里没有平台侧实现，把音频通道打桩掉，否则 MissingPluginException
@@ -27,25 +28,39 @@ void main() {
   });
 
   Finder findTitle() => find.byWidgetPredicate(
-        (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
-      );
+    (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
+  );
   Finder findCreateWifi() => find.byWidgetPredicate(
-        (w) =>
-            w is Text &&
-            (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
-      );
+    (w) =>
+        w is Text && (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
+  );
   Finder findInCall() => find.byWidgetPredicate(
-        (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
-      );
+    (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
+  );
   Finder findLeave() => find.byWidgetPredicate(
-        (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
-      );
+    (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
+  );
   Finder findRoomTitle() => find.byWidgetPredicate(
-        (w) =>
-            w is Text &&
-            (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
-                w.data?.endsWith("'s chat · Wi-Fi") == true),
+    (w) =>
+        w is Text &&
+        (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
+            w.data?.endsWith("'s chat · Wi-Fi") == true),
+  );
+
+  // Native-channel futures and real loopback sockets need both event loops.
+  // Await observable room state instead of assuming one 500 ms sleep completes
+  // every asynchronous permission/scan/socket step.
+  Future<void> waitForRoom(WidgetTester tester, bool inRoom) async {
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
+      expect(tester.takeException(), isNull);
+      if (findInCall().evaluate().isNotEmpty == inRoom) return;
+    }
+    fail('Room transition did not complete');
+  }
 
   testWidgets('创建房间：首页 UI 离场、背景留场、房间 UI 入场', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
@@ -66,6 +81,7 @@ void main() {
       await tester.tap(findCreateWifi());
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
+    await waitForRoom(tester, true);
     await tester.pump();
 
     // 逐帧走完整段转场，任何一帧溢出都会在这里冒出来。
@@ -88,7 +104,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
   });
 
   testWidgets('离开房间：原路退回首页', (tester) async {
@@ -105,6 +122,7 @@ void main() {
       await tester.tap(findCreateWifi());
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
+    await waitForRoom(tester, true);
     await tester.pump();
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -119,11 +137,13 @@ void main() {
       expect(tester.takeException(), isNull, reason: '退场第 ${i + 1} 帧溢出');
     }
 
+    await waitForRoom(tester, false);
     expect(findInCall(), findsNothing);
     expect(findTitle(), findsWidgets);
     expect(findCreateWifi(), findsOneWidget);
 
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
   });
 }

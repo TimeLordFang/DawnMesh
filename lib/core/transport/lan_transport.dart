@@ -64,6 +64,10 @@ class _FrameAccumulator {
 /// 语音单独走 UDP 是因为 TCP 的队头阻塞会让丢包变成持续卡顿；控制帧量小、
 /// 必须可靠，所以留在 TCP 上。
 class LanTransport implements RoomTransport {
+  /// Encrypted app rooms use reliable TCP for all frames. No unauthenticated
+  /// UDP endpoint registration; sealed audio cannot be classified before opening.
+  final bool controlOnly;
+  LanTransport({this.controlOnly = false});
   static const int controlPort = 8988;
   static const int audioPort = 8989;
 
@@ -137,7 +141,7 @@ class LanTransport implements RoomTransport {
   }
 
   @override
-  bool get supportsHostTransfer => true;
+  bool get supportsHostTransfer => !controlOnly;
 
   /// 已知成员的 IP。来自各自 UDP 语音包的源地址——能发语音就说明这条路通，
   /// 正好是交接后重连要用的端点。
@@ -195,7 +199,7 @@ class LanTransport implements RoomTransport {
       onError: (Object e) => AppLog.error(_tag, '监听连接时出错', e),
     );
 
-    if (!await _bindUdp(audioPort)) {
+    if (!controlOnly && !await _bindUdp(audioPort)) {
       await stop();
       return false;
     }
@@ -214,6 +218,7 @@ class LanTransport implements RoomTransport {
       return;
     }
 
+    socket.setOption(SocketOption.tcpNoDelay, true);
     final accumulator = _FrameAccumulator();
     _clientLabels[socket] = label;
     AppLog.info(_tag, '成员接入：$label');
@@ -290,6 +295,7 @@ class LanTransport implements RoomTransport {
       return false;
     }
 
+    _hostSocket!.setOption(SocketOption.tcpNoDelay, true);
     final accumulator = _FrameAccumulator();
     _hostSocket!.listen(
       (chunk) {
@@ -303,12 +309,12 @@ class LanTransport implements RoomTransport {
     );
 
     // 语音用临时端口，房主从数据包的源地址学习端点。
-    if (!await _bindUdp(0)) {
+    if (!controlOnly && !await _bindUdp(0)) {
       await stop();
       return false;
     }
 
-    _startUdpKeepalive();
+    if (!controlOnly) _startUdpKeepalive();
     _notifyPeerCount();
     AppLog.info(_tag, '已连接房主 ${hostAddress.address}:$port');
     return true;

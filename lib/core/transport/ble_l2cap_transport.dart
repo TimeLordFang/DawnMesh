@@ -261,7 +261,14 @@ class BleL2capTransport implements RoomTransport {
 
   /// BLE 帧经 invokeMethod 同步过桥，没有可刷写的本地缓冲。
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    if (_role == BleRole.idle) return;
+    try {
+      await _channel.invokeMethod('flush').timeout(const Duration(seconds: 6));
+    } catch (e) {
+      AppLog.debug(_tag, '蓝牙发送队列清理失败：$e');
+    }
+  }
 
   /// 蓝牙房不支持房主转移。
   ///

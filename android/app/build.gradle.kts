@@ -9,7 +9,7 @@ plugins {
 }
 
 // 发布签名从 android/key.properties 读取（该文件不入库）。格式：
-//   storeFile=../keystore/sunsetripple.jks   # 相对 android/app/ 或绝对路径
+//   storeFile=../keystore/dawnmesh.jks   # 相对 android/app/ 或绝对路径
 //   storePassword=...
 //   keyAlias=...
 //   keyPassword=...
@@ -22,7 +22,7 @@ val keystoreProperties = Properties().apply {
 val hasReleaseSigning = keystorePropertiesFile.exists()
 
 android {
-    // 必须与线上已发布版本一致，否则装不上去覆盖升级。
+    // 保留 Kotlin namespace；独立 applicationId 在 defaultConfig 中配置。
     namespace = "host.msknet.sunsetripple"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
@@ -92,6 +92,7 @@ dependencies {
     // Opus 编解码。纯 JVM 实现，不需要额外的 .so。
     // 版本与已发布的 Kotlin 版 alpha.7 一致，保证两版音频互通。
     implementation("io.github.jaredmdobson:concentus:1.0.2")
+    testImplementation("junit:junit:4.13.2")
 }
 
 val verifyReleaseSigning by tasks.registering {

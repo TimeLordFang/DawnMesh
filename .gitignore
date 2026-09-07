@@ -37,3 +37,7 @@ native/build/
 android/key.properties
 .pub-cache/
 .flutter-plugins*
+
+# Local Android/Flutter development toolchain
+.tools/
+artifacts/

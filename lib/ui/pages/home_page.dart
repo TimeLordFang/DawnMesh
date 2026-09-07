@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/audio/audio_io.dart';
+import '../../core/security/room_invite.dart';
+import '../widgets/room_invite_dialog.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart';
 import '../../core/transport/ble_l2cap_transport.dart';
@@ -185,6 +188,12 @@ class _HomeContentState extends State<HomeContent> {
   Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final invite = await requestRoomInvite(context);
+    if (!mounted) return;
+    if (invite == null) {
+      setState(() => _busy = false);
+      return;
+    }
     await _stopBleScanning();
     if (!mounted) return;
     final transport = BleL2capTransport();
@@ -203,10 +212,22 @@ class _HomeContentState extends State<HomeContent> {
       selfNickname: _identityNickname,
       mode: RoomMode.bluetoothPtt,
     );
+    await session.protectWithInvite(invite);
     session.transport = transport;
     session.onSendFrame = transport.send;
     transport.incoming.listen(session.handleIncomingFrame);
+    final joined = session.stateStream
+        .firstWhere((state) => state == RoomState.inRoom)
+        .timeout(const Duration(seconds: 8));
     await session.joinRoom(startAudio: false);
+    try {
+      await joined;
+    } on TimeoutException {
+      await session.dispose();
+      if (mounted) setState(() => _busy = false);
+      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
+      return;
+    }
     if (!mounted) {
       await session.dispose();
       return;
@@ -399,7 +420,7 @@ class _HomeContentState extends State<HomeContent> {
 
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                    child: Text('当前房间未启用端到端加密，仅限可信设备测试；附近设备可以申请加入。'),
+                    child: Text('语音和聊天默认加密。加入需要房主的邀请码，请仅分享给信任的人。'),
                   ),
                   const SizedBox(height: 18),
 
@@ -806,7 +827,14 @@ class _HomeContentState extends State<HomeContent> {
   String get _nickname {
     final s = AppStrings.of(context);
     final text = _nicknameController.text.trim();
-    return text.isEmpty ? s.defaultNickname : text;
+    if (text.isEmpty) return s.defaultNickname;
+    var nickname = '';
+    for (final rune in text.runes) {
+      final candidate = nickname + String.fromCharCode(rune);
+      if (utf8.encode(candidate).length > 48) break;
+      nickname = candidate;
+    }
+    return nickname;
   }
 
   /// 走 roster 的身份名，带十六进制短码，房间里好区分同名的人。
@@ -832,11 +860,17 @@ class _HomeContentState extends State<HomeContent> {
       mode: _selectedMode,
     );
 
+    await session.protectWithInvite(RoomInvite.generate());
+    if (!mounted) {
+      await session.dispose();
+      return;
+    }
+
     if (_selectedMode == RoomMode.wifiFullDuplex) {
       _isHostingWifiDirect = true;
       unawaited(WifiDirectManager.instance.createGroup());
       _startPeriodicScan();
-      final transport = LanTransport();
+      final transport = LanTransport(controlOnly: true);
       if (!await transport.startHost()) {
         await transport.dispose();
         _stopPeriodicScan();
@@ -887,6 +921,12 @@ class _HomeContentState extends State<HomeContent> {
   void _onJoinRoom(DiscoveredRoom room) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final invite = await requestRoomInvite(context);
+    if (!mounted) return;
+    if (invite == null) {
+      setState(() => _busy = false);
+      return;
+    }
     FocusScope.of(context).unfocus();
     final session = RoomSession(
       audioIo: widget.audioIo,
@@ -894,7 +934,7 @@ class _HomeContentState extends State<HomeContent> {
       mode: RoomMode.wifiFullDuplex,
     );
 
-    final transport = LanTransport();
+    final transport = LanTransport(controlOnly: true);
     if (!await transport.startClient(
       hostAddress: room.hostAddress,
       port: room.port,
@@ -904,12 +944,24 @@ class _HomeContentState extends State<HomeContent> {
       _showConnectionError('连接 Wi-Fi 房失败，请重新扫描后重试。');
       return;
     }
+    await session.protectWithInvite(invite);
     session.transport = transport;
     session.onSendFrame = transport.send;
     transport.incoming.listen(session.handleIncomingFrame);
 
     // 同 _onCreateRoom：开麦推迟到转场跑完。
+    final joined = session.stateStream
+        .firstWhere((state) => state == RoomState.inRoom)
+        .timeout(const Duration(seconds: 8));
     await session.joinRoom(startAudio: false);
+    try {
+      await joined;
+    } on TimeoutException {
+      await session.dispose();
+      if (mounted) setState(() => _busy = false);
+      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
+      return;
+    }
 
     if (!mounted) {
       await session.dispose();
@@ -922,6 +974,12 @@ class _HomeContentState extends State<HomeContent> {
   void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final invite = await requestRoomInvite(context);
+    if (!mounted) return;
+    if (invite == null) {
+      setState(() => _busy = false);
+      return;
+    }
     FocusScope.of(context).unfocus();
     final s = AppStrings.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -959,18 +1017,30 @@ class _HomeContentState extends State<HomeContent> {
       mode: RoomMode.wifiFullDuplex,
     );
 
-    final transport = LanTransport();
+    final transport = LanTransport(controlOnly: true);
     if (!await transport.startClient(hostAddress: hostIp, port: 8988)) {
       await transport.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('已连接 Wi-Fi Direct，但房间服务不可用。');
       return;
     }
+    await session.protectWithInvite(invite);
     session.transport = transport;
     session.onSendFrame = transport.send;
     transport.incoming.listen(session.handleIncomingFrame);
 
+    final joined = session.stateStream
+        .firstWhere((state) => state == RoomState.inRoom)
+        .timeout(const Duration(seconds: 8));
     await session.joinRoom(startAudio: false);
+    try {
+      await joined;
+    } on TimeoutException {
+      await session.dispose();
+      if (mounted) setState(() => _busy = false);
+      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
+      return;
+    }
 
     if (!mounted) {
       await session.dispose();

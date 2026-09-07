@@ -1,3 +1,10 @@
+import 'dart:typed_data';
+import 'package:sunset_ripple/core/security/room_invite.dart';
+import 'package:sunset_ripple/core/security/session_handshake.dart';
+import 'package:sunset_ripple/core/protocol/frame.dart';
+import 'package:sunset_ripple/core/protocol/frame_type.dart';
+import 'package:sunset_ripple/core/protocol/payloads/join_request.dart';
+import 'package:sunset_ripple/core/protocol/payloads/roster.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,17 +18,52 @@ void main() {
   const scanChannel = 'host.msknet.sunsetripple/ble_l2cap_scan';
   final calls = <MethodCall>[];
   bool advertisingWorks = true;
+  late RoomInvite invite;
+  late SecureFrameCodec hostCodec;
   RoomSession? entered;
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
-  setUp(() {
+  setUp(() async {
+    invite = RoomInvite.generate();
+    hostCodec = await invite.createCodec();
     calls.clear();
     advertisingWorks = true;
     entered = null;
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'startAdvertising') return advertisingWorks;
+      if (call.method == 'sendL2capData') {
+        final sealed = Frame.decode(call.arguments['data'] as Uint8List)!;
+        expect(sealed.type, FrameType.sealed);
+        final plain = await hostCodec.open(sealed);
+        if (plain.type == FrameType.joinReq) {
+          final join = JoinRequestPayload.decode(plain.payload)!;
+          final response = await hostCodec.seal(
+            Frame(
+              type: FrameType.roster,
+              senderId: 1,
+              seq: 1,
+              payload:
+                  RosterPayload(
+                    hostId: 1,
+                    members: [
+                      RosterMember(memberId: 1, flags: 1, nickname: 'Host'),
+                      RosterMember(memberId: 2, nickname: join.nickname),
+                    ],
+                  ).encode(),
+            ),
+          );
+          await messenger.handlePlatformMessage(
+            'host.msknet.sunsetripple/ble_l2cap_data',
+            const StandardMethodCodec().encodeSuccessEnvelope({
+              'data': response.encode(),
+              'peerAddress': 'host',
+            }),
+            (_) {},
+          );
+        }
+      }
       return true;
     });
     for (final name in [
@@ -104,6 +146,11 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
       await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('room-invite-input')),
+        invite.code,
+      );
+      await tester.tap(find.text('验证并加入'));
       await pumpUntil(tester, () => entered != null);
       expect(
         calls.where((c) => c.method == 'connectL2cap').single.arguments['psm'],

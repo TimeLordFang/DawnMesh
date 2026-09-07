@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import '../audio/audio_io.dart';
@@ -13,6 +14,7 @@ import '../protocol/payloads/leave.dart';
 import '../protocol/payloads/ptt_state.dart';
 import '../protocol/payloads/roster.dart';
 import '../security/session_handshake.dart';
+import '../security/room_invite.dart';
 import '../transport/room_transport.dart';
 import 'chat_message.dart';
 import 'device_code.dart';
@@ -58,6 +60,15 @@ class RoomSession {
   /// 帧类型 0x09/0x0a/0x0b 与旧版的 HANDSHAKE_HELLO/HANDSHAKE_CONFIRM/SEALED
   /// 一一对应，握手与密封的能力已经就位，等两版都具备后再协商开启。
   SecureFrameCodec? secureCodec;
+  RoomInvite? roomInvite;
+
+  Future<void> protectWithInvite(RoomInvite invite) async {
+    secureCodec = await invite.createCodec();
+    roomInvite = invite;
+  }
+
+  // Leave room for the largest chat-history header when encryption is enabled.
+  int get maxChatTextBytes => secureCodec == null ? 480 : 320;
 
   RoomState _state = RoomState.idle;
   bool _isHost = false;
@@ -268,6 +279,14 @@ class RoomSession {
   }
 
   Future<void> _dispatchIncomingFrame(Frame frame) async {
+    if (secureCodec != null) {
+      final hostCommand =
+          frame.type == FrameType.roster ||
+          frame.type == FrameType.hostHandover ||
+          frame.type == FrameType.hostAnnounce ||
+          frame.type == FrameType.chatSync;
+      if (hostCommand && (_isHost || frame.senderId != 1)) return;
+    }
     switch (frame.type) {
       case FrameType.audio:
         _handleAudioFrame(frame);
@@ -937,6 +956,9 @@ class RoomSession {
       );
     }
 
+    if (utf8.encode(trimmed).length > maxChatTextBytes) {
+      throw ArgumentError('消息最多 $maxChatTextBytes UTF-8 字节。');
+    }
     final fullNickname = _members[_selfMemberId]?.nickname ?? selfNickname;
     final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
     final code = DeviceCode.toNumeric(rawCode);
@@ -1285,6 +1307,8 @@ class RoomSession {
     await audioIo.stopPlayback();
     await audioIo.clearRemoteMembers();
     await transport?.stop();
+    secureCodec = null;
+    roomInvite = null;
 
     _members.clear();
     _lastAudioAt.clear();

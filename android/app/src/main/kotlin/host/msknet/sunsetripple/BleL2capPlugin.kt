@@ -201,6 +201,16 @@ class BleL2capPlugin(
                 result.success(sendData(data, excludeAddress = null))
             }
 
+            "flush" -> {
+                val pending = peers.values.map { it.flush() }.toTypedArray()
+                java.util.concurrent.CompletableFuture.allOf(*pending).whenComplete { _, error ->
+                    mainHandler.post {
+                        if (error == null) result.success(true)
+                        else result.error("FLUSH_FAILED", "蓝牙发送队列未完成", null)
+                    }
+                }
+            }
+
             "stop" -> {
                 stopEverything()
                 result.success(true)
@@ -546,24 +556,21 @@ class BleL2capPlugin(
 
     private inner class PeerLink(val socket: BluetoothSocket, val address: String) {
         val alive = AtomicBoolean(true)
-        private val writeLock = Any()
+        private val writer = BoundedFrameWriter(
+            write = { data -> socket.outputStream.write(data); socket.outputStream.flush() },
+            closeTransport = {
+                alive.set(false)
+                try { socket.close() } catch (_: IOException) {}
+            },
+            onFailure = {
+                peers.remove(address, this)
+                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
+            },
+        )
 
-        fun write(data: ByteArray) {
-            synchronized(writeLock) {
-                if (!alive.get()) return
-                socket.outputStream.write(data)
-                socket.outputStream.flush()
-            }
-        }
-
-        fun close() {
-            alive.set(false)
-            try {
-                socket.close()
-            } catch (e: IOException) {
-                Log.d(TAG, "关闭 $address 时被忽略的异常：$e")
-            }
-        }
+        fun write(data: ByteArray): Boolean = writer.send(data)
+        fun flush() = writer.flush()
+        fun close() { writer.close() }
     }
 
     private fun registerPeer(socket: BluetoothSocket): PeerLink {
@@ -650,8 +657,7 @@ class BleL2capPlugin(
             if (address == excludeAddress) continue
             if (!link.alive.get()) continue
             try {
-                link.write(data)
-                anySent = true
+                if (link.write(data)) anySent = true
             } catch (e: IOException) {
                 Log.w(TAG, "向 $address 发送失败，断开该链路", e)
                 removePeer(link)
