@@ -1,47 +1,43 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart' as crypto;
-import 'session_crypto.dart';
-import 'session_handshake.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/scrypt.dart';
 
-/// A fresh 128-bit bearer secret for a trusted group, never advertised or logged.
-/// Possession authorizes membership; this does not identify individual humans.
+/// Six digits authenticate a PAKE exchange; they are never an AES traffic key.
 class RoomInvite {
   final String code;
+  Future<BigInt>? _scalar;
   RoomInvite._(this.code);
 
-  factory RoomInvite.generate() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return RoomInvite._(base64Url.encode(bytes).replaceAll('=', ''));
-  }
+  factory RoomInvite.generate() =>
+      RoomInvite._(Random.secure().nextInt(1000000).toString().padLeft(6, '0'));
 
   factory RoomInvite.parse(String input) {
     final code = input.trim();
-    if (!RegExp(r'^[A-Za-z0-9_-]{22}$').hasMatch(code)) {
-      throw const FormatException('邀请码应为 22 位，请完整复制房主的邀请码。');
-    }
-    final bytes = base64Url.decode('$code==');
-    if (bytes.length != 16 ||
-        base64Url.encode(bytes).replaceAll('=', '') != code) {
-      throw const FormatException('邀请码格式不正确。');
+    if (!RegExp(r'^[0-9]{6}$').hasMatch(code)) {
+      throw const FormatException('请输入房主提供的 6 位数字邀请码。');
     }
     return RoomInvite._(code);
   }
 
-  Future<SecureFrameCodec> createCodec() async {
-    // The input is uniform random entropy, NOT a human password. Domain-separated
-    // SHA-256 expands it to an AES key without introducing a weak password KDF.
-    final bytes = base64Url.decode('$code==');
-    final key = Uint8List.fromList(
-      crypto.sha256.convert([
-        ...utf8.encode('DawnMesh room key v1\u0000'),
-        ...bytes,
-      ]).bytes,
-    );
-    return SecureFrameCodec(await SessionCipher.fromKey(key));
-  }
+  Future<BigInt> passwordScalar() => _scalar ??= _deriveScalar(code);
+
+  static Future<BigInt> _deriveScalar(String code) => Isolate.run(() {
+    final kdf =
+        Scrypt()..init(
+          ScryptParameters(
+            16384,
+            8,
+            1,
+            40,
+            Uint8List.fromList(utf8.encode('DawnMesh SPAKE2 PIN v2')),
+          ),
+        );
+    final bytes = kdf.process(Uint8List.fromList(ascii.encode(code)));
+    return bytes.fold<BigInt>(BigInt.zero, (v, b) => (v << 8) | BigInt.from(b));
+  });
 
   @override
   String toString() => 'RoomInvite([redacted])';

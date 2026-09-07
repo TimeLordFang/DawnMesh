@@ -28,6 +28,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
             "dev.dawnmesh.intercom/permissions").apply {
             setMethodCallHandler { call, result ->
@@ -85,6 +86,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        CallControlBridge.detach()
         permissionResult?.error("CANCELLED", "权限请求已取消", null)
         permissionResult = null
         permissionChannel?.setMethodCallHandler(null)

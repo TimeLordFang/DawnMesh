@@ -20,10 +20,10 @@ Future<void> showRoomInvite(BuildContext context, RoomInvite invite) =>
               children: [
                 SelectableText(
                   invite.code,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 20),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 32, letterSpacing: 4),
                 ),
                 const SizedBox(height: 16),
-                const Text('仅分享给信任的人。持有邀请码的人可以加入、收听并查看房内消息；重新建房会更换邀请码。'),
+                const Text('把这 6 位数字口述给附近的人即可，无需联网。仅分享给信任的人；重新建房会更换邀请码。'),
               ],
             ),
             actions: [
@@ -74,10 +74,15 @@ class _InviteDialogState extends State<_InviteDialog> {
       autofocus: true,
       autocorrect: false,
       enableSuggestions: false,
-      obscureText: true,
-      maxLength: 22,
+      obscureText: false,
+      maxLength: 6,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       onSubmitted: (_) => submit(),
-      decoration: InputDecoration(labelText: '房主提供的 22 位邀请码', errorText: error),
+      decoration: InputDecoration(
+        labelText: '房主提供的 6 位数字邀请码',
+        errorText: error,
+      ),
     ),
     actions: [
       TextButton(

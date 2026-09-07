@@ -45,7 +45,7 @@ class SessionStage extends StatefulWidget {
 }
 
 class _SessionStageState extends State<SessionStage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // 背景在首页与房间两种形态下的几何参数，转场时在两者之间插值。
   static const double _homeCelestialY = 0.42;
   static const double _roomCelestialY = 0.38;
@@ -72,6 +72,7 @@ class _SessionStageState extends State<SessionStage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 音频通道挂在舞台上，首页与房间共用一个，进出房间不会重建。
     _audioIo = PlatformAudioChannel();
     _stage = AnimationController(
@@ -83,9 +84,17 @@ class _SessionStageState extends State<SessionStage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_session?.dispose());
     _stage.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && _session?.isPttPressed == true) {
+      _session?.setPtt(false);
+    }
   }
 
   bool get _inRoom => _session != null;

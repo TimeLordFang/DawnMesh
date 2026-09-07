@@ -146,6 +146,10 @@ class PlatformAudioPlugin(
                     )
                     return
                 }
+                if (!IntercomForegroundService.start(context)) {
+                    result.error("FOREGROUND_FAILED", "无法启动前台通话，请保持应用在前台并允许麦克风和通知权限", null)
+                    return
+                }
                 currentBitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
 
                 // AudioRecord / AudioTrack 的构造、AEC/NS/AGC 挂载、前台服务启动
@@ -157,6 +161,7 @@ class PlatformAudioPlugin(
                     val captureOk = playbackOk && startCapture()
                     // 收尾也在后台做：stopPlayback 会 join 播放线程。
                     if (playbackOk && !captureOk) stopPlayback()
+                    if (!captureOk) IntercomForegroundService.stop(context)
 
                     mainHandler.post {
                         when {
@@ -323,7 +328,6 @@ class PlatformAudioPlugin(
             start()
         }
 
-        IntercomForegroundService.start(context)
         Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${currentBitrate}bps）")
         return true
     }

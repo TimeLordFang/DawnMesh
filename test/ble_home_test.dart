@@ -1,9 +1,5 @@
 import 'package:sunset_ripple/core/security/room_invite.dart';
-import 'package:sunset_ripple/core/security/session_handshake.dart';
 import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/protocol/payloads/join_request.dart';
-import 'package:sunset_ripple/core/protocol/payloads/roster.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,14 +14,26 @@ void main() {
   final calls = <MethodCall>[];
   bool advertisingWorks = true;
   late RoomInvite invite;
-  late SecureFrameCodec hostCodec;
+  late RoomSession host;
   RoomSession? entered;
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   setUp(() async {
     invite = RoomInvite.generate();
-    hostCodec = await invite.createCodec();
+    host = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Host');
+    await host.protectWithInvite(invite);
+    await host.createRoom(startAudio: false);
+    host.onSendFrame = (frame) {
+      messenger.handlePlatformMessage(
+        'host.msknet.sunsetripple/ble_l2cap_data',
+        const StandardMethodCodec().encodeSuccessEnvelope({
+          'data': frame.encode(),
+          'peerAddress': 'host',
+        }),
+        (_) {},
+      );
+    };
     calls.clear();
     advertisingWorks = true;
     entered = null;
@@ -33,51 +41,9 @@ void main() {
       calls.add(call);
       if (call.method == 'startAdvertising') return advertisingWorks;
       if (call.method == 'sendL2capData') {
-        final sealed = Frame.decode(call.arguments['data'] as Uint8List)!;
-        expect(sealed.type, FrameType.sealed);
-        final plain = await hostCodec.open(sealed);
-        if (plain.type == FrameType.joinReq) {
-          final join = JoinRequestPayload.decode(plain.payload)!;
-          final admission = await hostCodec.seal(
-            Frame(
-              type: FrameType.admission,
-              senderId: 1,
-              seq: 0,
-              payload: Uint8List.fromList([2, ...join.sessionToken]),
-            ),
-          );
-          await messenger.handlePlatformMessage(
-            'host.msknet.sunsetripple/ble_l2cap_data',
-            const StandardMethodCodec().encodeSuccessEnvelope({
-              'data': admission.encode(),
-              'peerAddress': 'host',
-            }),
-            (_) {},
-          );
-          final response = await hostCodec.seal(
-            Frame(
-              type: FrameType.roster,
-              senderId: 1,
-              seq: 1,
-              payload:
-                  RosterPayload(
-                    hostId: 1,
-                    members: [
-                      RosterMember(memberId: 1, flags: 1, nickname: 'Host'),
-                      RosterMember(memberId: 2, nickname: join.nickname),
-                    ],
-                  ).encode(),
-            ),
-          );
-          await messenger.handlePlatformMessage(
-            'host.msknet.sunsetripple/ble_l2cap_data',
-            const StandardMethodCodec().encodeSuccessEnvelope({
-              'data': response.encode(),
-              'peerAddress': 'host',
-            }),
-            (_) {},
-          );
-        }
+        await host.handleIncomingFrame(
+          Frame.decode(call.arguments['data'] as Uint8List)!,
+        );
       }
       return true;
     });
@@ -93,6 +59,8 @@ void main() {
   });
   tearDown(() async {
     await entered?.dispose();
+    host.onSendFrame = null;
+    await host.dispose();
     messenger.setMockMethodCallHandler(channel, null);
     for (final name in [
       scanChannel,
@@ -134,7 +102,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.text('Bluetooth Talk'));
+    await tester.tap(find.text('Bluetooth room'));
     await tester.pump();
   }
 
@@ -157,7 +125,7 @@ void main() {
       await tester.pump();
       expect(find.text('测试蓝牙房'), findsOneWidget);
       await tester.runAsync(() async {
-        await tester.tap(find.text('Join chat'));
+        await tester.tap(find.text('Join room'));
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
       await tester.pump();
@@ -182,7 +150,7 @@ void main() {
   ) async {
     advertisingWorks = false;
     await showHome(tester);
-    await tester.tap(find.text('Start Bluetooth Talk'));
+    await tester.tap(find.text('Create Bluetooth room'));
     await tester.pump();
     await pumpUntil(
       tester,

@@ -5,7 +5,7 @@ void main() {
   group('AppStrings i18n Tests', () {
     test('Chinese strings return non-empty localized texts', () {
       const s = AppStrings.zh;
-      expect(s.appName, '落日后残波');
+      expect(s.appName, '曙光之声');
       expect(s.tagline, '和身边的人聊聊');
       expect(s.fullDuplex, '自由交谈');
       expect(s.pttMode, '按住说话');
@@ -18,9 +18,9 @@ void main() {
       expect(s.defaultNickname, '探索者');
       expect(s.scanRooms, '看看附近');
       expect(s.nearbyRoomsTitle, '附近的聊天室');
-      expect(s.wifiRoom, 'Wi-Fi 畅聊');
-      expect(s.bluetoothRoom, '蓝牙对讲');
-      expect(s.joinRoom, '加入聊天');
+      expect(s.wifiRoom, 'Wi-Fi 房间');
+      expect(s.bluetoothRoom, '蓝牙房间');
+      expect(s.joinRoom, '加入房间');
       expect(s.micMutedStatus, '麦克风已关闭');
       expect(s.pttHoldingToTalk, '正在说话');
       expect(s.pttHoldToTalk, '按住说话');
@@ -45,7 +45,7 @@ void main() {
 
     test('English strings return non-empty localized texts', () {
       const s = AppStrings.en;
-      expect(s.appName, 'SunsetRipple');
+      expect(s.appName, 'DawnMesh');
       expect(s.tagline, 'Chat with people nearby');
       expect(s.fullDuplex, 'Talk freely');
       expect(s.pttMode, 'Hold to talk');
@@ -58,9 +58,9 @@ void main() {
       expect(s.defaultNickname, 'Explorer');
       expect(s.scanRooms, 'Look nearby');
       expect(s.nearbyRoomsTitle, 'Chats nearby');
-      expect(s.wifiRoom, 'Wi-Fi Chat');
-      expect(s.bluetoothRoom, 'Bluetooth Talk');
-      expect(s.joinRoom, 'Join chat');
+      expect(s.wifiRoom, 'Wi-Fi room');
+      expect(s.bluetoothRoom, 'Bluetooth room');
+      expect(s.joinRoom, 'Join room');
       expect(s.micMutedStatus, 'Microphone is off');
       expect(s.pttHoldingToTalk, 'Speaking');
       expect(s.pttHoldToTalk, 'Hold to talk');
@@ -75,8 +75,10 @@ void main() {
       expect(s.chatCloseSheet, 'Close messages');
       expect(s.chatUnreadBadge(5), '5 unread messages');
       expect(s.chatRecall, 'Recall');
-      expect(s.chatRecallConfirm,
-          contains('Would you like to recall this message'));
+      expect(
+        s.chatRecallConfirm,
+        contains('Would you like to recall this message'),
+      );
       expect(s.chatRecalledTip, 'Recall request submitted');
       expect(s.formerNameLabel('OldName'), 'Previously OldName');
       expect(s.hostRoleBadge, 'Host');

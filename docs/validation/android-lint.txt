@@ -1,4 +1,25 @@
-/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:69: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:102: Warning: Attribute showWhenLocked is only used in API level 27 and higher (current min is 26) [UnusedAttribute]
+            android:showWhenLocked="true"
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "UnusedAttribute":
+   This check finds attributes set in XML files that were introduced in a
+   version newer than the oldest version targeted by your application (with
+   the minSdkVersion attribute).
+
+   This is not an error; the application will simply ignore the attribute.
+   However, if the attribute is important to the appearance or functionality
+   of your application, you should consider finding an alternative way to
+   achieve the same result with only available attributes, and then you can
+   optionally create a copy of the layout in a layout-vNN folder which will be
+   used on API NN or higher where you can take advantage of the newer
+   attribute.
+
+   Note: This check does not only apply to attributes. For example, some tags
+   can be unused too, such as the new <tag> element in layouts introduced in
+   API 21.
+
+/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:71: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
     <application
     ^
 
@@ -18,25 +39,16 @@
    https://developer.android.com/about/versions/12/backup-restore#xml-changes
    https://goo.gle/DataExtractionRules
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt:34: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt:82: Warning: Unnecessary; SDK_INT is never < 26 [ObsoleteSdkInt]
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt:106: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:102: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
     private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:301: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:306: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:414: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:418: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:698: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:702: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /Users/judoon/workspace/DawnMesh/android/app/src/main/res/drawable-v21: Warning: This folder configuration (v21) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into drawable. [ObsoleteSdkInt]
@@ -85,4 +97,21 @@
    application iconwill not show if your monochrome attribute is not also
    specified in android:roundIcon.
 
-0 errors, 12 warnings
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/LockScreenTalkActivity.kt:33: Warning: Do not concatenate text displayed with setText. Use resource string with placeholders. [SetTextI18n]
+            text = getString(R.string.app_name) + " · 房间通话"
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "SetTextI18n":
+   When calling TextView#setText
+   * Never call Number#toString() to format numbers; it will not handle
+   fraction separators and locale-specific digits properly. Consider using
+   String#format with proper format specifications (%d or %f) instead.
+   * Do not pass a string literal (e.g. "Hello") to display text. Hardcoded
+   text can not be properly translated to other languages. Consider using
+   Android resource strings instead.
+   * Do not build messages by concatenating text chunks. Such messages can not
+   be properly translated.
+
+   https://developer.android.com/guide/topics/resources/localization.html
+
+0 errors, 11 warnings

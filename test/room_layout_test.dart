@@ -85,9 +85,7 @@ void main() {
     testWidgets('${entry.key} 首页整场（背景+标题+前景）不溢出', (tester) async {
       useSurface(tester, entry.value);
       await tester.pumpWidget(
-        MaterialApp(
-          home: SessionStage(isNight: false, onToggleTheme: () {}),
-        ),
+        MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
       );
       // 首页 initState 会发起扫描，里面有 2 秒的 Future.delayed。
       await tester.pump(const Duration(seconds: 3));
@@ -95,7 +93,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(
         find.byWidgetPredicate(
-          (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
+          (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),
         ),
         findsWidgets,
       );
@@ -103,7 +101,7 @@ void main() {
         find.byWidgetPredicate(
           (w) =>
               w is Text &&
-              (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
+              (w.data == '创建 Wi-Fi 房间' || w.data == 'Create Wi-Fi room'),
         ),
         findsOneWidget,
       );
@@ -111,20 +109,12 @@ void main() {
 
     testWidgets('${entry.key} 聊天面板弹出、输入发送、长消息不溢出', (tester) async {
       useSurface(tester, entry.value);
-      final session = RoomSession(
-        audioIo: MockAudioIo(),
-        selfNickname: '测试者',
-      );
+      final session = RoomSession(audioIo: MockAudioIo(), selfNickname: '测试者');
       await session.createRoom();
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: RoomChatSheet(
-              session: session,
-              isNight: false,
-            ),
-          ),
+          home: Scaffold(body: RoomChatSheet(session: session, isNight: false)),
         ),
       );
       await tester.pump();

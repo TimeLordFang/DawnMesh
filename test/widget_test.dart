@@ -6,12 +6,15 @@ import 'package:sunset_ripple/main.dart';
 
 void main() {
   const audioChannel = MethodChannel('host.msknet.sunsetripple/audio');
-  const audioEventsChannel =
-      MethodChannel('host.msknet.sunsetripple/audio_events');
-  const wifiDirectChannel =
-      MethodChannel('host.msknet.sunsetripple/wifi_direct');
-  const wifiDirectEventsChannel =
-      MethodChannel('host.msknet.sunsetripple/wifi_direct_events');
+  const audioEventsChannel = MethodChannel(
+    'host.msknet.sunsetripple/audio_events',
+  );
+  const wifiDirectChannel = MethodChannel(
+    'host.msknet.sunsetripple/wifi_direct',
+  );
+  const wifiDirectEventsChannel = MethodChannel(
+    'host.msknet.sunsetripple/wifi_direct_events',
+  );
 
   setUp(() {
     final messenger =
@@ -25,7 +28,9 @@ void main() {
       return null;
     });
     messenger.setMockMethodCallHandler(
-        wifiDirectEventsChannel, (_) async => null);
+      wifiDirectEventsChannel,
+      (_) async => null,
+    );
   });
 
   tearDown(() {
@@ -48,7 +53,7 @@ void main() {
     // 能找到标题（SunsetRipple 或 落日后残波）与输入框
     expect(
       find.byWidgetPredicate(
-        (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
+        (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),
       ),
       findsWidgets,
     );
@@ -57,7 +62,7 @@ void main() {
       find.byWidgetPredicate(
         (w) =>
             w is Text &&
-            (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
+            (w.data == '创建 Wi-Fi 房间' || w.data == 'Create Wi-Fi room'),
       ),
       findsOneWidget,
     );
@@ -68,7 +73,7 @@ void main() {
     await tester.pump(scanSettle);
 
     final bluetoothChip = find.byWidgetPredicate(
-      (w) => w is Text && (w.data == '蓝牙对讲' || w.data == 'Bluetooth Talk'),
+      (w) => w is Text && (w.data == '蓝牙房间' || w.data == 'Bluetooth room'),
     );
     expect(bluetoothChip, findsOneWidget);
 
@@ -81,7 +86,7 @@ void main() {
       find.byWidgetPredicate(
         (w) =>
             w is Text &&
-            (w.data == '开始蓝牙对讲' || w.data == 'Start Bluetooth Talk'),
+            (w.data == '创建蓝牙房间' || w.data == 'Create Bluetooth room'),
       ),
       findsOneWidget,
     );

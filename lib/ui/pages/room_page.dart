@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
@@ -36,14 +37,29 @@ class RoomContent extends StatefulWidget {
 
 class _RoomContentState extends State<RoomContent> {
   bool _isSpeakerOn = true;
+  StreamSubscription<void>? _controls;
+  @override
+  void initState() {
+    super.initState();
+    _controls = widget.session.controlsStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controls?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final isNight = widget.isNight;
     final stage = widget.stage;
     // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
-    final discSize =
-        (MediaQuery.of(context).size.height * 0.24).clamp(148.0, 212.0);
+    final discSize = (MediaQuery.of(context).size.height *
+            (widget.session.isBluetooth ? 0.20 : 0.24))
+        .clamp(124.0, 212.0);
 
     return SafeArea(
       top: false,
@@ -69,24 +85,50 @@ class _RoomContentState extends State<RoomContent> {
 
           const Spacer(),
 
-          // 2. 中央对讲盘：WiFi 房是实时音浪，蓝牙房是按住说话
+          if (widget.session.isBluetooth)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SegmentedButton<VoiceMode>(
+                style: SegmentedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: Colors.white,
+                  selectedForegroundColor: Colors.black,
+                  selectedBackgroundColor: Colors.white70,
+                ),
+                segments: const [
+                  ButtonSegment(
+                    value: VoiceMode.pushToTalk,
+                    label: Text('按住对讲'),
+                  ),
+                  ButtonSegment(
+                    value: VoiceMode.automatic,
+                    label: Text('自动通话'),
+                  ),
+                ],
+                selected: {widget.session.voiceMode},
+                onSelectionChanged:
+                    (modes) => widget.session.setVoiceMode(modes.single),
+              ),
+            ),
+          // Each device selects its own transmit mode; receiving stays enabled.
           StageEnterItem(
             stage: stage,
             index: 1,
             rise: 40,
             fromScale: 0.84,
-            child: widget.session.isFullDuplex
-                ? _buildDuplexDisc(isNight, discSize)
-                : PttButton(
-                    isNight: isNight,
-                    size: discSize,
-                    isPressed: widget.session.isPttPressed,
-                    onStateChanged: (pressed) {
-                      setState(() {
-                        widget.session.setPtt(pressed);
-                      });
-                    },
-                  ),
+            child:
+                widget.session.isFullDuplex
+                    ? _buildDuplexDisc(isNight, discSize)
+                    : PttButton(
+                      isNight: isNight,
+                      size: discSize,
+                      isPressed: widget.session.isPttPressed,
+                      onStateChanged: (pressed) {
+                        setState(() {
+                          widget.session.setPtt(pressed);
+                        });
+                      },
+                    ),
           ),
 
           const Spacer(),
@@ -121,7 +163,8 @@ class _RoomContentState extends State<RoomContent> {
 
   Widget _buildDuplexDisc(bool isNight, double size) {
     final s = AppStrings.of(context);
-    final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetBurgundy;
+    final activeColor =
+        isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetBurgundy;
 
     // 光晕做在外层、参数固定：BoxShadow 的模糊是这里最贵的绘制，若
     // blurRadius/spreadRadius 跟着音量逐帧变，GPU 就得逐帧重做高斯模糊——

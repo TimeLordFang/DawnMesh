@@ -28,11 +28,11 @@ void main() {
   });
 
   Finder findTitle() => find.byWidgetPredicate(
-    (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
+    (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),
   );
   Finder findCreateWifi() => find.byWidgetPredicate(
     (w) =>
-        w is Text && (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
+        w is Text && (w.data == '创建 Wi-Fi 房间' || w.data == 'Create Wi-Fi room'),
   );
   Finder findInCall() => find.byWidgetPredicate(
     (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),

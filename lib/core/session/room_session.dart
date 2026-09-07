@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import '../audio/audio_io.dart';
+import '../audio/voice_activity_gate.dart';
+import '../platform/background_call_controls.dart';
+import '../platform/platform_audio_channel.dart';
 import '../diagnostics/app_log.dart';
 import '../protocol/frame.dart';
 import '../protocol/frame_type.dart';
@@ -15,6 +18,7 @@ import '../protocol/payloads/ptt_state.dart';
 import '../protocol/payloads/roster.dart';
 import '../security/session_handshake.dart';
 import '../security/room_invite.dart';
+import '../security/room_admission.dart';
 import '../transport/room_transport.dart';
 import 'chat_message.dart';
 import 'device_code.dart';
@@ -23,6 +27,8 @@ import 'member.dart';
 import 'reconnect_controller.dart';
 
 enum RoomMode { wifiFullDuplex, bluetoothPtt }
+
+enum VoiceMode { pushToTalk, automatic }
 
 enum RoomState { idle, connecting, inRoom, reconnecting, disconnected }
 
@@ -50,11 +56,42 @@ class RoomSession {
   final String selfNickname;
   final Uint8List sessionToken;
   final RoomMode mode;
+  late VoiceMode _voiceMode =
+      mode == RoomMode.wifiFullDuplex
+          ? VoiceMode.automatic
+          : VoiceMode.pushToTalk;
+  VoiceMode get voiceMode => _voiceMode;
+  bool get isBluetooth => mode == RoomMode.bluetoothPtt;
+  final _voiceGate = VoiceActivityGate();
+  final _controlsController = StreamController<void>.broadcast();
+  Stream<void> get controlsStream => _controlsController.stream;
+  BackgroundCallControls? _backgroundControls;
+
+  void setVoiceMode(VoiceMode value) {
+    if (!isBluetooth || _voiceMode == value) return;
+    setPtt(false);
+    _voiceMode = value;
+    _voiceGate.reset();
+    _notifyControls();
+  }
+
+  void _notifyControls() {
+    if (!_controlsController.isClosed) _controlsController.add(null);
+    unawaited(
+      _backgroundControls?.update(
+        bluetooth: isBluetooth,
+        automatic: isFullDuplex,
+        pressed: isPttPressed,
+        muted: isMuted,
+      ),
+    );
+  }
 
   /// Production entry points require a fresh room invitation before connecting.
   /// Nullable only for legacy protocol tests and explicit internal use.
   SecureFrameCodec? secureCodec;
   RoomInvite? roomInvite;
+  RoomAdmission? _admission;
   bool _admitted = false;
   bool _closed = false;
   Future<void> _incomingQueue = Future.value();
@@ -63,8 +100,17 @@ class RoomSession {
   int _pendingOutgoing = 0;
 
   Future<void> protectWithInvite(RoomInvite invite) async {
-    secureCodec = await invite.createCodec();
     roomInvite = invite;
+    _admission = RoomAdmission(
+      passwordScalar: await invite.passwordScalar(),
+      token: sessionToken,
+      send: (frame) => onSendFrame?.call(frame),
+      onReady: (codec) async {
+        if (_closed) return;
+        secureCodec = codec;
+        if (!_isHost) await _sendJoinRequest();
+      },
+    );
   }
 
   // Leave room for the largest chat-history header when encryption is enabled.
@@ -144,7 +190,7 @@ class RoomSession {
   bool isPttPressed = false;
   int get selfMemberId => _selfMemberId;
   List<Member> get members => _members.values.toList();
-  bool get isFullDuplex => mode == RoomMode.wifiFullDuplex;
+  bool get isFullDuplex => _voiceMode == VoiceMode.automatic;
 
   /// 会话令牌：进房时随机生成，同一台设备跨重连保持不变。
   /// 房主用它判定「老成员重连回来了」——昵称谁都可以填一样的，不能作为身份依据。
@@ -190,6 +236,7 @@ class RoomSession {
   /// 进房转场期间要用它把开麦推迟到动画结束——原因见 [startAudio] 的说明。
   Future<void> createRoom({bool startAudio = true}) async {
     _isHost = true;
+    await _admission?.startHost();
     _selfMemberId = 1;
     _members.clear();
     _nextJoinOrder = 1;
@@ -223,6 +270,16 @@ class RoomSession {
 
     _updateState(RoomState.connecting);
 
+    if (_admission != null) {
+      _admission!.startClient();
+    } else {
+      await _sendJoinRequest();
+    }
+    if (startAudio && roomInvite == null) await this.startAudio();
+    _startHeartbeat();
+  }
+
+  Future<void> _sendJoinRequest() async {
     final joinPayload = JoinRequestPayload(
       nickname: selfNickname,
       sessionToken: sessionToken,
@@ -233,10 +290,7 @@ class RoomSession {
       seq: _nextSeq(),
       payload: joinPayload.encode(),
     );
-    sendFrame(joinFrame);
-
-    if (startAudio) await this.startAudio();
-    _startHeartbeat();
+    await sendFrame(joinFrame);
   }
 
   /// 打开麦克风与扬声器。可重复调用，只生效一次。
@@ -246,15 +300,33 @@ class RoomSession {
   /// 如果压在 560ms 的进房转场里，UI 线程和平台线程互相抢，动画必然掉帧。
   /// 所以进房时先只建房、跑完动画再开麦。
   Future<void> startAudio() async {
-    if (_audioStarted) return;
+    if (_audioStarted || _closed || (roomInvite != null && _state != RoomState.inRoom)) return;
     _audioStarted = true;
+    if (audioIo is PlatformAudioChannel) {
+      _backgroundControls = BackgroundCallControls(this);
+      await _backgroundControls!.bind((command, value) async {
+        if (_closed || !_audioStarted) return;
+        if (command == 'ptt') setPtt(value == true);
+        if (command == 'automatic') {
+          setVoiceMode(
+            value == true ? VoiceMode.automatic : VoiceMode.pushToTalk,
+          );
+        }
+        if (command == 'mute' && value is bool && value != isMuted) {
+          toggleMute();
+        }
+      });
+      _notifyControls();
+    }
     await _startAudioPipeline();
   }
 
   /// Process incoming binary frames
   Future<void> handleIncomingFrame(Frame frame) {
     if (_closed) return Future.value();
-    if (secureCodec == null) return _handleIncomingFrame(frame);
+    if (secureCodec == null && roomInvite == null) {
+      return _handleIncomingFrame(frame);
+    }
     // Keep async cryptography in wire order and bound unauthenticated work.
     if (_pendingIncoming >= 256) return Future.value();
     _pendingIncoming++;
@@ -268,6 +340,17 @@ class RoomSession {
   }
 
   Future<void> _handleIncomingFrame(Frame frame) async {
+    if (roomInvite != null &&
+        (frame.type == FrameType.handshakeHello ||
+            frame.type == FrameType.handshakeConfirm)) {
+      try {
+        await _admission?.handle(frame);
+      } catch (_) {
+        /* Invalid admission is rejected. */
+      }
+      return;
+    }
+    if (roomInvite != null && secureCodec == null) return;
     if (frame.type == FrameType.sealed) {
       if (secureCodec == null) {
         AppLog.warn('RoomSession', '收到加密帧但未配置安全编解码器，已丢弃');
@@ -387,7 +470,7 @@ class RoomSession {
   /// 缺了这一步，WiFi 房里的说话指示灯一旦亮起就永远不会灭——
   /// 只有 PTT 帧会复位它，而全双工模式根本不发 PTT 帧。
   void _expireSpeakingStates() {
-    if (!isFullDuplex) return; // PTT 模式由 pttState 帧驱动，不能靠音频超时
+    // Peers choose their own transmit mode, so every receiver expires silence.
 
     final now = DateTime.now();
     var changed = false;
@@ -785,30 +868,38 @@ class RoomSession {
     // 每帧音频都会被发送两遍。
     await audioIo.stopCapture();
     await audioIo.clearRemoteMembers();
+    if (!_audioStarted || _closed) return;
 
     await audioIo.startCapture((opusPacket, level) {
-      // 全双工：没静音就一直发；PTT：还要按住才发。
-      final shouldTransmit =
-          isFullDuplex ? !audioIo.isMuted : (!audioIo.isMuted && isPttPressed);
-      if (!shouldTransmit) return;
-
-      if (!_waveController.isClosed) {
-        final nowMs = DateTime.now().millisecondsSinceEpoch;
-        if (nowMs - _lastWaveUiEmitMs >= 33) {
-          _lastWaveUiEmitMs = nowMs;
-          _waveController.add(level);
-        }
+      if (_closed || !_audioStarted || _state != RoomState.inRoom || isMuted) {
+        _voiceGate.reset();
+        return;
       }
-
-      sendFrame(
-        Frame(
-          type: FrameType.audio,
-          senderId: _selfMemberId,
-          seq: _nextSeq(),
-          payload: opusPacket,
-        ),
-      );
-    }, bitrateBps: isFullDuplex ? _wifiBitrate : _bluetoothBitrate);
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final packets =
+          isFullDuplex
+              ? _voiceGate.process(opusPacket, level, nowMs)
+              : (isPttPressed ? [opusPacket] : <Uint8List>[]);
+      if (!_waveController.isClosed && nowMs - _lastWaveUiEmitMs >= 33) {
+        _lastWaveUiEmitMs = nowMs;
+        _waveController.add(packets.isEmpty ? 0 : level);
+      }
+      for (final packet in packets) {
+        sendFrame(
+          Frame(
+            type: FrameType.audio,
+            senderId: _selfMemberId,
+            seq: _nextSeq(),
+            payload: packet,
+          ),
+        );
+      }
+    }, bitrateBps: isBluetooth ? _bluetoothBitrate : _wifiBitrate);
+    if (!_audioStarted || _closed) {
+      await audioIo.stopCapture();
+      await audioIo.stopPlayback();
+      return;
+    }
 
     // 播放不再需要 Dart 定时器：抖动缓冲、解码、混音、送扬声器全在原生侧，
     // 由 AudioTrack 的写阻塞天然定速（原来的 Timer.periodic(20ms) 有调度漂移）。
@@ -872,7 +963,9 @@ class RoomSession {
 
   /// PTT 按住/松开切换。
   void setPtt(bool isPressed) {
+    if (isPressed && (isFullDuplex || isMuted || _closed)) return;
     isPttPressed = isPressed;
+    _notifyControls();
     final self = _members[_selfMemberId];
     if (self != null) {
       self.isSpeaking = isPressed;
@@ -892,6 +985,11 @@ class RoomSession {
   void toggleMute() {
     final nextMuted = !audioIo.isMuted;
     audioIo.setMuted(nextMuted);
+    if (nextMuted) {
+      setPtt(false);
+      _voiceGate.reset();
+    }
+    _notifyControls();
     final self = _members[_selfMemberId];
     if (self != null) {
       self.isMuted = nextMuted;
@@ -920,7 +1018,9 @@ class RoomSession {
   void Function(Frame frame)? onSendFrame;
 
   Future<void> sendFrame(Frame frame) {
-    if (_closed) return Future.value();
+    if (_closed || (roomInvite != null && secureCodec == null)) {
+      return Future.value();
+    }
     if (secureCodec == null) return _sendFrame(frame);
     if (_pendingOutgoing >= 256) return Future.value();
     _pendingOutgoing++;
@@ -1339,6 +1439,11 @@ class RoomSession {
   }
 
   Future<void> leave() async {
+    _audioStarted = false;
+    isPttPressed = false;
+    _voiceGate.reset();
+    await _backgroundControls?.close();
+    _backgroundControls = null;
     final leavePayload = LeavePayload();
     final frame = Frame(
       type: FrameType.leave,
@@ -1365,6 +1470,8 @@ class RoomSession {
     await audioIo.clearRemoteMembers();
     await transport?.stop();
     _closed = true;
+    _admission?.close();
+    _admission = null;
     secureCodec = null;
     roomInvite = null;
 
@@ -1421,6 +1528,7 @@ class RoomSession {
   Future<void> _dispose() async {
     await leave();
     await transport?.dispose();
+    await _controlsController.close();
     transport = null;
     _chatMessages.clear();
     _seenChatKeys.clear();

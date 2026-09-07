@@ -9,6 +9,7 @@ import 'package:sunset_ripple/core/protocol/frame_type.dart';
 import 'package:sunset_ripple/core/protocol/payloads/roster.dart';
 import 'package:sunset_ripple/core/security/room_invite.dart';
 import 'package:sunset_ripple/core/security/session_crypto.dart';
+import 'package:sunset_ripple/core/security/session_handshake.dart';
 import 'package:sunset_ripple/core/session/room_session.dart';
 import 'package:sunset_ripple/core/transport/lan_transport.dart';
 
@@ -23,7 +24,8 @@ Future<void> until(bool Function() condition) async {
 void main() {
   test('invitation is canonical, random, and redacted', () {
     final invite = RoomInvite.generate();
-    expect(invite.code.length, 22);
+    expect(invite.code.length, 6);
+    expect(RoomInvite.parse('000123').code, '000123');
     expect(RoomInvite.parse(' ${invite.code} ').code, invite.code);
     expect(RoomInvite.generate().code, isNot(invite.code));
     expect(invite.toString(), isNot(contains(invite.code)));
@@ -37,10 +39,15 @@ void main() {
   test(
     'wrong key, modified ciphertext, and concurrent replay are rejected',
     () async {
-      final invite = RoomInvite.generate();
-      final sender = await invite.createCodec();
-      final receiver = await invite.createCodec();
-      final wrong = await RoomInvite.generate().createCodec();
+      final sender = SecureFrameCodec(
+        await SessionCipher.fromKey(Uint8List(32)),
+      );
+      final receiver = SecureFrameCodec(
+        await SessionCipher.fromKey(Uint8List(32)),
+      );
+      final wrong = SecureFrameCodec(
+        await SessionCipher.fromKey(Uint8List(32)..[0] = 1),
+      );
       final sealed = await sender.seal(
         Frame(
           type: FrameType.chat,
@@ -86,11 +93,17 @@ void main() {
     'captured roster cannot admit a fresh client without its challenge',
     () async {
       final invite = RoomInvite.generate();
-      final hostCodec = await invite.createCodec();
+      final hostCodec = SecureFrameCodec(
+        await SessionCipher.fromKey(Uint8List(32)),
+      );
       final guest = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Guest');
       addTearDown(guest.dispose);
       await guest.protectWithInvite(invite);
       await guest.joinRoom(startAudio: false);
+      // Isolate post-PAKE membership confirmation from the PAKE tests.
+      guest.secureCodec = SecureFrameCodec(
+        await SessionCipher.fromKey(Uint8List(32)),
+      );
       final roster = Frame(
         type: FrameType.roster,
         senderId: 1,
@@ -216,7 +229,15 @@ void main() {
       expect(wrong.state, RoomState.connecting);
       expect(host.members.length, 3);
       expect(wire, isNotEmpty);
-      expect(wire.every((frame) => frame.type == FrameType.sealed), isTrue);
+      expect(
+        wire.every(
+          (frame) =>
+              frame.type == FrameType.sealed ||
+              frame.type == FrameType.handshakeHello ||
+              frame.type == FrameType.handshakeConfirm,
+        ),
+        isTrue,
+      );
       expect(
         wire.any(
           (frame) => latin1.decode(frame.encode()).contains('guest secret'),

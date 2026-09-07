@@ -8,46 +8,73 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 
-/**
- * 通话期间的前台服务。
- *
- * 没有它，应用一退到后台，系统就会在几十秒内回收麦克风采集与网络 socket，
- * 表现为「切出去看一眼消息，回来对讲就断了」。
- *
- * Android 14（API 34）起，microphone 类型的前台服务必须在应用处于前台时启动，
- * 且已经持有 RECORD_AUDIO——这里由「创建/加入房间」这个用户操作触发，满足条件。
- */
+/** Foreground microphone lifetime owns CPU/network locks, released on stop. */
 class IntercomForegroundService : Service() {
-
     companion object {
         private const val TAG = "SunsetFgs"
-        private const val CHANNEL_ID = "sunsetripple_intercom"
+        private const val CHANNEL_ID = "dawnmesh_call_v2"
         private const val NOTIFICATION_ID = 4802
+        @Volatile private var running = false
 
-        fun start(context: Context) {
-            val intent = Intent(context, IntercomForegroundService::class.java)
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (e: Exception) {
-                // Android 12+ 有后台启动限制；失败不该让通话本身崩掉。
-                Log.e(TAG, "启动前台服务失败，后台可能会被系统掐断音频", e)
-            }
+        fun start(context: Context): Boolean = try {
+            context.startForegroundService(Intent(context, IntercomForegroundService::class.java))
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "无法启动通话前台服务", e)
+            false
         }
 
         fun stop(context: Context) {
-            try {
-                context.stopService(Intent(context, IntercomForegroundService::class.java))
-            } catch (e: Exception) {
-                Log.w(TAG, "停止前台服务失败", e)
+            context.stopService(Intent(context, IntercomForegroundService::class.java))
+        }
+
+        fun refreshNotification(context: Context) {
+            if (!running) return
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(NOTIFICATION_ID, notification(context))
+        }
+
+        private fun notification(context: Context): Notification {
+            val controlIntent = PendingIntent.getActivity(context, 4803,
+                Intent(context, LockScreenTalkActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val state = when {
+                CallControlBridge.muted -> "已静音 · 仍可收听"
+                CallControlBridge.automatic -> "自动通话 · 有声音时发送"
+                else -> "按住对讲 · 点此打开锁屏对讲面板"
             }
+            return Notification.Builder(context, CHANNEL_ID)
+                .setContentTitle(context.getString(R.string.app_name) + " · 房间通话")
+                .setContentText(state)
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentIntent(controlIntent)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setCategory(Notification.CATEGORY_CALL)
+                .addAction(Notification.Action.Builder(
+                    android.R.drawable.ic_btn_speak_now, "通话面板", controlIntent).build())
+                .build()
+        }
+    }
+
+    private var cpuLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val renewCpuLock = object : Runnable {
+        override fun run() {
+            // Bounded lease renewed only while this foreground service exists.
+            cpuLock?.acquire(30 * 60 * 1000L)
+            handler.postDelayed(this, 20 * 60 * 1000L)
         }
     }
 
@@ -55,68 +82,47 @@ class IntercomForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID,
+            "房间通话与锁屏控制", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "通话期间持续收发，点通知打开按住对讲面板"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setShowBadge(false)
+        })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
-                )
-            } else {
-                startForeground(NOTIFICATION_ID, buildNotification())
+                startForeground(NOTIFICATION_ID, notification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else startForeground(NOTIFICATION_ID, notification(this))
+            running = true
+            if (cpuLock == null) {
+                cpuLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "DawnMesh:ActiveCall")
+                    .apply { setReferenceCounted(false) }
+                renewCpuLock.run()
+            }
+            if (wifiLock == null && !CallControlBridge.bluetooth) {
+                val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                val lock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "DawnMesh:ActiveCall")
+                wifiLock = lock.apply { setReferenceCounted(false); acquire() }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "startForeground 失败", e)
+            Log.e(TAG, "前台通话服务初始化失败", e)
             stopSelf()
-            return START_NOT_STICKY
         }
-        // 通话是一次性的，被系统杀掉后不要自动重启一个空会话。
         return START_NOT_STICKY
     }
 
-    private fun createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "聊天连接",
-            NotificationManager.IMPORTANCE_LOW, // 不出声、不震动，避免干扰通话
-        ).apply {
-            description = "切到后台后，继续保持聊天连接"
-            setShowBadge(false)
-        }
-        manager.createNotificationChannel(channel)
-    }
-
-    private fun buildNotification(): Notification {
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-
-        return builder
-            .setContentTitle("落日后残波")
-            .setContentText("聊天还在继续")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentIntent(contentIntent)
-            .setOngoing(true)
-            .setCategory(Notification.CATEGORY_CALL)
-            .build()
+    override fun onDestroy() {
+        running = false
+        handler.removeCallbacks(renewCpuLock)
+        cpuLock?.let { if (it.isHeld) it.release() }
+        wifiLock?.let { if (it.isHeld) it.release() }
+        cpuLock = null
+        wifiLock = null
+        super.onDestroy()
     }
 }

@@ -159,7 +159,7 @@ class PlatformAudioChannel implements AudioIo {
   String _describe(PlatformException e, String what) {
     switch (e.code) {
       case 'PERMISSION_DENIED':
-        return '没有录音权限，$what 失败。请在系统设置里允许「落日后残波」使用麦克风';
+        return '没有录音权限，$what 失败。请在系统设置里允许「曙光之声」使用麦克风';
       case 'CAPTURE_FAILED':
         return '麦克风被其他应用占用，$what 失败';
       case 'PLAYBACK_FAILED':
