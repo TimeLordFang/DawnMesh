@@ -1,100 +1,58 @@
-/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:102: Warning: Attribute showWhenLocked is only used in API level 27 and higher (current min is 26) [UnusedAttribute]
-            android:showWhenLocked="true"
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> Task :gradle:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle:compileKotlin UP-TO-DATE
+> Task :gradle:compileJava NO-SOURCE
+> Task :gradle:compileGroovy UP-TO-DATE
+> Task :gradle:pluginDescriptors UP-TO-DATE
+> Task :gradle:processResources UP-TO-DATE
+> Task :gradle:classes UP-TO-DATE
+> Task :gradle:jar UP-TO-DATE
+> Task :app:compileFlutterBuildDebug UP-TO-DATE
+> Task :app:packJniLibsflutterBuildDebug UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:cleanMergeDebugAssets
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:copyFlutterAssetsDebug
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :app:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:generateDebugLintReportModel UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :app:lintAnalyzeDebug UP-TO-DATE
+> Task :app:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :app:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :app:lintReportDebug UP-TO-DATE
+> Task :app:lintDebug
 
-   Explanation for issues of type "UnusedAttribute":
-   This check finds attributes set in XML files that were introduced in a
-   version newer than the oldest version targeted by your application (with
-   the minSdkVersion attribute).
+[Incubating] Problems report is available at: file:///Users/judoon/workspace/DawnMesh/build/reports/problems/problems-report.html
 
-   This is not an error; the application will simply ignore the attribute.
-   However, if the attribute is important to the appearance or functionality
-   of your application, you should consider finding an alternative way to
-   achieve the same result with only available attributes, and then you can
-   optionally create a copy of the layout in a layout-vNN folder which will be
-   used on API NN or higher where you can take advantage of the newer
-   attribute.
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
 
-   Note: This check does not only apply to attributes. For example, some tags
-   can be unused too, such as the new <tag> element in layouts introduced in
-   API 21.
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:71: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
-    <application
-    ^
+For more on this, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-   Explanation for issues of type "DataExtractionRules":
-   Before Android 12, the attributes android:allowBackup and
-   android:fullBackupContent were used to configure all forms of backup,
-   including cloud backups, device-to-device transfers and adb backup.
-
-   In Android 12 and higher, these attributes have been deprecated and will
-   only apply to cloud backups. You should instead use the attribute
-   android:dataExtractionRules, specifying an @xml resource that configures
-   which files to back up, for cloud backups and for device-to-device
-   transfers, separately. If your minSdkVersion supports older versions,
-   you'll still want to specify an android:fullBackupContent resource if the
-   default behavior is not right for your app.
-
-   https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   https://goo.gle/DataExtractionRules
-
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:102: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-    private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:306: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:429: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:720: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/res/drawable-v21: Warning: This folder configuration (v21) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into drawable. [ObsoleteSdkInt]
-/Users/judoon/workspace/DawnMesh/android/app/src/main/res/mipmap-anydpi-v26: Warning: This folder configuration (v26) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into mipmap-anydpi. [ObsoleteSdkInt]
-
-   Explanation for issues of type "ObsoleteSdkInt":
-   This check flags version checks that are not necessary, because the
-   minSdkVersion (or surrounding known API level) is already at least as high
-   as the version checked for.
-
-   Similarly, it also looks for resources in -vNN folders, such as values-v14
-   where the version qualifier is less than or equal to the minSdkVersion,
-   where the contents should be merged into the best folder.
-
-/Users/judoon/workspace/DawnMesh/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml:2: Warning: The resource R.mipmap.ic_launcher_round appears to be unused [UnusedResources]
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-^
-
-   Explanation for issues of type "UnusedResources":
-   Unused resources make applications larger and slow down builds.
-
-
-   The unused resource check can ignore tests. If you want to include
-   resources that are only referenced from tests, consider packaging them in a
-   test source set instead.
-
-   You can include test sources in the unused resource check by setting the
-   system property lint.unused-resources.include-tests =true, and to exclude
-   them (usually for performance reasons), use
-   lint.unused-resources.exclude-tests =true.
-   ,
-
-/Users/judoon/workspace/DawnMesh/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml:2: Warning: The application adaptive icon is missing a monochrome tag [MonochromeLauncherIcon]
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-^
-
-   Explanation for issues of type "MonochromeLauncherIcon":
-   If android:roundIcon and android:icon are both in your manifest, you must
-   either remove the reference to android:roundIcon if it is not needed; or,
-   supply the monochrome icon in the drawable defined by the android:roundIcon
-   and android:icon attribute.
-
-   For example, if android:roundIcon and android:icon are both in the
-   manifest, a launcher might choose to use android:roundIcon over
-   android:icon to display the adaptive app icon. Therefore, your themed
-   application iconwill not show if your monochrome attribute is not also
-   specified in android:roundIcon.
-
-0 errors, 10 warnings
+BUILD SUCCESSFUL in 723ms
+38 actionable tasks: 4 executed, 34 up-to-date

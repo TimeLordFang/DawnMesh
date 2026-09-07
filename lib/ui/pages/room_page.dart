@@ -7,6 +7,7 @@ import '../transitions/stage_choreography.dart';
 import '../widgets/audio_controls.dart';
 import '../widgets/member_orbit.dart';
 import '../widgets/ptt_button.dart';
+import '../widgets/voice_mode_switch.dart';
 import '../../l10n/app_strings.dart';
 
 /// 房间前景：成员轨道、中央对讲盘、底部音频控制条。
@@ -56,6 +57,7 @@ class _RoomContentState extends State<RoomContent> {
   Widget build(BuildContext context) {
     final isNight = widget.isNight;
     final stage = widget.stage;
+    final compactHeight = MediaQuery.sizeOf(context).height < 700;
     // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
     final discSize = (MediaQuery.of(context).size.height * 0.20).clamp(
       124.0,
@@ -66,7 +68,7 @@ class _RoomContentState extends State<RoomContent> {
       top: false,
       child: Column(
         children: [
-          const SizedBox(height: 18),
+          SizedBox(height: compactHeight ? 10 : 18),
 
           // 1. 成员轨道
           StageEnterItem(
@@ -87,21 +89,12 @@ class _RoomContentState extends State<RoomContent> {
           const Spacer(),
 
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: SegmentedButton<VoiceMode>(
-              style: SegmentedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: Colors.white,
-                selectedForegroundColor: Colors.black,
-                selectedBackgroundColor: Colors.white70,
-              ),
-              segments: const [
-                ButtonSegment(value: VoiceMode.pushToTalk, label: Text('按住对讲')),
-                ButtonSegment(value: VoiceMode.automatic, label: Text('自动通话')),
-              ],
-              selected: {widget.session.voiceMode},
-              onSelectionChanged:
-                  (modes) => widget.session.setVoiceMode(modes.single),
+            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 8 : 10),
+            child: VoiceModeSwitch(
+              value: widget.session.voiceMode,
+              isNight: isNight,
+              dense: compactHeight,
+              onChanged: widget.session.setVoiceMode,
             ),
           ),
           // Each device selects its own transmit mode; receiving stays enabled.

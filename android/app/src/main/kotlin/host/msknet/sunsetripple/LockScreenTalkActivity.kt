@@ -16,6 +16,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -27,8 +28,8 @@ class LockScreenTalkActivity : Activity() {
     private lateinit var roomType: TextView
     private lateinit var talk: CallTalkPad
     private lateinit var modes: LinearLayout
-    private lateinit var holdMode: TextView
-    private lateinit var autoMode: TextView
+    private lateinit var holdMode: LinearLayout
+    private lateinit var autoMode: LinearLayout
     private lateinit var mute: LinearLayout
     private lateinit var muteTitle: TextView
     private lateinit var muteHint: TextView
@@ -98,11 +99,14 @@ class LockScreenTalkActivity : Activity() {
         modes = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(4))
-            background = shape(CallPanelColors.card, 18f)
+            background = shape(CallPanelColors.card, 24f)
+            elevation = dp(3).toFloat()
         }
         holdMode = modeButton("按住对讲", false)
         autoMode = modeButton("自动通话", true)
-        modes.addView(holdMode, LinearLayout.LayoutParams(0, -2, 1f))
+        modes.addView(holdMode, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            rightMargin = dp(3)
+        })
         modes.addView(autoMode, LinearLayout.LayoutParams(0, -2, 1f))
         column.addView(modes, LinearLayout.LayoutParams(-1, -2))
         talk = CallTalkPad(this).apply {
@@ -192,11 +196,28 @@ class LockScreenTalkActivity : Activity() {
         return dx * dx + dy * dy <= radius * radius
     }
 
-    private fun modeButton(title: String, automatic: Boolean) = label(title, 14f, CallPanelColors.secondary, true).apply {
+    private fun modeButton(title: String, automatic: Boolean) = LinearLayout(this).apply {
         gravity = Gravity.CENTER
-        minimumHeight = dp(48)
-        setPadding(dp(8), dp(10), dp(8), dp(10))
+        minimumHeight = dp(64)
+        setPadding(dp(8), dp(9), dp(8), dp(9))
         isFocusable = true
+        isClickable = true
+        val icon = ImageView(this@LockScreenTalkActivity).apply {
+            setImageDrawable(CallPanelIcon(if (automatic) "wave" else "mic", CallPanelColors.secondary))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(9) })
+        val copy = LinearLayout(this@LockScreenTalkActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        copy.addView(label(title, 14f, CallPanelColors.secondary, true))
+        copy.addView(label(if (automatic) "声音触发" else "按住发送", 11f, CallPanelColors.secondary).apply {
+            setPadding(0, dp(2), 0, 0)
+            alpha = .78f
+        })
+        addView(copy, LinearLayout.LayoutParams(-2, -2))
+        contentDescription = "$title，${if (automatic) "声音触发" else "按住发送"}"
         accessibilityDelegate = object : View.AccessibilityDelegate() {
             override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
@@ -251,10 +272,21 @@ class LockScreenTalkActivity : Activity() {
         modes.visibility = View.VISIBLE
         for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
             button.isSelected = selected
-            button.setTextColor(if (selected) CallPanelColors.ink else CallPanelColors.secondary)
             button.background = ripple(if (selected) {
                 if (auto) CallPanelColors.blue else CallPanelColors.mint
-            } else Color.TRANSPARENT, 14f)
+            } else Color.TRANSPARENT, 20f)
+            val icon = button.getChildAt(0) as ImageView
+            val copy = button.getChildAt(1) as LinearLayout
+            val foreground = if (selected) CallPanelColors.ink else CallPanelColors.secondary
+            icon.setImageDrawable(CallPanelIcon(if (button === autoMode) "wave" else "mic", foreground))
+            (copy.getChildAt(0) as TextView).setTextColor(foreground)
+            (copy.getChildAt(1) as TextView).setTextColor(foreground)
+            button.animate()
+                .scaleX(if (selected) 1f else .98f)
+                .scaleY(if (selected) 1f else .98f)
+                .alpha(if (selected) 1f else .82f)
+                .setDuration(180)
+                .start()
         }
         muteTitle.text = if (muted) "麦克风已静音" else "麦克风已开启"
         muteHint.text = if (muted) "点按恢复发言" else "点按静音，保持收听"

@@ -95,14 +95,15 @@
 +}
 --- a/android/app/src/main/AndroidManifest.xml
 +++ b/android/app/src/main/AndroidManifest.xml
-@@ -1,5 +1,7 @@
+@@ -1,6 +1,8 @@
  <manifest xmlns:android="http://schemas.android.com/apk/res/android"
      xmlns:tools="http://schemas.android.com/tools">
-+
-+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
  
++    <uses-permission android:name="android.permission.WAKE_LOCK"/>
++
      <!-- 语音采集与通话音频路由 -->
      <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 @@ -34,6 +36,8 @@
          android:name="android.permission.ACCESS_FINE_LOCATION"
          android:maxSdkVersion="32"/>
@@ -260,25 +261,23 @@
 -                        "蓝牙广播开启失败（错误码 $errorCode）",
 -                        null,
 -                    )
--                }
 +                    if (advertiseCallback !== this) return@post
 +                    val message = "蓝牙广播失败（错误码 $errorCode；1=广播过长，2=实例耗尽，4=内部错误，5=硬件不支持）"
 +                    pendingAdvertisingResult?.error("ADVERTISE_FAILED", message, null)
 +                    pendingAdvertisingResult = null
 +                    dataSink?.error("ADVERTISE_FAILED", message, null)
 +                    stopEverything()
-+                }
-+            }
-+        }
-+        advertiseCallback = callback
+                 }
+-                stopEverything()
+             }
+         }
+         advertiseCallback = callback
 +        mainHandler.postDelayed({
 +            if (advertiseCallback === callback && pendingAdvertisingResult != null) {
 +                pendingAdvertisingResult?.error("ADVERTISE_TIMEOUT", "蓝牙广播启动超时，请关闭再开启蓝牙后重试", null)
 +                pendingAdvertisingResult = null
-                 stopEverything()
-             }
--        }
--        advertiseCallback = callback
++                stopEverything()
++            }
 +        }, 8_000)
  
          try {
@@ -312,12 +311,10 @@
          val payload = ByteArray(3 + nameBytes.size)
          payload[0] = (advertisedPsm ushr 8).toByte()
          payload[1] = advertisedPsm.toByte()
-@@ -351,17 +394,6 @@
-             .setIncludeDeviceName(false)
-             .addManufacturerData(MANUFACTURER_ID, payload)
+@@ -353,17 +396,6 @@
              .build()
--    }
--
+     }
+ 
 -    /** 按 UTF-8 字节数截断，且不切断多字节字符（中文房名会踩到）。 */
 -    private fun truncateUtf8(text: String, maxBytes: Int): ByteArray {
 -        var candidate = text
@@ -327,9 +324,11 @@
 -            candidate = candidate.substring(0, candidate.length - 1)
 -        }
 -        return ByteArray(0)
-     }
- 
+-    }
+-
      private fun acceptLoop(server: BluetoothServerSocket) {
+         while (accepting.get()) {
+             val socket = try {
 @@ -400,6 +432,7 @@
              .build()
          val settings = ScanSettings.Builder()
@@ -344,7 +343,8 @@
              val record = result?.scanRecord ?: return
 -            val payload = record.getManufacturerSpecificData(MANUFACTURER_ID) ?: return
 -            if (payload.size < 3) return
--
++            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
+ 
 -            val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
 -            if (psm <= 0) return
 -            val memberCount = payload[2].toInt() and 0xFF
@@ -353,8 +353,7 @@
 -            } else {
 -                "蓝牙房"
 -            }
-+            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
- 
+-
              val device = result.device ?: return
              val info = mapOf(
                  "address" to device.address,
@@ -372,10 +371,9 @@
              Log.e(TAG, "BLE 扫描失败，errorCode=$errorCode")
              mainHandler.post {
 -                scanSink?.error("SCAN_FAILED", "蓝牙扫描失败（错误码 $errorCode）", null)
--            }
--            scanning = false
 +                scanSink?.error("SCAN_FAILED", "蓝牙扫描失败（错误码 $errorCode；2=注册失败，5=硬件资源不足，6=扫描过频）。请稍等 30 秒再试", null)
-+            }
+             }
+-            scanning = false
 +            mainHandler.post { stopScan() }
          }
      }
@@ -437,19 +435,17 @@
 +                try { socket.close() } catch (_: IOException) {}
                  mainHandler.post {
 -                    result.error("CONNECT_FAILED", "连接蓝牙房主失败，请靠近后重试", null)
--                }
--                return@Thread
--            }
--
--            hostLink = registerPeer(socket)
--            mainHandler.post { result.success(true) }
--        }, "sunset-ble-connect").start()
 +                    if (pendingConnectSocket === socket) pendingConnectSocket = null
 +                    if (completed.compareAndSet(false, true)) {
 +                        result.error("CONNECT_FAILED", "连接蓝牙房主失败，请重新扫描后重试", null)
 +                    }
-+                }
-+            }
+                 }
+-                return@Thread
+             }
+-
+-            hostLink = registerPeer(socket)
+-            mainHandler.post { result.success(true) }
+-        }, "sunset-ble-connect").start()
 +        }, "dawnmesh-ble-connect").start()
      }
  
@@ -458,7 +454,18 @@
      private inner class PeerLink(val socket: BluetoothSocket, val address: String) {
          val alive = AtomicBoolean(true)
 -        private val writeLock = Any()
--
++        private val writer = BoundedFrameWriter(
++            write = { data -> socket.outputStream.write(data); socket.outputStream.flush() },
++            closeTransport = {
++                alive.set(false)
++                try { socket.close() } catch (_: IOException) {}
++            },
++            onFailure = {
++                peers.remove(address, this)
++                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
++            },
++        )
+ 
 -        fun write(data: ByteArray) {
 -            synchronized(writeLock) {
 -                if (!alive.get()) return
@@ -475,18 +482,6 @@
 -                Log.d(TAG, "关闭 $address 时被忽略的异常：$e")
 -            }
 -        }
-+        private val writer = BoundedFrameWriter(
-+            write = { data -> socket.outputStream.write(data); socket.outputStream.flush() },
-+            closeTransport = {
-+                alive.set(false)
-+                try { socket.close() } catch (_: IOException) {}
-+            },
-+            onFailure = {
-+                peers.remove(address, this)
-+                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
-+            },
-+        )
-+
 +        fun write(data: ByteArray): Boolean = writer.send(data)
 +        fun flush() = writer.flush()
 +        fun close() { writer.close() }
@@ -1025,7 +1020,7 @@
 +}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
-@@ -8,46 +8,73 @@
+@@ -8,115 +8,121 @@
  import android.content.Context
  import android.content.Intent
  import android.content.pm.ServiceInfo
@@ -1112,9 +1107,9 @@
 +                .addAction(Notification.Action.Builder(
 +                    android.R.drawable.ic_btn_speak_now, "通话面板", controlIntent).build())
 +                .build()
-+        }
-+    }
-+
+         }
+     }
+ 
 +    private var cpuLock: PowerManager.WakeLock? = null
 +    private var wifiLock: WifiManager.WifiLock? = null
 +    private val handler = Handler(Looper.getMainLooper())
@@ -1123,10 +1118,10 @@
 +            // Bounded lease renewed only while this foreground service exists.
 +            cpuLock?.acquire(30 * 60 * 1000L)
 +            handler.postDelayed(this, 20 * 60 * 1000L)
-         }
-     }
- 
-@@ -55,68 +82,47 @@
++        }
++    }
++
+     override fun onBind(intent: Intent?): IBinder? = null
  
      override fun onCreate() {
          super.onCreate()
@@ -1159,13 +1154,13 @@
 +                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "DawnMesh:ActiveCall")
 +                    .apply { setReferenceCounted(false) }
 +                renewCpuLock.run()
-+            }
+             }
 +            if (wifiLock == null && !CallControlBridge.bluetooth) {
 +                val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 +                @Suppress("DEPRECATION")
 +                val lock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "DawnMesh:ActiveCall")
 +                wifiLock = lock.apply { setReferenceCounted(false); acquire() }
-             }
++            }
          } catch (e: Exception) {
 -            Log.e(TAG, "startForeground 失败", e)
 +            Log.e(TAG, "前台通话服务初始化失败", e)
@@ -1189,7 +1184,15 @@
 -            setShowBadge(false)
 -        }
 -        manager.createNotificationChannel(channel)
--    }
++    override fun onDestroy() {
++        running = false
++        handler.removeCallbacks(renewCpuLock)
++        cpuLock?.let { if (it.isHeld) it.release() }
++        wifiLock?.let { if (it.isHeld) it.release() }
++        cpuLock = null
++        wifiLock = null
++        super.onDestroy()
+     }
 -
 -    private fun buildNotification(): Notification {
 -        val contentIntent = PendingIntent.getActivity(
@@ -1216,19 +1219,11 @@
 -            .setOngoing(true)
 -            .setCategory(Notification.CATEGORY_CALL)
 -            .build()
-+    override fun onDestroy() {
-+        running = false
-+        handler.removeCallbacks(renewCpuLock)
-+        cpuLock?.let { if (it.isHeld) it.release() }
-+        wifiLock?.let { if (it.isHeld) it.release() }
-+        cpuLock = null
-+        wifiLock = null
-+        super.onDestroy()
-     }
+-    }
  }
 --- /dev/null
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/LockScreenTalkActivity.kt
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,310 @@
 +package host.msknet.sunsetripple
 +
 +import android.app.Activity
@@ -1247,6 +1242,7 @@
 +import android.view.accessibility.AccessibilityNodeInfo
 +import android.widget.FrameLayout
 +import android.widget.ImageButton
++import android.widget.ImageView
 +import android.widget.LinearLayout
 +import android.widget.ScrollView
 +import android.widget.TextView
@@ -1258,8 +1254,8 @@
 +    private lateinit var roomType: TextView
 +    private lateinit var talk: CallTalkPad
 +    private lateinit var modes: LinearLayout
-+    private lateinit var holdMode: TextView
-+    private lateinit var autoMode: TextView
++    private lateinit var holdMode: LinearLayout
++    private lateinit var autoMode: LinearLayout
 +    private lateinit var mute: LinearLayout
 +    private lateinit var muteTitle: TextView
 +    private lateinit var muteHint: TextView
@@ -1329,11 +1325,14 @@
 +        modes = LinearLayout(this).apply {
 +            gravity = Gravity.CENTER_VERTICAL
 +            setPadding(dp(4), dp(4), dp(4), dp(4))
-+            background = shape(CallPanelColors.card, 18f)
++            background = shape(CallPanelColors.card, 24f)
++            elevation = dp(3).toFloat()
 +        }
 +        holdMode = modeButton("按住对讲", false)
 +        autoMode = modeButton("自动通话", true)
-+        modes.addView(holdMode, LinearLayout.LayoutParams(0, -2, 1f))
++        modes.addView(holdMode, LinearLayout.LayoutParams(0, -2, 1f).apply {
++            rightMargin = dp(3)
++        })
 +        modes.addView(autoMode, LinearLayout.LayoutParams(0, -2, 1f))
 +        column.addView(modes, LinearLayout.LayoutParams(-1, -2))
 +        talk = CallTalkPad(this).apply {
@@ -1423,11 +1422,28 @@
 +        return dx * dx + dy * dy <= radius * radius
 +    }
 +
-+    private fun modeButton(title: String, automatic: Boolean) = label(title, 14f, CallPanelColors.secondary, true).apply {
++    private fun modeButton(title: String, automatic: Boolean) = LinearLayout(this).apply {
 +        gravity = Gravity.CENTER
-+        minimumHeight = dp(48)
-+        setPadding(dp(8), dp(10), dp(8), dp(10))
++        minimumHeight = dp(64)
++        setPadding(dp(8), dp(9), dp(8), dp(9))
 +        isFocusable = true
++        isClickable = true
++        val icon = ImageView(this@LockScreenTalkActivity).apply {
++            setImageDrawable(CallPanelIcon(if (automatic) "wave" else "mic", CallPanelColors.secondary))
++            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
++        }
++        addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(9) })
++        val copy = LinearLayout(this@LockScreenTalkActivity).apply {
++            orientation = LinearLayout.VERTICAL
++            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
++        }
++        copy.addView(label(title, 14f, CallPanelColors.secondary, true))
++        copy.addView(label(if (automatic) "声音触发" else "按住发送", 11f, CallPanelColors.secondary).apply {
++            setPadding(0, dp(2), 0, 0)
++            alpha = .78f
++        })
++        addView(copy, LinearLayout.LayoutParams(-2, -2))
++        contentDescription = "$title，${if (automatic) "声音触发" else "按住发送"}"
 +        accessibilityDelegate = object : View.AccessibilityDelegate() {
 +            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
 +                super.onInitializeAccessibilityNodeInfo(host, info)
@@ -1482,10 +1498,21 @@
 +        modes.visibility = View.VISIBLE
 +        for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
 +            button.isSelected = selected
-+            button.setTextColor(if (selected) CallPanelColors.ink else CallPanelColors.secondary)
 +            button.background = ripple(if (selected) {
 +                if (auto) CallPanelColors.blue else CallPanelColors.mint
-+            } else Color.TRANSPARENT, 14f)
++            } else Color.TRANSPARENT, 20f)
++            val icon = button.getChildAt(0) as ImageView
++            val copy = button.getChildAt(1) as LinearLayout
++            val foreground = if (selected) CallPanelColors.ink else CallPanelColors.secondary
++            icon.setImageDrawable(CallPanelIcon(if (button === autoMode) "wave" else "mic", foreground))
++            (copy.getChildAt(0) as TextView).setTextColor(foreground)
++            (copy.getChildAt(1) as TextView).setTextColor(foreground)
++            button.animate()
++                .scaleX(if (selected) 1f else .98f)
++                .scaleY(if (selected) 1f else .98f)
++                .alpha(if (selected) 1f else .82f)
++                .setDuration(180)
++                .start()
 +        }
 +        muteTitle.text = if (muted) "麦克风已静音" else "麦克风已开启"
 +        muteHint.text = if (muted) "点按恢复发言" else "点按静音，保持收听"
@@ -1833,10 +1860,9 @@
  
                      override fun onFailure(reason: Int) {
 -                        createGroupInternal(result)
--                    }
--                }) ?: createGroupInternal(result)
 +                        createGroupInternal(config, result)
-+                    }
+                     }
+-                }) ?: createGroupInternal(result)
 +                }) ?: createGroupInternal(config, result)
              }
  
@@ -3043,19 +3069,10 @@
  enum RoomState { idle, connecting, inRoom, reconnecting, disconnected }
  
  /// Full Feature-Parity Central Room Session Controller.
-@@ -47,16 +56,65 @@
+@@ -47,17 +56,66 @@
    final String selfNickname;
    final Uint8List sessionToken;
    final RoomMode mode;
--
--  /// 端到端 AES-GCM 安全信封编解码器。
--  ///
--  /// **默认为 null，即默认不加密。** 这是刻意的：已发布的 Kotlin 版 alpha.7
--  /// 线上也没有默认开启强制加密，如果这一版单方面默认加密，升级到 alpha.8 的
--  /// 用户就会和还没升级的人连不上。
--  ///
--  /// 帧类型 0x09/0x0a/0x0b 与旧版的 HANDSHAKE_HELLO/HANDSHAKE_CONFIRM/SEALED
--  /// 一一对应，握手与密封的能力已经就位，等两版都具备后再协商开启。
 +  late VoiceMode _voiceMode =
 +      mode == RoomMode.wifiFullDuplex
 +          ? VoiceMode.automatic
@@ -3066,7 +3083,15 @@
 +  final _controlsController = StreamController<void>.broadcast();
 +  Stream<void> get controlsStream => _controlsController.stream;
 +  BackgroundCallControls? _backgroundControls;
-+
+ 
+-  /// 端到端 AES-GCM 安全信封编解码器。
+-  ///
+-  /// **默认为 null，即默认不加密。** 这是刻意的：已发布的 Kotlin 版 alpha.7
+-  /// 线上也没有默认开启强制加密，如果这一版单方面默认加密，升级到 alpha.8 的
+-  /// 用户就会和还没升级的人连不上。
+-  ///
+-  /// 帧类型 0x09/0x0a/0x0b 与旧版的 HANDSHAKE_HELLO/HANDSHAKE_CONFIRM/SEALED
+-  /// 一一对应，握手与密封的能力已经就位，等两版都具备后再协商开启。
 +  void setVoiceMode(VoiceMode value) {
 +    if (_closed || _voiceMode == value) return;
 +    setPtt(false);
@@ -3112,12 +3137,13 @@
 +      },
 +    );
 +  }
-+
+ 
 +  // Leave room for the largest chat-history header when encryption is enabled.
 +  int get maxChatTextBytes => secureCodec == null ? 480 : 320;
- 
++
    RoomState _state = RoomState.idle;
    bool _isHost = false;
+   int _selfMemberId = 1;
 @@ -93,8 +151,12 @@
  
    // 纯内存聊天状态
@@ -3461,8 +3487,6 @@
 -      if (m.isSpeaking) flags |= 0x04;
 -      return RosterMember(memberId: m.memberId, flags: flags, nickname: m.nickname);
 -    }).toList();
--
--    final payload = RosterPayload(hostId: _selfMemberId, members: rosterMembers);
 +    final rosterMembers =
 +        _members.values.map((m) {
 +          int flags = 0;
@@ -3475,7 +3499,8 @@
 +            nickname: m.nickname,
 +          );
 +        }).toList();
-+
+ 
+-    final payload = RosterPayload(hostId: _selfMemberId, members: rosterMembers);
 +    final payload = RosterPayload(
 +      hostId: _selfMemberId,
 +      members: rosterMembers,
@@ -3483,11 +3508,12 @@
      final frame = Frame(
        type: FrameType.roster,
        senderId: _selfMemberId,
-@@ -684,32 +872,38 @@
+@@ -684,33 +872,39 @@
      // 每帧音频都会被发送两遍。
      await audioIo.stopCapture();
      await audioIo.clearRemoteMembers();
--
++    if (!_audioStarted || _closed) return;
+ 
 -    await audioIo.startCapture(
 -      (opusPacket, level) {
 -        // 全双工：没静音就一直发；PTT：还要按住才发。
@@ -3495,26 +3521,6 @@
 -            ? !audioIo.isMuted
 -            : (!audioIo.isMuted && isPttPressed);
 -        if (!shouldTransmit) return;
--
--        if (!_waveController.isClosed) {
--          final nowMs = DateTime.now().millisecondsSinceEpoch;
--          if (nowMs - _lastWaveUiEmitMs >= 33) {
--            _lastWaveUiEmitMs = nowMs;
--            _waveController.add(level);
--          }
--        }
--
--        sendFrame(Frame(
--          type: FrameType.audio,
--          senderId: _selfMemberId,
--          seq: _nextSeq(),
--          payload: opusPacket,
--        ));
--      },
--      bitrateBps: isFullDuplex ? _wifiBitrate : _bluetoothBitrate,
--    );
-+    if (!_audioStarted || _closed) return;
-+
 +    await audioIo.startCapture((opusPacket, level) {
 +      if (_closed || !_audioStarted || _state != RoomState.inRoom || isMuted) {
 +        _voiceGate.reset();
@@ -3546,8 +3552,27 @@
 +      return;
 +    }
  
+-        if (!_waveController.isClosed) {
+-          final nowMs = DateTime.now().millisecondsSinceEpoch;
+-          if (nowMs - _lastWaveUiEmitMs >= 33) {
+-            _lastWaveUiEmitMs = nowMs;
+-            _waveController.add(level);
+-          }
+-        }
+-
+-        sendFrame(Frame(
+-          type: FrameType.audio,
+-          senderId: _selfMemberId,
+-          seq: _nextSeq(),
+-          payload: opusPacket,
+-        ));
+-      },
+-      bitrateBps: isFullDuplex ? _wifiBitrate : _bluetoothBitrate,
+-    );
+-
      // 播放不再需要 Dart 定时器：抖动缓冲、解码、混音、送扬声器全在原生侧，
      // 由 AudioTrack 的写阻塞天然定速（原来的 Timer.periodic(20ms) 有调度漂移）。
+     // 这里只剩「谁还在说话」的超时判定，100ms 一次足够。
 @@ -750,12 +944,15 @@
    /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
    void pruneStaleMembers() {
@@ -3636,19 +3661,16 @@
 -        'RoomSession',
 -        '还不知道「${target.nickname}」的连接地址，等对方说过话后再试',
 -      );
--      return;
--    }
--
++      AppLog.error('RoomSession', '还不知道「${target.nickname}」的连接地址，等对方说过话后再试');
+       return;
+     }
+ 
 -    await sendFrame(Frame(
 -      type: FrameType.hostHandover,
 -      senderId: _selfMemberId,
 -      seq: _nextSeq(),
 -      payload: HostTransferCodec.encode(plan),
 -    ));
-+      AppLog.error('RoomSession', '还不知道「${target.nickname}」的连接地址，等对方说过话后再试');
-+      return;
-+    }
-+
 +    await sendFrame(
 +      Frame(
 +        type: FrameType.hostHandover,
@@ -3665,13 +3687,11 @@
      final trimmed = text.trim();
      if (trimmed.isEmpty) {
 -      throw ArgumentError('Chat message text cannot be empty or whitespace-only.');
--    }
--
 +      throw ArgumentError(
 +        'Chat message text cannot be empty or whitespace-only.',
 +      );
-+    }
-+
+     }
+ 
 +    if (utf8.encode(trimmed).length > maxChatTextBytes) {
 +      throw ArgumentError('消息最多 $maxChatTextBytes UTF-8 字节。');
 +    }
@@ -3961,17 +3981,6 @@
 -        final data = event['data'] as Uint8List?;
 -        final peerAddress = event['peerAddress'] as String? ?? 'unknown';
 -        if (data == null) return;
--
--        // 原生侧已经按帧头补齐成整帧了，这里直接解码即可。
--        final frame = Frame.decode(data);
--        if (frame == null) {
--          AppLog.warn(_tag, '收到无法解析的蓝牙帧（${data.length} 字节），来自 $peerAddress');
--          return;
--        }
--        if (!_incoming.isClosed) _incoming.add(frame);
--      },
--      onError: (Object e) => AppLog.error(_tag, '蓝牙数据通道中断', e),
--    );
 +    _dataSubscription = _dataChannel.receiveBroadcastStream().listen((
 +      dynamic event,
 +    ) {
@@ -3982,7 +3991,17 @@
 +      final data = event['data'] as Uint8List?;
 +      final peerAddress = event['peerAddress'] as String? ?? 'unknown';
 +      if (data == null) return;
-+
+ 
+-        // 原生侧已经按帧头补齐成整帧了，这里直接解码即可。
+-        final frame = Frame.decode(data);
+-        if (frame == null) {
+-          AppLog.warn(_tag, '收到无法解析的蓝牙帧（${data.length} 字节），来自 $peerAddress');
+-          return;
+-        }
+-        if (!_incoming.isClosed) _incoming.add(frame);
+-      },
+-      onError: (Object e) => AppLog.error(_tag, '蓝牙数据通道中断', e),
+-    );
 +      // 原生侧已经按帧头补齐成整帧了，这里直接解码即可。
 +      final frame = Frame.decode(data);
 +      if (frame == null) {
@@ -4420,7 +4439,7 @@
 -  static const String currentVersion = '0.1.0-alpha.10';
 -  static const String latestReleaseUrl =
 -      'https://api.github.com/repos/Starlordzz/sunsetripple/releases/latest';
-+  static const String currentVersion = '0.1.0-dev.5';
++  static const String currentVersion = '0.1.0-dev.6';
  
    Future<UpdateState> checkUpdate() async {
 -    final client = HttpClient();
@@ -4753,11 +4772,14 @@
        _nicknameController.text = nickname;
      }
      _defaultNickname = nickname;
-@@ -87,16 +116,146 @@
+@@ -87,18 +116,148 @@
      }
    }
  
 -  void _startScan() {
+-    setState(() => _isScanning = true);
+-    _lanDiscovery.startListening();
+-    WifiDirectManager.instance.discoverPeers();
 +  void _selectMode(RoomMode mode) {
 +    if (_busy || mode == _selectedMode) return;
 +    setState(() => _selectedMode = mode);
@@ -4772,7 +4794,9 @@
 +
 +  Future<void> _stopBleScanning() async {
 +    _scanGeneration++;
-+    _scanTimer?.cancel();
+     _scanTimer?.cancel();
+-    _scanTimer = Timer(const Duration(seconds: 3), () {
+-      if (mounted) {
 +    await _scanTask;
 +    await _bleDiscovery.stopScan();
 +    if (mounted) setState(() => _isScanning = false);
@@ -4781,17 +4805,14 @@
 +  Future<void> _runScan(int generation) async {
 +    if (!mounted || generation != _scanGeneration) return;
 +    _scanTimer?.cancel();
-     setState(() => _isScanning = true);
--    _lanDiscovery.startListening();
--    WifiDirectManager.instance.discoverPeers();
--    _scanTimer?.cancel();
++    setState(() => _isScanning = true);
 +    if (_selectedMode == RoomMode.bluetoothPtt) {
 +      final ok = await _bleDiscovery.startScan();
 +      if (!mounted || generation != _scanGeneration) return;
 +      if (!ok) {
-+        setState(() => _isScanning = false);
+         setState(() => _isScanning = false);
 +        return;
-+      }
+       }
 +    } else {
 +      await _bleDiscovery.stopScan();
 +      if (!mounted || generation != _scanGeneration) return;
@@ -4800,10 +4821,7 @@
 +    }
 +    // BLE keeps receiving while this page is visible. The button is a refresh
 +    // indicator, not a loop that repeatedly registers a scanner (Android throttles it).
-     _scanTimer = Timer(const Duration(seconds: 3), () {
--      if (mounted) {
--        setState(() => _isScanning = false);
--      }
++    _scanTimer = Timer(const Duration(seconds: 3), () {
 +      if (mounted) setState(() => _isScanning = false);
      });
 +  }
@@ -4853,8 +4871,8 @@
 +        );
 +      },
 +    );
-+  }
-+
+   }
+ 
 +  Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
@@ -4904,9 +4922,11 @@
 +    }
 +    setState(() => _busy = false);
 +    widget.onEnterRoom(session, room.roomName);
-   }
- 
++  }
++
    void _startPeriodicScan() {
+     _periodicScanTimer?.cancel();
+     _periodicScanTimer = Timer.periodic(const Duration(seconds: 6), (_) {
 @@ -120,6 +279,8 @@
      _periodicScanTimer?.cancel();
      _p2pSubscription?.cancel();
@@ -5174,6 +5194,9 @@
 -                            fontSize: 15,
 -                            height: 1.5,
 -                          ),
+-                        ),
+-                      );
+-                    }
 +                child:
 +                    _selectedMode == RoomMode.bluetoothPtt
 +                        ? _bleRoomList(s, textSecondary)
@@ -5184,7 +5207,27 @@
 +                            final rooms = snapshot.data ?? [];
 +                            final p2pPeers = _p2pPeers;
 +                            final totalCount = rooms.length + p2pPeers.length;
-+
+ 
+-                    return ListView.separated(
+-                      shrinkWrap: true,
+-                      physics: const NeverScrollableScrollPhysics(),
+-                      padding: const EdgeInsets.symmetric(
+-                          horizontal: 24, vertical: 8),
+-                      itemCount: totalCount,
+-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+-                      itemBuilder: (context, index) {
+-                        if (index < rooms.length) {
+-                          final room = rooms[index];
+-                          return Container(
+-                            padding: const EdgeInsets.symmetric(
+-                                horizontal: 18, vertical: 16),
+-                            decoration: BoxDecoration(
+-                              color: cardBg,
+-                              borderRadius: BorderRadius.circular(18),
+-                              border: Border.all(
+-                                color: isNight
+-                                    ? const Color(0xFF283A52)
+-                                    : const Color(0xFFDCCEC8),
 +                            if (totalCount == 0) {
 +                              return Container(
 +                                padding: const EdgeInsets.symmetric(
@@ -5210,7 +5253,25 @@
 +                              padding: const EdgeInsets.symmetric(
 +                                horizontal: 24,
 +                                vertical: 8,
-+                              ),
+                               ),
+-                            ),
+-                            child: Row(
+-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+-                              children: [
+-                                Expanded(
+-                                  child: Column(
+-                                    crossAxisAlignment:
+-                                        CrossAxisAlignment.start,
+-                                    children: [
+-                                      Text(
+-                                        room.roomName,
+-                                        maxLines: 1,
+-                                        overflow: TextOverflow.ellipsis,
+-                                        style: TextStyle(
+-                                          color: textPrimary,
+-                                          fontSize: 18,
+-                                          fontWeight: FontWeight.bold,
+-                                        ),
 +                              itemCount: totalCount,
 +                              separatorBuilder:
 +                                  (_, __) => const SizedBox(height: 12),
@@ -5230,7 +5291,25 @@
 +                                            isNight
 +                                                ? const Color(0xFF283A52)
 +                                                : const Color(0xFFDCCEC8),
-+                                      ),
+                                       ),
+-                                      const SizedBox(height: 4),
+-                                      Text(
+-                                        s.roomHostInfo(room.hostNickname,
+-                                            room.memberCount, 6),
+-                                        style: TextStyle(
+-                                            color: textSecondary, fontSize: 14),
+-                                      ),
+-                                    ],
+-                                  ),
+-                                ),
+-                                const SizedBox(width: 12),
+-                                ElevatedButton(
+-                                  onPressed: () => _onJoinRoom(room),
+-                                  style: ElevatedButton.styleFrom(
+-                                    backgroundColor: isNight
+-                                        ? AppTheme.nightSkyBlue
+-                                        : AppTheme.sunsetCoral,
+-                                    foregroundColor: Colors.white,
 +                                    ),
 +                                    child: Row(
 +                                      mainAxisAlignment:
@@ -5302,10 +5381,58 @@
 +                                          ? s.defaultWifiRoomTitle(peer.name)
 +                                          : s.nearbyWifiRoom;
 +                                  return Container(
-+                                    padding: const EdgeInsets.symmetric(
+                                     padding: const EdgeInsets.symmetric(
+-                                        horizontal: 22, vertical: 14),
+-                                    shape: RoundedRectangleBorder(
+-                                      borderRadius: BorderRadius.circular(22),
 +                                      horizontal: 18,
 +                                      vertical: 16,
-+                                    ),
+                                     ),
+-                                  ),
+-                                  child: Text(
+-                                    s.joinRoom,
+-                                    style: const TextStyle(
+-                                        fontSize: 16,
+-                                        fontWeight: FontWeight.bold),
+-                                  ),
+-                                ),
+-                              ],
+-                            ),
+-                          );
+-                        } else {
+-                          final peer = p2pPeers[index - rooms.length];
+-                          final peerTitle = peer.name.isNotEmpty
+-                              ? s.defaultWifiRoomTitle(peer.name)
+-                              : s.nearbyWifiRoom;
+-                          return Container(
+-                            padding: const EdgeInsets.symmetric(
+-                                horizontal: 18, vertical: 16),
+-                            decoration: BoxDecoration(
+-                              color: cardBg,
+-                              borderRadius: BorderRadius.circular(18),
+-                              border: Border.all(
+-                                color: isNight
+-                                    ? const Color(0xFF283A52)
+-                                    : const Color(0xFFDCCEC8),
+-                              ),
+-                            ),
+-                            child: Row(
+-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+-                              children: [
+-                                Expanded(
+-                                  child: Column(
+-                                    crossAxisAlignment:
+-                                        CrossAxisAlignment.start,
+-                                    children: [
+-                                      Text(
+-                                        peerTitle,
+-                                        maxLines: 1,
+-                                        overflow: TextOverflow.ellipsis,
+-                                        style: TextStyle(
+-                                          color: textPrimary,
+-                                          fontSize: 18,
+-                                          fontWeight: FontWeight.bold,
+-                                        ),
 +                                    decoration: BoxDecoration(
 +                                      color: cardBg,
 +                                      borderRadius: BorderRadius.circular(18),
@@ -5314,8 +5441,45 @@
 +                                            isNight
 +                                                ? const Color(0xFF283A52)
 +                                                : const Color(0xFFDCCEC8),
-+                                      ),
-+                                    ),
+                                       ),
+-                                      const SizedBox(height: 4),
+-                                      Text(
+-                                        "${s.hostTag}: ${peer.name.isNotEmpty ? peer.name : s.nearbyDevice} · ${s.nearFieldDirect}",
+-                                        style: TextStyle(
+-                                            color: textSecondary, fontSize: 14),
+-                                      ),
+-                                    ],
+-                                  ),
+-                                ),
+-                                const SizedBox(width: 12),
+-                                ElevatedButton(
+-                                  onPressed: () => _onJoinWifiDirectPeer(peer),
+-                                  style: ElevatedButton.styleFrom(
+-                                    backgroundColor: isNight
+-                                        ? AppTheme.nightSkyBlue
+-                                        : AppTheme.sunsetCoral,
+-                                    foregroundColor: Colors.white,
+-                                    padding: const EdgeInsets.symmetric(
+-                                        horizontal: 22, vertical: 14),
+-                                    shape: RoundedRectangleBorder(
+-                                      borderRadius: BorderRadius.circular(22),
+                                     ),
+-                                  ),
+-                                  child: Text(
+-                                    s.joinRoom,
+-                                    style: const TextStyle(
+-                                        fontSize: 16,
+-                                        fontWeight: FontWeight.bold),
+-                                  ),
+-                                ),
+-                              ],
+-                            ),
+-                          );
+-                        }
+-                      },
+-                    );
+-                  },
+-                ),
 +                                    child: Row(
 +                                      mainAxisAlignment:
 +                                          MainAxisAlignment.spaceBetween,
@@ -5380,157 +5544,7 @@
 +                              },
 +                            );
 +                          },
-                         ),
--                      );
--                    }
--
--                    return ListView.separated(
--                      shrinkWrap: true,
--                      physics: const NeverScrollableScrollPhysics(),
--                      padding: const EdgeInsets.symmetric(
--                          horizontal: 24, vertical: 8),
--                      itemCount: totalCount,
--                      separatorBuilder: (_, __) => const SizedBox(height: 12),
--                      itemBuilder: (context, index) {
--                        if (index < rooms.length) {
--                          final room = rooms[index];
--                          return Container(
--                            padding: const EdgeInsets.symmetric(
--                                horizontal: 18, vertical: 16),
--                            decoration: BoxDecoration(
--                              color: cardBg,
--                              borderRadius: BorderRadius.circular(18),
--                              border: Border.all(
--                                color: isNight
--                                    ? const Color(0xFF283A52)
--                                    : const Color(0xFFDCCEC8),
--                              ),
--                            ),
--                            child: Row(
--                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
--                              children: [
--                                Expanded(
--                                  child: Column(
--                                    crossAxisAlignment:
--                                        CrossAxisAlignment.start,
--                                    children: [
--                                      Text(
--                                        room.roomName,
--                                        maxLines: 1,
--                                        overflow: TextOverflow.ellipsis,
--                                        style: TextStyle(
--                                          color: textPrimary,
--                                          fontSize: 18,
--                                          fontWeight: FontWeight.bold,
--                                        ),
--                                      ),
--                                      const SizedBox(height: 4),
--                                      Text(
--                                        s.roomHostInfo(room.hostNickname,
--                                            room.memberCount, 6),
--                                        style: TextStyle(
--                                            color: textSecondary, fontSize: 14),
--                                      ),
--                                    ],
--                                  ),
--                                ),
--                                const SizedBox(width: 12),
--                                ElevatedButton(
--                                  onPressed: () => _onJoinRoom(room),
--                                  style: ElevatedButton.styleFrom(
--                                    backgroundColor: isNight
--                                        ? AppTheme.nightSkyBlue
--                                        : AppTheme.sunsetCoral,
--                                    foregroundColor: Colors.white,
--                                    padding: const EdgeInsets.symmetric(
--                                        horizontal: 22, vertical: 14),
--                                    shape: RoundedRectangleBorder(
--                                      borderRadius: BorderRadius.circular(22),
--                                    ),
--                                  ),
--                                  child: Text(
--                                    s.joinRoom,
--                                    style: const TextStyle(
--                                        fontSize: 16,
--                                        fontWeight: FontWeight.bold),
--                                  ),
--                                ),
--                              ],
--                            ),
--                          );
--                        } else {
--                          final peer = p2pPeers[index - rooms.length];
--                          final peerTitle = peer.name.isNotEmpty
--                              ? s.defaultWifiRoomTitle(peer.name)
--                              : s.nearbyWifiRoom;
--                          return Container(
--                            padding: const EdgeInsets.symmetric(
--                                horizontal: 18, vertical: 16),
--                            decoration: BoxDecoration(
--                              color: cardBg,
--                              borderRadius: BorderRadius.circular(18),
--                              border: Border.all(
--                                color: isNight
--                                    ? const Color(0xFF283A52)
--                                    : const Color(0xFFDCCEC8),
--                              ),
--                            ),
--                            child: Row(
--                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
--                              children: [
--                                Expanded(
--                                  child: Column(
--                                    crossAxisAlignment:
--                                        CrossAxisAlignment.start,
--                                    children: [
--                                      Text(
--                                        peerTitle,
--                                        maxLines: 1,
--                                        overflow: TextOverflow.ellipsis,
--                                        style: TextStyle(
--                                          color: textPrimary,
--                                          fontSize: 18,
--                                          fontWeight: FontWeight.bold,
--                                        ),
--                                      ),
--                                      const SizedBox(height: 4),
--                                      Text(
--                                        "${s.hostTag}: ${peer.name.isNotEmpty ? peer.name : s.nearbyDevice} · ${s.nearFieldDirect}",
--                                        style: TextStyle(
--                                            color: textSecondary, fontSize: 14),
--                                      ),
--                                    ],
--                                  ),
--                                ),
--                                const SizedBox(width: 12),
--                                ElevatedButton(
--                                  onPressed: () => _onJoinWifiDirectPeer(peer),
--                                  style: ElevatedButton.styleFrom(
--                                    backgroundColor: isNight
--                                        ? AppTheme.nightSkyBlue
--                                        : AppTheme.sunsetCoral,
--                                    foregroundColor: Colors.white,
--                                    padding: const EdgeInsets.symmetric(
--                                        horizontal: 22, vertical: 14),
--                                    shape: RoundedRectangleBorder(
--                                      borderRadius: BorderRadius.circular(22),
--                                    ),
--                                  ),
--                                  child: Text(
--                                    s.joinRoom,
--                                    style: const TextStyle(
--                                        fontSize: 16,
--                                        fontWeight: FontWeight.bold),
--                                  ),
--                                ),
--                              ],
--                            ),
--                          );
--                        }
--                      },
--                    );
--                  },
--                ),
++                        ),
                ),
              ),
  
@@ -5670,8 +5684,6 @@
 +        .firstWhere((state) => state == RoomState.inRoom)
 +        .timeout(const Duration(seconds: 8));
      await session.joinRoom(startAudio: false);
--
--    if (mounted) widget.onEnterRoom(session, room.roomName);
 +    try {
 +      await joined;
 +    } on TimeoutException {
@@ -5680,7 +5692,8 @@
 +      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
 +      return;
 +    }
-+
+ 
+-    if (mounted) widget.onEnterRoom(session, room.roomName);
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -5757,7 +5770,6 @@
 +        .firstWhere((state) => state == RoomState.inRoom)
 +        .timeout(const Duration(seconds: 8));
      await session.joinRoom(startAudio: false);
--
 +    try {
 +      await joined;
 +    } on TimeoutException {
@@ -5766,7 +5778,7 @@
 +      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
 +      return;
 +    }
-+
+ 
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -5825,7 +5837,15 @@
  import 'package:flutter/material.dart';
  import '../../core/session/member.dart';
  import '../../core/session/room_session.dart';
-@@ -36,14 +37,30 @@
+@@ -6,6 +7,7 @@
+ import '../widgets/audio_controls.dart';
+ import '../widgets/member_orbit.dart';
+ import '../widgets/ptt_button.dart';
++import '../widgets/voice_mode_switch.dart';
+ import '../../l10n/app_strings.dart';
+ 
+ /// 房间前景：成员轨道、中央对讲盘、底部音频控制条。
+@@ -36,20 +38,37 @@
  
  class _RoomContentState extends State<RoomContent> {
    bool _isSpeakerOn = true;
@@ -5837,17 +5857,18 @@
 +      if (mounted) setState(() {});
 +    });
 +  }
-+
-+  @override
+ 
+   @override
 +  void dispose() {
 +    _controls?.cancel();
 +    super.dispose();
 +  }
- 
-   @override
++
++  @override
    Widget build(BuildContext context) {
      final isNight = widget.isNight;
      final stage = widget.stage;
++    final compactHeight = MediaQuery.sizeOf(context).height < 700;
      // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
 -    final discSize =
 -        (MediaQuery.of(context).size.height * 0.24).clamp(148.0, 212.0);
@@ -5858,27 +5879,25 @@
  
      return SafeArea(
        top: false,
-@@ -69,24 +86,43 @@
+       child: Column(
+         children: [
+-          const SizedBox(height: 18),
++          SizedBox(height: compactHeight ? 10 : 18),
+ 
+           // 1. 成员轨道
+           StageEnterItem(
+@@ -69,24 +88,34 @@
  
            const Spacer(),
  
 -          // 2. 中央对讲盘：WiFi 房是实时音浪，蓝牙房是按住说话
 +          Padding(
-+            padding: const EdgeInsets.only(bottom: 8),
-+            child: SegmentedButton<VoiceMode>(
-+              style: SegmentedButton.styleFrom(
-+                visualDensity: VisualDensity.compact,
-+                foregroundColor: Colors.white,
-+                selectedForegroundColor: Colors.black,
-+                selectedBackgroundColor: Colors.white70,
-+              ),
-+              segments: const [
-+                ButtonSegment(value: VoiceMode.pushToTalk, label: Text('按住对讲')),
-+                ButtonSegment(value: VoiceMode.automatic, label: Text('自动通话')),
-+              ],
-+              selected: {widget.session.voiceMode},
-+              onSelectionChanged:
-+                  (modes) => widget.session.setVoiceMode(modes.single),
++            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 8 : 10),
++            child: VoiceModeSwitch(
++              value: widget.session.voiceMode,
++              isNight: isNight,
++              dense: compactHeight,
++              onChanged: widget.session.setVoiceMode,
 +            ),
 +          ),
 +          // Each device selects its own transmit mode; receiving stays enabled.
@@ -5915,7 +5934,7 @@
            ),
  
            const Spacer(),
-@@ -121,7 +157,8 @@
+@@ -121,7 +150,8 @@
  
    Widget _buildDuplexDisc(bool isNight, double size) {
      final s = AppStrings.of(context);
@@ -5958,7 +5977,7 @@
      // 音频通道挂在舞台上，首页与房间共用一个，进出房间不会重建。
      _audioIo = PlatformAudioChannel();
      _stage = AnimationController(
-@@ -81,8 +84,17 @@
+@@ -81,10 +84,19 @@
  
    @override
    void dispose() {
@@ -5966,16 +5985,18 @@
 +    unawaited(_session?.dispose());
      _stage.dispose();
      super.dispose();
-+  }
-+
+   }
+ 
 +  @override
 +  void didChangeAppLifecycleState(AppLifecycleState state) {
 +    if (state != AppLifecycleState.resumed && _session?.isPttPressed == true) {
 +      _session?.setPtt(false);
 +    }
-   }
- 
++  }
++
    bool get _inRoom => _session != null;
+ 
+   void _onEnterRoom(RoomSession session, String roomName) {
 @@ -97,22 +109,27 @@
      // 的构造和前台服务启动都压在 Android 主线程上，一次上百毫秒，
      // 塞进转场里必然掉帧。等动画落位再开。
@@ -5997,10 +6018,9 @@
      // 早先这里是 `await session.leave()` 再反演动画，等于让用户干等一次
      // socket 关闭，手感上像是按钮没反应。
 -    unawaited(session.leave());
--
--    _stage.reverse().whenComplete(() {
 +    final cleanup = session.dispose();
-+
+ 
+-    _stage.reverse().whenComplete(() {
 +    _stage.reverse().whenComplete(() async {
 +      await cleanup;
        if (!mounted) return;
@@ -6473,13 +6493,33 @@
 -                                final isLocal = msg.isLocal;
 -                                final isFormer = !isLocal &&
 -                                    !activeMemberIds.contains(msg.senderId);
--
++                              )
++                              : ListView.builder(
++                                controller: _scrollController,
++                                padding: const EdgeInsets.symmetric(
++                                  horizontal: 12,
++                                  vertical: 10,
++                                ),
++                                itemCount: messages.length,
++                                itemBuilder: (context, index) {
++                                  final msg = messages[index];
++                                  final isLocal = msg.isLocal;
++                                  final isFormer =
++                                      !isLocal &&
++                                      !activeMemberIds.contains(msg.senderId);
+ 
 -                                final (baseName, _) =
 -                                    DeviceCode.split(msg.senderNickname);
 -                                final hasConflict =
 -                                    (baseNameToCodes[baseName]?.length ?? 0) >
 -                                        1;
--
++                                  final (baseName, _) = DeviceCode.split(
++                                    msg.senderNickname,
++                                  );
++                                  final hasConflict =
++                                      (baseNameToCodes[baseName]?.length ?? 0) >
++                                      1;
+ 
 -                                return Padding(
 -                                  padding:
 -                                      const EdgeInsets.symmetric(vertical: 6),
@@ -6501,7 +6541,30 @@
 -                                        ),
 -                                        const SizedBox(width: 8),
 -                                      ],
--
++                                  return Padding(
++                                    padding: const EdgeInsets.symmetric(
++                                      vertical: 6,
++                                    ),
++                                    child: Row(
++                                      mainAxisAlignment:
++                                          isLocal
++                                              ? MainAxisAlignment.end
++                                              : MainAxisAlignment.start,
++                                      crossAxisAlignment:
++                                          CrossAxisAlignment.start,
++                                      children: [
++                                        // 远端消息头像框
++                                        if (!isLocal) ...[
++                                          AvatarFrame(
++                                            senderCode: msg.senderCode,
++                                            nickname: msg.senderNickname,
++                                            isHost: msg.isHost,
++                                            size: 34,
++                                            isNight: isNight,
++                                          ),
++                                          const SizedBox(width: 8),
++                                        ],
+ 
 -                                      // 气泡与名字栏
 -                                      Flexible(
 -                                        child: Column(
@@ -6521,7 +6584,27 @@
 -                                              accentColor: accentColor,
 -                                              isNight: isNight,
 -                                            ),
--
++                                        // 气泡与名字栏
++                                        Flexible(
++                                          child: Column(
++                                            crossAxisAlignment:
++                                                isLocal
++                                                    ? CrossAxisAlignment.end
++                                                    : CrossAxisAlignment.start,
++                                            children: [
++                                              // 署名与身份标签（Wrap 结构自适应折行）
++                                              _buildBubbleHeader(
++                                                context: context,
++                                                msg: msg,
++                                                isLocal: isLocal,
++                                                isFormer: isFormer,
++                                                hasConflict: hasConflict,
++                                                s: s,
++                                                textSecondary: textSecondary,
++                                                accentColor: accentColor,
++                                                isNight: isNight,
++                                              ),
+ 
 -                                            // 气泡本体（长按支持撤回）
 -                                            GestureDetector(
 -                                              onLongPress: isLocal
@@ -6564,73 +6647,6 @@
 -                                                    bottomRight:
 -                                                        Radius.circular(
 -                                                            isLocal ? 4 : 16),
-+                              )
-+                              : ListView.builder(
-+                                controller: _scrollController,
-+                                padding: const EdgeInsets.symmetric(
-+                                  horizontal: 12,
-+                                  vertical: 10,
-+                                ),
-+                                itemCount: messages.length,
-+                                itemBuilder: (context, index) {
-+                                  final msg = messages[index];
-+                                  final isLocal = msg.isLocal;
-+                                  final isFormer =
-+                                      !isLocal &&
-+                                      !activeMemberIds.contains(msg.senderId);
-+
-+                                  final (baseName, _) = DeviceCode.split(
-+                                    msg.senderNickname,
-+                                  );
-+                                  final hasConflict =
-+                                      (baseNameToCodes[baseName]?.length ?? 0) >
-+                                      1;
-+
-+                                  return Padding(
-+                                    padding: const EdgeInsets.symmetric(
-+                                      vertical: 6,
-+                                    ),
-+                                    child: Row(
-+                                      mainAxisAlignment:
-+                                          isLocal
-+                                              ? MainAxisAlignment.end
-+                                              : MainAxisAlignment.start,
-+                                      crossAxisAlignment:
-+                                          CrossAxisAlignment.start,
-+                                      children: [
-+                                        // 远端消息头像框
-+                                        if (!isLocal) ...[
-+                                          AvatarFrame(
-+                                            senderCode: msg.senderCode,
-+                                            nickname: msg.senderNickname,
-+                                            isHost: msg.isHost,
-+                                            size: 34,
-+                                            isNight: isNight,
-+                                          ),
-+                                          const SizedBox(width: 8),
-+                                        ],
-+
-+                                        // 气泡与名字栏
-+                                        Flexible(
-+                                          child: Column(
-+                                            crossAxisAlignment:
-+                                                isLocal
-+                                                    ? CrossAxisAlignment.end
-+                                                    : CrossAxisAlignment.start,
-+                                            children: [
-+                                              // 署名与身份标签（Wrap 结构自适应折行）
-+                                              _buildBubbleHeader(
-+                                                context: context,
-+                                                msg: msg,
-+                                                isLocal: isLocal,
-+                                                isFormer: isFormer,
-+                                                hasConflict: hasConflict,
-+                                                s: s,
-+                                                textSecondary: textSecondary,
-+                                                accentColor: accentColor,
-+                                                isNight: isNight,
-+                                              ),
-+
 +                                              // 气泡本体（长按支持撤回）
 +                                              GestureDetector(
 +                                                onLongPress:
@@ -6716,7 +6732,7 @@
 +                                                                  ),
 +                                                              width: 0.6,
 +                                                            ),
-+                                                  ),
+                                                   ),
 +                                                  child: Text(
 +                                                    msg.text,
 +                                                    softWrap: true,
@@ -6728,7 +6744,7 @@
 +                                                              : textPrimary,
 +                                                      height: 1.35,
 +                                                    ),
-                                                   ),
++                                                  ),
                                                  ),
                                                ),
 -                                            ),
@@ -6737,7 +6753,7 @@
 +                                          ),
                                          ),
 -                                      ),
--
+ 
 -                                      // 本机消息头像框
 -                                      if (isLocal) ...[
 -                                        const SizedBox(width: 8),
@@ -6748,7 +6764,6 @@
 -                                          size: 34,
 -                                          isNight: isNight,
 -                                        ),
-+
 +                                        // 本机消息头像框
 +                                        if (isLocal) ...[
 +                                          const SizedBox(width: 8),
@@ -7023,6 +7038,269 @@
 +      ],
 +    ),
 +  );
++}
+--- /dev/null
++++ b/lib/ui/widgets/voice_mode_switch.dart
+@@ -0,0 +1,260 @@
++import 'package:flutter/material.dart';
++import 'package:flutter/services.dart';
++
++import '../../core/session/room_session.dart';
++import '../theme/app_theme.dart';
++
++/// 房内发言方式切换器。
++///
++/// 两个选项始终同时可见；底层高亮块平滑滑动，避免系统分段按钮在深色房间背景上
++/// 显得突兀。标题保持稳定，辅助说明让用户不用试按也能理解两种模式。
++class VoiceModeSwitch extends StatelessWidget {
++  const VoiceModeSwitch({
++    super.key,
++    required this.value,
++    required this.isNight,
++    required this.onChanged,
++    this.dense = false,
++  });
++
++  final VoiceMode value;
++  final bool isNight;
++  final ValueChanged<VoiceMode> onChanged;
++  final bool dense;
++
++  @override
++  Widget build(BuildContext context) {
++    final automatic = value == VoiceMode.automatic;
++    final primary =
++        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
++    final secondary =
++        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
++    final surface =
++        isNight
++            ? AppTheme.darkCardBg.withValues(alpha: 0.86)
++            : AppTheme.lightCardBg.withValues(alpha: 0.90);
++
++    return Semantics(
++      container: true,
++      label: '发言模式',
++      child: ConstrainedBox(
++        constraints: const BoxConstraints(maxWidth: 390),
++        child: LayoutBuilder(
++          builder: (context, constraints) {
++            final textScale = MediaQuery.textScalerOf(context).scale(1);
++            final compact =
++                dense || constraints.maxWidth < 330 || textScale > 1.25;
++            final height = dense ? 46.0 : (compact ? 58.0 : 68.0);
++            final inset = dense ? 3.0 : 4.0;
++            final optionWidth = (constraints.maxWidth - inset * 2) / 2;
++
++            return Container(
++              height: height,
++              decoration: BoxDecoration(
++                color: surface,
++                borderRadius: BorderRadius.circular(dense ? 19 : 23),
++                border: Border.all(
++                  color:
++                      isNight
++                          ? Colors.white.withValues(alpha: 0.10)
++                          : AppTheme.sunsetBurgundy.withValues(alpha: 0.12),
++                ),
++                boxShadow: [
++                  BoxShadow(
++                    color: Colors.black.withValues(
++                      alpha: isNight ? 0.18 : 0.07,
++                    ),
++                    blurRadius: 18,
++                    offset: const Offset(0, 7),
++                  ),
++                ],
++              ),
++              child: Stack(
++                children: [
++                  AnimatedPositioned(
++                    duration: const Duration(milliseconds: 260),
++                    curve: Curves.easeOutCubic,
++                    left: inset + (automatic ? optionWidth : 0),
++                    top: inset,
++                    bottom: inset,
++                    width: optionWidth,
++                    child: AnimatedContainer(
++                      duration: const Duration(milliseconds: 260),
++                      curve: Curves.easeOutCubic,
++                      decoration: BoxDecoration(
++                        gradient: LinearGradient(
++                          begin: Alignment.topLeft,
++                          end: Alignment.bottomRight,
++                          colors: _selectedGradient(automatic),
++                        ),
++                        borderRadius: BorderRadius.circular(dense ? 16 : 19),
++                        boxShadow: [
++                          BoxShadow(
++                            color: _accent(automatic).withValues(alpha: 0.28),
++                            blurRadius: 12,
++                            offset: const Offset(0, 4),
++                          ),
++                        ],
++                      ),
++                    ),
++                  ),
++                  Row(
++                    children: [
++                      Expanded(
++                        child: _ModeOption(
++                          title: '按住对讲',
++                          hint: '按住发送',
++                          icon: Icons.touch_app_rounded,
++                          selected: !automatic,
++                          compact: compact,
++                          primary: primary,
++                          secondary: secondary,
++                          selectedForeground: Colors.white,
++                          onTap: () => _select(VoiceMode.pushToTalk),
++                        ),
++                      ),
++                      Expanded(
++                        child: _ModeOption(
++                          title: '自动通话',
++                          hint: '声音触发',
++                          icon: Icons.graphic_eq_rounded,
++                          selected: automatic,
++                          compact: compact,
++                          primary: primary,
++                          secondary: secondary,
++                          selectedForeground:
++                              isNight
++                                  ? Colors.white
++                                  : AppTheme.lightTextPrimary,
++                          onTap: () => _select(VoiceMode.automatic),
++                        ),
++                      ),
++                    ],
++                  ),
++                ],
++              ),
++            );
++          },
++        ),
++      ),
++    );
++  }
++
++  void _select(VoiceMode mode) {
++    if (mode == value) {
++      return;
++    }
++    HapticFeedback.selectionClick();
++    onChanged(mode);
++  }
++
++  List<Color> _selectedGradient(bool automatic) {
++    if (isNight) {
++      return automatic
++          ? const [Color(0xFF286A71), Color(0xFF4B9A8C)]
++          : const [AppTheme.nightDeepOcean, Color(0xFF5275A9)];
++    }
++    return automatic
++        ? const [AppTheme.sunsetCoral, Color(0xFFE4B074)]
++        : const [Color(0xFF7E3947), Color(0xFFA75559)];
++  }
++
++  Color _accent(bool automatic) {
++    if (isNight) {
++      return automatic ? const Color(0xFF4B9A8C) : AppTheme.nightSkyBlue;
++    }
++    return automatic ? const Color(0xFFD99A68) : AppTheme.sunsetBurgundy;
++  }
++}
++
++class _ModeOption extends StatelessWidget {
++  const _ModeOption({
++    required this.title,
++    required this.hint,
++    required this.icon,
++    required this.selected,
++    required this.compact,
++    required this.primary,
++    required this.secondary,
++    required this.selectedForeground,
++    required this.onTap,
++  });
++
++  final String title;
++  final String hint;
++  final IconData icon;
++  final bool selected;
++  final bool compact;
++  final Color primary;
++  final Color secondary;
++  final Color selectedForeground;
++  final VoidCallback onTap;
++
++  @override
++  Widget build(BuildContext context) {
++    final foreground = selected ? selectedForeground : primary;
++    return Semantics(
++      button: true,
++      selected: selected,
++      label: '$title，$hint',
++      excludeSemantics: true,
++      child: Material(
++        color: Colors.transparent,
++        child: InkWell(
++          onTap: onTap,
++          borderRadius: BorderRadius.circular(19),
++          child: Padding(
++            padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
++            child: Row(
++              mainAxisAlignment: MainAxisAlignment.center,
++              children: [
++                AnimatedScale(
++                  duration: const Duration(milliseconds: 220),
++                  curve: Curves.easeOutBack,
++                  scale: selected ? 1 : 0.90,
++                  child: Icon(icon, size: compact ? 19 : 21, color: foreground),
++                ),
++                SizedBox(width: compact ? 6 : 9),
++                Flexible(
++                  child: Column(
++                    mainAxisAlignment: MainAxisAlignment.center,
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    children: [
++                      Text(
++                        title,
++                        maxLines: 1,
++                        overflow: TextOverflow.fade,
++                        softWrap: false,
++                        style: TextStyle(
++                          color: foreground,
++                          fontSize: compact ? 13 : 14,
++                          fontWeight: FontWeight.w700,
++                          letterSpacing: 0.2,
++                        ),
++                      ),
++                      if (!compact) ...[
++                        const SizedBox(height: 2),
++                        Text(
++                          hint,
++                          maxLines: 1,
++                          style: TextStyle(
++                            color:
++                                selected
++                                    ? selectedForeground.withValues(alpha: 0.78)
++                                    : secondary,
++                            fontSize: 11,
++                            fontWeight: FontWeight.w500,
++                          ),
++                        ),
++                      ],
++                    ],
++                  ),
++                ),
++              ],
++            ),
++          ),
++        ),
++      ),
++    );
++  }
 +}
 --- a/native/src/protocol_frame.cpp
 +++ b/native/src/protocol_frame.cpp
@@ -7669,8 +7947,8 @@
  # versionName 取 `+` 前半段，versionCode 取后半段。
 -# 0.1.0-alpha.11 / versionCode 12
 -version: 0.1.0-alpha.11+12
-+# DawnMesh 0.1.0-dev.5 / versionCode 5
-+version: 0.1.0-dev.5+5
++# DawnMesh 0.1.0-dev.6 / versionCode 6
++version: 0.1.0-dev.6+6
  
  environment:
 -  sdk: '>=3.0.0 <4.0.0'
@@ -8365,19 +8643,32 @@
  
    Finder findTitle() => find.byWidgetPredicate(
 -        (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
+-      );
 +    (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),
 +  );
-+  Finder findCreateWifi() => find.byWidgetPredicate(
+   Finder findCreateWifi() => find.byWidgetPredicate(
+-        (w) =>
+-            w is Text &&
+-            (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
+-      );
 +    (w) =>
 +        w is Text && (w.data == '创建 Wi-Fi 房间' || w.data == 'Create Wi-Fi room'),
 +  );
-+  Finder findInCall() => find.byWidgetPredicate(
+   Finder findInCall() => find.byWidgetPredicate(
+-        (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
+-      );
 +    (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
 +  );
-+  Finder findLeave() => find.byWidgetPredicate(
+   Finder findLeave() => find.byWidgetPredicate(
+-        (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
+-      );
 +    (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
 +  );
-+  Finder findRoomTitle() => find.byWidgetPredicate(
+   Finder findRoomTitle() => find.byWidgetPredicate(
+-        (w) =>
+-            w is Text &&
+-            (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
+-                w.data?.endsWith("'s chat · Wi-Fi") == true),
 +    (w) =>
 +        w is Text &&
 +        (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
@@ -8393,23 +8684,6 @@
 +      await tester.runAsync(
 +        () => Future<void>.delayed(const Duration(milliseconds: 10)),
        );
--  Finder findCreateWifi() => find.byWidgetPredicate(
--        (w) =>
--            w is Text &&
--            (w.data == '开始 Wi-Fi 畅聊' || w.data == 'Start Wi-Fi Chat'),
--      );
--  Finder findInCall() => find.byWidgetPredicate(
--        (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
--      );
--  Finder findLeave() => find.byWidgetPredicate(
--        (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
--      );
--  Finder findRoomTitle() => find.byWidgetPredicate(
--        (w) =>
--            w is Text &&
--            (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
--                w.data?.endsWith("'s chat · Wi-Fi") == true),
--      );
 +      expect(tester.takeException(), isNull);
 +      if (findInCall().evaluate().isNotEmpty == inRoom) return;
 +    }
@@ -8963,7 +9237,7 @@
 +}
 --- /dev/null
 +++ b/test/voice_modes_test.dart
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,183 @@
 +import 'dart:typed_data';
 +import 'package:flutter/material.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -8973,6 +9247,7 @@
 +import 'package:sunset_ripple/core/protocol/frame_type.dart';
 +import 'package:sunset_ripple/core/session/room_session.dart';
 +import 'package:sunset_ripple/ui/pages/room_page.dart';
++import 'package:sunset_ripple/ui/widgets/voice_mode_switch.dart';
 +
 +void main() {
 +  test('voice gate drops silence, retains onset, hangs over and closes', () {
@@ -9106,6 +9381,45 @@
 +      expect(disposed, isTrue);
 +    },
 +  );
++
++  testWidgets('voice mode switch adapts to large text and keeps both targets', (
++    tester,
++  ) async {
++    var selected = VoiceMode.pushToTalk;
++    await tester.pumpWidget(
++      MaterialApp(
++        home: Scaffold(
++          body: MediaQuery(
++            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
++            child: Center(
++              child: SizedBox(
++                width: 300,
++                child: StatefulBuilder(
++                  builder:
++                      (context, setState) => VoiceModeSwitch(
++                        value: selected,
++                        isNight: true,
++                        onChanged: (mode) => setState(() => selected = mode),
++                      ),
++                ),
++              ),
++            ),
++          ),
++        ),
++      ),
++    );
++
++    expect(find.text('按住对讲'), findsOneWidget);
++    expect(find.text('自动通话'), findsOneWidget);
++    expect(find.text('按住发送'), findsNothing);
++    expect(find.text('声音触发'), findsNothing);
++    expect(tester.takeException(), isNull);
++
++    await tester.tap(find.text('自动通话'));
++    await tester.pumpAndSettle();
++    expect(selected, VoiceMode.automatic);
++    expect(tester.takeException(), isNull);
++  });
 +}
 --- a/test/widget_test.dart
 +++ b/test/widget_test.dart

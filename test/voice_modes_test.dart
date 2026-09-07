@@ -7,6 +7,7 @@ import 'package:sunset_ripple/core/protocol/frame.dart';
 import 'package:sunset_ripple/core/protocol/frame_type.dart';
 import 'package:sunset_ripple/core/session/room_session.dart';
 import 'package:sunset_ripple/ui/pages/room_page.dart';
+import 'package:sunset_ripple/ui/widgets/voice_mode_switch.dart';
 
 void main() {
   test('voice gate drops silence, retains onset, hangs over and closes', () {
@@ -140,4 +141,43 @@ void main() {
       expect(disposed, isTrue);
     },
   );
+
+  testWidgets('voice mode switch adapts to large text and keeps both targets', (
+    tester,
+  ) async {
+    var selected = VoiceMode.pushToTalk;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Center(
+              child: SizedBox(
+                width: 300,
+                child: StatefulBuilder(
+                  builder:
+                      (context, setState) => VoiceModeSwitch(
+                        value: selected,
+                        isNight: true,
+                        onChanged: (mode) => setState(() => selected = mode),
+                      ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('按住对讲'), findsOneWidget);
+    expect(find.text('自动通话'), findsOneWidget);
+    expect(find.text('按住发送'), findsNothing);
+    expect(find.text('声音触发'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('自动通话'));
+    await tester.pumpAndSettle();
+    expect(selected, VoiceMode.automatic);
+    expect(tester.takeException(), isNull);
+  });
 }

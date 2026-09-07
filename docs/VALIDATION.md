@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.5-release.apk`，**52,771,424 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.5` / versionCode **5**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`2bfdd626fead07a41ef07dd0629f34eb0cc288d525ca2e8937785d39fdf65ce1`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.6-release.apk`，**52,673,304 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.6` / versionCode **6**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`4ee0826d4b43244b11d5c266af94752ed6a79f3a7ecd08918c297af0ed172fcb`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
@@ -17,7 +17,7 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **155 项通过，0 失败** |
+| Flutter 全量测试（串行） | **156 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
 | `:app:testDebugUnitTest` | Kotlin **18 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
@@ -32,7 +32,14 @@
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
-## dev.5 本轮完成情况
+## dev.6 本轮完成情况
+
+- Wi-Fi 和蓝牙房共用新的胶囊式模式切换控件：选中块以 260 ms 曲线滑动，按住对讲与自动通话分别使用图标、渐变色和“按住发送 / 声音触发”说明。
+- 矮屏自动使用 46 dp 紧凑布局并收窄顶部间距；窄屏或大字号隐藏辅助说明但保留两个完整操作目标，360×640 进出房转场与 2 倍字号均无溢出。
+- 锁屏通话面板同步为图标化胶囊按钮，选中项使用模式色、缩放、透明度动画和触觉反馈，无需解锁即可切换。
+- 本轮只改变界面与版本号，邀请码、加密、发现和语音传输协议均未改变，可与 dev.5 互通并使用同一签名覆盖升级。
+
+## dev.5 已保留功能
 
 - 昵称通过 Android 私有 `SharedPreferences` 持久化，进程或活动重建后恢复；邀请码、密钥和聊天不写入该设置文件。
 - Wi-Fi 房与蓝牙房都可在自动通话和按住对讲之间切换，主界面和锁屏面板行为一致，每台设备独立选择发言方式。
@@ -74,6 +81,7 @@
 13. 昵称存取平台通道与 Wi-Fi Direct 凭据确定性/格式/差异性，Wi-Fi 模式切换与紧凑屏布局。
 14. 原始 BLE 广播多厂商段解析、段顺序变化、仅主包、非法 UTF-8/元数据与 Unicode 截断。
 15. 音频缓冲覆盖可靠流非音频序号间隔、欠载重缓冲、短句截止时间、蓝牙突发、上限丢旧及非可靠序号回绕。
+16. 新模式切换器覆盖 Wi-Fi/蓝牙交互、360×640 矮屏进出房转场、常见直板屏与 2 倍字号布局。
 
 ## 按约定由你执行
 
