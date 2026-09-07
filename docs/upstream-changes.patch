@@ -1,12 +1,3 @@
---- a/.gitignore
-+++ b/.gitignore
-@@ -34,3 +34,6 @@
- native/CMakePresets.json
- native/build_native.bat
- native/build/
-+android/key.properties
-+.pub-cache/
-+.flutter-plugins*
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -9,7 +9,7 @@
@@ -70,9 +61,11 @@
          }
      }
  }
-@@ -99,3 +93,16 @@
+@@ -98,4 +92,18 @@
+     // Opus 编解码。纯 JVM 实现，不需要额外的 .so。
      // 版本与已发布的 Kotlin 版 alpha.7 一致，保证两版音频互通。
      implementation("io.github.jaredmdobson:concentus:1.0.2")
++    testImplementation("junit:junit:4.13.2")
  }
 +
 +val verifyReleaseSigning by tasks.registering {
@@ -89,7 +82,16 @@
 +}
 --- a/android/app/src/main/AndroidManifest.xml
 +++ b/android/app/src/main/AndroidManifest.xml
-@@ -66,6 +66,7 @@
+@@ -34,6 +34,8 @@
+         android:name="android.permission.ACCESS_FINE_LOCATION"
+         android:maxSdkVersion="32"/>
+ 
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32"/>
++
+     <!-- 蓝牙房：Android 12 之前的旧权限模型 -->
+     <uses-permission
+         android:name="android.permission.BLUETOOTH"
+@@ -66,6 +68,7 @@
  
      <application
          android:label="@string/app_name"
@@ -97,7 +99,7 @@
          android:name="${applicationName}"
          android:icon="@mipmap/ic_launcher">
          <activity
---- a/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+--- /dev/null
 +++ b/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 @@ -0,0 +1,19 @@
 +package io.flutter.plugins;
@@ -166,7 +168,24 @@
                      result.error("BAD_ARGS", "connectL2cap 需要 address 与有效的 psm", null)
                      return
                  }
-@@ -207,7 +211,7 @@
+@@ -197,6 +201,16 @@
+                 result.success(sendData(data, excludeAddress = null))
+             }
+ 
++            "flush" -> {
++                val pending = peers.values.map { it.flush() }.toTypedArray()
++                java.util.concurrent.CompletableFuture.allOf(*pending).whenComplete { _, error ->
++                    mainHandler.post {
++                        if (error == null) result.success(true)
++                        else result.error("FLUSH_FAILED", "蓝牙发送队列未完成", null)
++                    }
++                }
++            }
++
+             "stop" -> {
+                 stopEverything()
+                 result.success(true)
+@@ -207,7 +221,7 @@
      }
  
      /** 返回 null 表示可用，否则是给用户看的原因。 */
@@ -175,7 +194,7 @@
          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
              return "蓝牙房需要 Android 10 及以上（L2CAP 通道）"
          }
-@@ -215,8 +219,15 @@
+@@ -215,8 +229,15 @@
              return "本机不支持低功耗蓝牙"
          }
          val a = adapter ?: return "本机没有蓝牙适配器"
@@ -193,7 +212,18 @@
          return null
      }
  
-@@ -271,25 +282,36 @@
+@@ -238,6 +259,10 @@
+         memberCount: Int,
+         result: MethodChannel.Result,
+     ) {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
++            result.error("UNSUPPORTED", "蓝牙对讲需要 Android 10 或更新版本", null)
++            return
++        }
+         stopEverything()
+         isHost = true
+         advertisedRoomName = roomName
+@@ -271,25 +296,36 @@
              return
          }
  
@@ -241,7 +271,7 @@
  
          try {
              @Suppress("MissingPermission")
-@@ -301,8 +323,9 @@
+@@ -301,8 +337,9 @@
              )
          } catch (e: Exception) {
              Log.e(TAG, "startAdvertising 抛异常", e)
@@ -252,7 +282,7 @@
          }
      }
  
-@@ -337,6 +360,12 @@
+@@ -337,6 +374,12 @@
              .setIncludeDeviceName(false) // 设备名会挤爆 31 字节预算
              .setIncludeTxPowerLevel(false)
              .addServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -265,7 +295,7 @@
              .build()
  
      private fun buildScanResponse(): AdvertiseData {
-@@ -400,6 +429,7 @@
+@@ -400,6 +443,7 @@
              .build()
          val settings = ScanSettings.Builder()
              .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -273,7 +303,7 @@
              .build()
  
          return try {
-@@ -432,8 +462,9 @@
+@@ -432,8 +476,9 @@
              if (payload.size < 3) return
  
              val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
@@ -284,7 +314,7 @@
              val roomName = if (payload.size > 3) {
                  String(payload, 3, payload.size - 3, Charsets.UTF_8)
              } else {
-@@ -454,9 +485,9 @@
+@@ -454,13 +499,17 @@
          override fun onScanFailed(errorCode: Int) {
              Log.e(TAG, "BLE 扫描失败，errorCode=$errorCode")
              mainHandler.post {
@@ -297,7 +327,15 @@
          }
      }
  
-@@ -468,27 +499,47 @@
+     private fun connectL2cap(address: String, psm: Int, result: MethodChannel.Result) {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
++            result.error("UNSUPPORTED", "蓝牙对讲需要 Android 10 或更新版本", null)
++            return
++        }
+         val a = adapter ?: run {
+             result.error("UNSUPPORTED", "没有蓝牙适配器", null)
+             return
+@@ -468,51 +517,68 @@
          isHost = false
          stopScan()
  
@@ -363,7 +401,46 @@
      }
  
      // ------------------------------------------------------------ 链路与收发
-@@ -558,6 +609,11 @@
+ 
+     private inner class PeerLink(val socket: BluetoothSocket, val address: String) {
+         val alive = AtomicBoolean(true)
+-        private val writeLock = Any()
+-
+-        fun write(data: ByteArray) {
+-            synchronized(writeLock) {
+-                if (!alive.get()) return
+-                socket.outputStream.write(data)
+-                socket.outputStream.flush()
+-            }
+-        }
+-
+-        fun close() {
+-            alive.set(false)
+-            try {
+-                socket.close()
+-            } catch (e: IOException) {
+-                Log.d(TAG, "关闭 $address 时被忽略的异常：$e")
+-            }
+-        }
++        private val writer = BoundedFrameWriter(
++            write = { data -> socket.outputStream.write(data); socket.outputStream.flush() },
++            closeTransport = {
++                alive.set(false)
++                try { socket.close() } catch (_: IOException) {}
++            },
++            onFailure = {
++                peers.remove(address, this)
++                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
++            },
++        )
++
++        fun write(data: ByteArray): Boolean = writer.send(data)
++        fun flush() = writer.flush()
++        fun close() { writer.close() }
+     }
+ 
+     private fun registerPeer(socket: BluetoothSocket): PeerLink {
+@@ -558,6 +624,11 @@
                  payload.copyInto(full, FRAME_HEADER_SIZE)
              }
  
@@ -375,7 +452,17 @@
              // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
              if (isHost) sendData(full, excludeAddress = link.address)
  
-@@ -605,7 +661,7 @@
+@@ -594,8 +665,7 @@
+             if (address == excludeAddress) continue
+             if (!link.alive.get()) continue
+             try {
+-                link.write(data)
+-                anySent = true
++                if (link.write(data)) anySent = true
+             } catch (e: IOException) {
+                 Log.w(TAG, "向 $address 发送失败，断开该链路", e)
+                 removePeer(link)
+@@ -605,7 +675,7 @@
      }
  
      private fun removePeer(link: PeerLink) {
@@ -384,7 +471,7 @@
          link.close()
          if (hostLink === link) hostLink = null
      }
-@@ -613,6 +669,11 @@
+@@ -613,6 +683,11 @@
      // ---------------------------------------------------------------- 收尾
  
      private fun stopEverything() {
@@ -396,6 +483,121 @@
          stopScan()
  
          accepting.set(false)
+--- /dev/null
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BoundedFrameWriter.kt
+@@ -0,0 +1,101 @@
++package host.msknet.sunsetripple
++
++import java.io.IOException
++import java.util.concurrent.ArrayBlockingQueue
++import java.util.concurrent.CompletableFuture
++import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
++import java.util.concurrent.atomic.AtomicBoolean
++
++/** One bounded writer per physical peer. Socket I/O never runs on the UI thread. */
++internal class BoundedFrameWriter(
++    capacity: Int = 64,
++    private val timeoutMillis: Long = 5_000,
++    private val write: (ByteArray) -> Unit,
++    private val closeTransport: () -> Unit,
++    private val onFailure: (Throwable) -> Unit,
++) : AutoCloseable {
++    private sealed class Job {
++        class Frame(val bytes: ByteArray) : Job()
++        class Barrier(val completion: CompletableFuture<Unit>) : Job()
++    }
++
++    companion object {
++        private val timer = Executors.newSingleThreadScheduledExecutor { task ->
++            Thread(task, "dawnmesh-write-timeout").apply { isDaemon = true }
++        }
++    }
++
++    private val open = AtomicBoolean(true)
++    private val jobs = ArrayBlockingQueue<Job>(capacity)
++    private val worker = Thread({ run() }, "dawnmesh-peer-writer").apply {
++        isDaemon = true
++        start()
++    }
++
++    @Synchronized
++    fun send(bytes: ByteArray): Boolean {
++        if (!open.get()) return false
++        if (jobs.offer(Job.Frame(bytes.copyOf()))) return true
++        fail(IOException("Peer send queue full"))
++        return false
++    }
++
++    @Synchronized
++    fun flush(): CompletableFuture<Unit> {
++        val done = CompletableFuture<Unit>()
++        if (!open.get() || !jobs.offer(Job.Barrier(done))) {
++            done.completeExceptionally(IOException("Peer writer is closed or full"))
++        }
++        return done
++    }
++
++    private fun run() {
++        try {
++            while (open.get()) {
++                when (val job = jobs.take()) {
++                    is Job.Barrier -> job.completion.complete(Unit)
++                    is Job.Frame -> {
++                        val deadline = timer.schedule(
++                            { fail(IOException("Peer write timed out")) },
++                            timeoutMillis, TimeUnit.MILLISECONDS,
++                        )
++                        try { write(job.bytes) } finally { deadline.cancel(false) }
++                    }
++                }
++            }
++        } catch (e: InterruptedException) {
++            Thread.currentThread().interrupt()
++        } catch (e: Exception) {
++            fail(e)
++        } finally {
++            rejectBarriers()
++        }
++    }
++
++    private fun rejectBarriers() {
++        while (true) {
++            val job = jobs.poll() ?: break
++            if (job is Job.Barrier) job.completion.completeExceptionally(IOException("Peer closed"))
++        }
++    }
++
++    @Synchronized
++    private fun fail(error: Throwable) {
++        if (!open.compareAndSet(true, false)) return
++        try { closeTransport() } finally {
++            worker.interrupt()
++            rejectBarriers()
++            onFailure(error)
++        }
++    }
++
++    @Synchronized
++    override fun close() {
++        if (!open.compareAndSet(true, false)) return
++        try { closeTransport() } finally {
++            worker.interrupt()
++            rejectBarriers()
++        }
++    }
++}
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
+@@ -60,7 +60,7 @@
+ 
+     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+         try {
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                 startForeground(
+                     NOTIFICATION_ID,
+                     buildNotification(),
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/MainActivity.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/MainActivity.kt
 @@ -9,6 +9,7 @@
@@ -431,7 +633,7 @@
 +                val wanted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) listOf(
 +                    Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN,
 +                    Manifest.permission.BLUETOOTH_ADVERTISE,
-+                ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
++                ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
 +                val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 +                if (missing.isEmpty()) result.success(true) else {
 +                    permissionResult = result
@@ -454,7 +656,15 @@
          audioPlugin?.dispose()
          audioPlugin = null
          blePlugin?.dispose()
-@@ -107,6 +135,7 @@
+@@ -98,6 +126,7 @@
+         } else {
+             // Android 12 及以下，扫描 WiFi/蓝牙设备必须有精确位置权限。
+             wanted += Manifest.permission.ACCESS_FINE_LOCATION
++            wanted += Manifest.permission.ACCESS_COARSE_LOCATION
+         }
+ 
+         val missing = wanted.filter {
+@@ -107,6 +136,7 @@
          if (missing.isEmpty()) return
  
          Log.i(TAG, "申请运行时权限：${missing.joinToString()}")
@@ -462,7 +672,7 @@
          requestPermissions(missing.toTypedArray(), REQUEST_CODE_RUNTIME_PERMISSIONS)
      }
  
-@@ -117,6 +146,9 @@
+@@ -117,6 +147,9 @@
      ) {
          super.onRequestPermissionsResult(requestCode, permissions, grantResults)
          if (requestCode != REQUEST_CODE_RUNTIME_PERMISSIONS) return
@@ -472,6 +682,14 @@
  
          permissions.forEachIndexed { index, permission ->
              val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
+--- a/android/app/src/main/res/values-zh/strings.xml
++++ b/android/app/src/main/res/values-zh/strings.xml
+@@ -1,4 +1,4 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">落日后残波</string>
++    <string name="app_name">DawnMesh</string>
+ </resources>
 --- a/android/app/src/main/res/values/strings.xml
 +++ b/android/app/src/main/res/values/strings.xml
 @@ -1,5 +1,5 @@
@@ -481,14 +699,62 @@
 -    <string name="app_name">SunsetRipple</string>
 +    <string name="app_name">DawnMesh</string>
  </resources>
---- a/android/app/src/main/res/values-zh/strings.xml
-+++ b/android/app/src/main/res/values-zh/strings.xml
-@@ -1,4 +1,4 @@
- <?xml version="1.0" encoding="utf-8"?>
- <resources>
--    <string name="app_name">落日后残波</string>
-+    <string name="app_name">DawnMesh</string>
- </resources>
+--- /dev/null
++++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/BoundedFrameWriterTest.kt
+@@ -0,0 +1,53 @@
++package host.msknet.sunsetripple
++
++import org.junit.Assert.*
++import org.junit.Test
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.TimeUnit
++import java.util.concurrent.atomic.AtomicInteger
++
++class BoundedFrameWriterTest {
++    @Test fun preservesOrderAndFlushes() {
++        val written = java.util.Collections.synchronizedList(mutableListOf<Int>())
++        val writer = BoundedFrameWriter(write = { written.add(it[0].toInt()) },
++            closeTransport = {}, onFailure = { throw AssertionError(it) })
++        try {
++            assertTrue(writer.send(byteArrayOf(1)))
++            assertTrue(writer.send(byteArrayOf(2)))
++            writer.flush().get(2, TimeUnit.SECONDS)
++            assertEquals(listOf(1, 2), written.toList())
++        } finally { writer.close() }
++        assertFalse(writer.send(byteArrayOf(3)))
++    }
++
++    @Test fun fullQueueClosesSlowPeerWithoutBlockingCaller() {
++        val entered = CountDownLatch(1)
++        val release = CountDownLatch(1)
++        val failures = AtomicInteger()
++        val writer = BoundedFrameWriter(capacity = 1, write = { entered.countDown(); release.await() },
++            closeTransport = { release.countDown() }, onFailure = { failures.incrementAndGet() })
++        try {
++            assertTrue(writer.send(byteArrayOf(1)))
++            assertTrue(entered.await(2, TimeUnit.SECONDS))
++            assertTrue(writer.send(byteArrayOf(2)))
++            assertFalse(writer.send(byteArrayOf(3)))
++            assertEquals(1, failures.get())
++        } finally { writer.close() }
++    }
++
++    @Test fun blockedWriteTimesOutAndRejectsPendingFlush() {
++        val entered = CountDownLatch(1)
++        val release = CountDownLatch(1)
++        val failed = CountDownLatch(1)
++        val writer = BoundedFrameWriter(timeoutMillis = 100, write = { entered.countDown(); release.await() },
++            closeTransport = { release.countDown() }, onFailure = { failed.countDown() })
++        try {
++            writer.send(byteArrayOf(1))
++            assertTrue(entered.await(2, TimeUnit.SECONDS))
++            val flush = writer.flush()
++            assertTrue(failed.await(2, TimeUnit.SECONDS))
++            assertTrue(flush.isCompletedExceptionally)
++            assertFalse(writer.send(byteArrayOf(2)))
++        } finally { writer.close() }
++    }
++}
 --- a/android/build.gradle.kts
 +++ b/android/build.gradle.kts
 @@ -1,7 +1,7 @@
@@ -509,263 +775,7 @@
 -distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-all.zip
  distributionUrl=https\://services.gradle.org/distributions/gradle-8.12-all.zip
 +distributionSha256Sum=7ebdac923867a3cec0098302416d1e3c6c0c729fc4e2e05c10637a8af33a76c5
---- a/android/gradlew
-+++ b/android/gradlew
-@@ -0,0 +1,160 @@
-+#!/usr/bin/env bash
-+
-+##############################################################################
-+##
-+##  Gradle start up script for UN*X
-+##
-+##############################################################################
-+
-+# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-+DEFAULT_JVM_OPTS=""
-+
-+APP_NAME="Gradle"
-+APP_BASE_NAME=`basename "$0"`
-+
-+# Use the maximum available, or set MAX_FD != -1 to use that value.
-+MAX_FD="maximum"
-+
-+warn ( ) {
-+    echo "$*"
-+}
-+
-+die ( ) {
-+    echo
-+    echo "$*"
-+    echo
-+    exit 1
-+}
-+
-+# OS specific support (must be 'true' or 'false').
-+cygwin=false
-+msys=false
-+darwin=false
-+case "`uname`" in
-+  CYGWIN* )
-+    cygwin=true
-+    ;;
-+  Darwin* )
-+    darwin=true
-+    ;;
-+  MINGW* )
-+    msys=true
-+    ;;
-+esac
-+
-+# Attempt to set APP_HOME
-+# Resolve links: $0 may be a link
-+PRG="$0"
-+# Need this for relative symlinks.
-+while [ -h "$PRG" ] ; do
-+    ls=`ls -ld "$PRG"`
-+    link=`expr "$ls" : '.*-> \(.*\)$'`
-+    if expr "$link" : '/.*' > /dev/null; then
-+        PRG="$link"
-+    else
-+        PRG=`dirname "$PRG"`"/$link"
-+    fi
-+done
-+SAVED="`pwd`"
-+cd "`dirname \"$PRG\"`/" >/dev/null
-+APP_HOME="`pwd -P`"
-+cd "$SAVED" >/dev/null
-+
-+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
-+
-+# Determine the Java command to use to start the JVM.
-+if [ -n "$JAVA_HOME" ] ; then
-+    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
-+        # IBM's JDK on AIX uses strange locations for the executables
-+        JAVACMD="$JAVA_HOME/jre/sh/java"
-+    else
-+        JAVACMD="$JAVA_HOME/bin/java"
-+    fi
-+    if [ ! -x "$JAVACMD" ] ; then
-+        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
-+
-+Please set the JAVA_HOME variable in your environment to match the
-+location of your Java installation."
-+    fi
-+else
-+    JAVACMD="java"
-+    which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
-+
-+Please set the JAVA_HOME variable in your environment to match the
-+location of your Java installation."
-+fi
-+
-+# Increase the maximum file descriptors if we can.
-+if [ "$cygwin" = "false" -a "$darwin" = "false" ] ; then
-+    MAX_FD_LIMIT=`ulimit -H -n`
-+    if [ $? -eq 0 ] ; then
-+        if [ "$MAX_FD" = "maximum" -o "$MAX_FD" = "max" ] ; then
-+            MAX_FD="$MAX_FD_LIMIT"
-+        fi
-+        ulimit -n $MAX_FD
-+        if [ $? -ne 0 ] ; then
-+            warn "Could not set maximum file descriptor limit: $MAX_FD"
-+        fi
-+    else
-+        warn "Could not query maximum file descriptor limit: $MAX_FD_LIMIT"
-+    fi
-+fi
-+
-+# For Darwin, add options to specify how the application appears in the dock
-+if $darwin; then
-+    GRADLE_OPTS="$GRADLE_OPTS \"-Xdock:name=$APP_NAME\" \"-Xdock:icon=$APP_HOME/media/gradle.icns\""
-+fi
-+
-+# For Cygwin, switch paths to Windows format before running java
-+if $cygwin ; then
-+    APP_HOME=`cygpath --path --mixed "$APP_HOME"`
-+    CLASSPATH=`cygpath --path --mixed "$CLASSPATH"`
-+    JAVACMD=`cygpath --unix "$JAVACMD"`
-+
-+    # We build the pattern for arguments to be converted via cygpath
-+    ROOTDIRSRAW=`find -L / -maxdepth 1 -mindepth 1 -type d 2>/dev/null`
-+    SEP=""
-+    for dir in $ROOTDIRSRAW ; do
-+        ROOTDIRS="$ROOTDIRS$SEP$dir"
-+        SEP="|"
-+    done
-+    OURCYGPATTERN="(^($ROOTDIRS))"
-+    # Add a user-defined pattern to the cygpath arguments
-+    if [ "$GRADLE_CYGPATTERN" != "" ] ; then
-+        OURCYGPATTERN="$OURCYGPATTERN|($GRADLE_CYGPATTERN)"
-+    fi
-+    # Now convert the arguments - kludge to limit ourselves to /bin/sh
-+    i=0
-+    for arg in "$@" ; do
-+        CHECK=`echo "$arg"|egrep -c "$OURCYGPATTERN" -`
-+        CHECK2=`echo "$arg"|egrep -c "^-"`                                 ### Determine if an option
-+
-+        if [ $CHECK -ne 0 ] && [ $CHECK2 -eq 0 ] ; then                    ### Added a condition
-+            eval `echo args$i`=`cygpath --path --ignore --mixed "$arg"`
-+        else
-+            eval `echo args$i`="\"$arg\""
-+        fi
-+        i=$((i+1))
-+    done
-+    case $i in
-+        (0) set -- ;;
-+        (1) set -- "$args0" ;;
-+        (2) set -- "$args0" "$args1" ;;
-+        (3) set -- "$args0" "$args1" "$args2" ;;
-+        (4) set -- "$args0" "$args1" "$args2" "$args3" ;;
-+        (5) set -- "$args0" "$args1" "$args2" "$args3" "$args4" ;;
-+        (6) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" ;;
-+        (7) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" ;;
-+        (8) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" ;;
-+        (9) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" "$args8" ;;
-+    esac
-+fi
-+
-+# Split up the JVM_OPTS And GRADLE_OPTS values into an array, following the shell quoting and substitution rules
-+function splitJvmOpts() {
-+    JVM_OPTS=("$@")
-+}
-+eval splitJvmOpts $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS
-+JVM_OPTS[${#JVM_OPTS[*]}]="-Dorg.gradle.appname=$APP_BASE_NAME"
-+
-+exec "$JAVACMD" "${JVM_OPTS[@]}" -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
---- a/android/gradlew.bat
-+++ b/android/gradlew.bat
-@@ -0,0 +1,90 @@
-+@if "%DEBUG%" == "" @echo off
-+@rem ##########################################################################
-+@rem
-+@rem  Gradle startup script for Windows
-+@rem
-+@rem ##########################################################################
-+
-+@rem Set local scope for the variables with windows NT shell
-+if "%OS%"=="Windows_NT" setlocal
-+
-+@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-+set DEFAULT_JVM_OPTS=
-+
-+set DIRNAME=%~dp0
-+if "%DIRNAME%" == "" set DIRNAME=.
-+set APP_BASE_NAME=%~n0
-+set APP_HOME=%DIRNAME%
-+
-+@rem Find java.exe
-+if defined JAVA_HOME goto findJavaFromJavaHome
-+
-+set JAVA_EXE=java.exe
-+%JAVA_EXE% -version >NUL 2>&1
-+if "%ERRORLEVEL%" == "0" goto init
-+
-+echo.
-+echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
-+echo.
-+echo Please set the JAVA_HOME variable in your environment to match the
-+echo location of your Java installation.
-+
-+goto fail
-+
-+:findJavaFromJavaHome
-+set JAVA_HOME=%JAVA_HOME:"=%
-+set JAVA_EXE=%JAVA_HOME%/bin/java.exe
-+
-+if exist "%JAVA_EXE%" goto init
-+
-+echo.
-+echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME%
-+echo.
-+echo Please set the JAVA_HOME variable in your environment to match the
-+echo location of your Java installation.
-+
-+goto fail
-+
-+:init
-+@rem Get command-line arguments, handling Windowz variants
-+
-+if not "%OS%" == "Windows_NT" goto win9xME_args
-+if "%@eval[2+2]" == "4" goto 4NT_args
-+
-+:win9xME_args
-+@rem Slurp the command line arguments.
-+set CMD_LINE_ARGS=
-+set _SKIP=2
-+
-+:win9xME_args_slurp
-+if "x%~1" == "x" goto execute
-+
-+set CMD_LINE_ARGS=%*
-+goto execute
-+
-+:4NT_args
-+@rem Get arguments from the 4NT Shell from JP Software
-+set CMD_LINE_ARGS=%$
-+
-+:execute
-+@rem Setup the command line
-+
-+set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
-+
-+@rem Execute Gradle
-+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %CMD_LINE_ARGS%
-+
-+:end
-+@rem End local scope for the variables with windows NT shell
-+if "%ERRORLEVEL%"=="0" goto mainEnd
-+
-+:fail
-+rem Set variable GRADLE_EXIT_CONSOLE if you need the _script_ return code instead of
-+rem the _cmd.exe /c_ return code!
-+if  not "" == "%GRADLE_EXIT_CONSOLE%" exit 1
-+exit /b 1
-+
-+:mainEnd
-+if "%OS%"=="Windows_NT" endlocal
-+
-+:omega
---- a/android/key.properties.example
+--- /dev/null
 +++ b/android/key.properties.example
 @@ -0,0 +1,5 @@
 +# storeFile relative to android/app; DO NOT COMMIT key.properties or keystore.
@@ -773,10 +783,7 @@
 +storePassword=REPLACE_LOCALLY
 +keyAlias=dawnmesh
 +keyPassword=REPLACE_LOCALLY
---- a/android/local.properties
-+++ b/android/local.properties
-@@ -0,0 +1 @@
-+flutter.sdk=/private/tmp/dawnmesh-flutter--- a/android/settings.gradle.kts
+--- a/android/settings.gradle.kts
 +++ b/android/settings.gradle.kts
 @@ -14,7 +14,7 @@
          // 但 GitHub runner 反过来：连 maven.aliyun.com 会 502，而 Gradle 撞到
@@ -787,9 +794,266 @@
              maven { url = uri("https://maven.aliyun.com/repository/google") }
              maven { url = uri("https://maven.aliyun.com/repository/central") }
              maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+--- a/lib/core/protocol/frame_type.dart
++++ b/lib/core/protocol/frame_type.dart
+@@ -13,7 +13,8 @@
+   sealed(0x0b),
+   chat(0x0c),
+   chatSync(0x0d),
+-  chatDelete(0x0e);
++  chatDelete(0x0e),
++  admission(0x10);
+ 
+   final int value;
+   const FrameType(this.value);
+--- /dev/null
++++ b/lib/core/security/room_invite.dart
+@@ -0,0 +1,48 @@
++import 'dart:convert';
++import 'dart:math';
++import 'dart:typed_data';
++import 'package:crypto/crypto.dart' as crypto;
++import 'session_crypto.dart';
++import 'session_handshake.dart';
++
++/// A fresh 128-bit bearer secret for a trusted group, never advertised or logged.
++/// Possession authorizes membership; this does not identify individual humans.
++class RoomInvite {
++  final String code;
++  RoomInvite._(this.code);
++
++  factory RoomInvite.generate() {
++    final random = Random.secure();
++    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
++    return RoomInvite._(base64Url.encode(bytes).replaceAll('=', ''));
++  }
++
++  factory RoomInvite.parse(String input) {
++    final code = input.trim();
++    if (!RegExp(r'^[A-Za-z0-9_-]{22}$').hasMatch(code)) {
++      throw const FormatException('邀请码应为 22 位，请完整复制房主的邀请码。');
++    }
++    final bytes = base64Url.decode('$code==');
++    if (bytes.length != 16 ||
++        base64Url.encode(bytes).replaceAll('=', '') != code) {
++      throw const FormatException('邀请码格式不正确。');
++    }
++    return RoomInvite._(code);
++  }
++
++  Future<SecureFrameCodec> createCodec() async {
++    // The input is uniform random entropy, NOT a human password. Domain-separated
++    // SHA-256 expands it to an AES key without introducing a weak password KDF.
++    final bytes = base64Url.decode('$code==');
++    final key = Uint8List.fromList(
++      crypto.sha256.convert([
++        ...utf8.encode('DawnMesh room key v1\u0000'),
++        ...bytes,
++      ]).bytes,
++    );
++    return SecureFrameCodec(await SessionCipher.fromKey(key));
++  }
++
++  @override
++  String toString() => 'RoomInvite([redacted])';
++}
+--- a/lib/core/security/session_crypto.dart
++++ b/lib/core/security/session_crypto.dart
+@@ -1,4 +1,3 @@
+-import 'dart:collection';
+ import 'dart:convert';
+ import 'dart:math';
+ import 'dart:typed_data';
+@@ -25,7 +24,9 @@
+   /// 全量指纹：SHA-256 摘要，十六进制大写，冒号分隔（如 "3A:5F:..."）。
+   static String full(List<int> publicKey) {
+     final digest = crypto.sha256.convert(publicKey).bytes;
+-    return digest.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(':');
++    return digest
++        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
++        .join(':');
+   }
+ 
+   /// 6 位安全短码：取 SHA-256 前 4 字节大端无符号整数模 1,000,000，分成三三两段（如 "123 456"）。
+@@ -67,10 +68,12 @@
+     secureRandom.seed(KeyParameter(seed));
+ 
+     final keyGen = ECKeyGenerator();
+-    keyGen.init(ParametersWithRandom(
+-      ECKeyGeneratorParameters(_domainParams),
+-      secureRandom,
+-    ));
++    keyGen.init(
++      ParametersWithRandom(
++        ECKeyGeneratorParameters(_domainParams),
++        secureRandom,
++      ),
++    );
+ 
+     final pair = keyGen.generateKeyPair();
+     final priv = pair.privateKey as ECPrivateKey;
+@@ -96,10 +99,9 @@
+     signer.init(true, PrivateKeyParameter(privateKey));
+     final sig = signer.generateSignature(payload) as ECSignature;
+ 
+-    final seq = ASN1Sequence(elements: [
+-      ASN1Integer(sig.r),
+-      ASN1Integer(sig.s),
+-    ]);
++    final seq = ASN1Sequence(
++      elements: [ASN1Integer(sig.r), ASN1Integer(sig.s)],
++    );
+     return seq.encode();
+   }
+ }
+@@ -144,18 +146,23 @@
+ 
+ /// 基于 AES-256-GCM 的会话加密器。
+ ///
+-/// 具备 12 字节 Nonce、128 位认证标签、65536 深度 Nonce 防重放窗口。
++/// 具备 12 字节 Nonce、128 位认证标签、每发送端 1024 帧滑动防重放窗口。
+ class SessionCipher {
+   static const int nonceBytes = 12;
+   static const int tagBits = 128;
+   static const int tagBytes = 16;
+-  static const int maxSeenNonces = 65536;
++  static const int replayWindowSize = 1024;
++  static const int maxSenderPrefixes = 128;
+ 
+   final crypt.SecretKey _secretKey;
+-  final crypt.AesGcm _aesGcm = crypt.AesGcm.with256bits(nonceLength: nonceBytes);
+-  final Set<String> _seenNonces = <String>{};
+-  final ListQueue<String> _nonceOrder = ListQueue<String>();
+-  final Random _random = Random.secure();
++  final crypt.AesGcm _aesGcm = crypt.AesGcm.with256bits(
++    nonceLength: nonceBytes,
++  );
++  final Map<String, _ReplayWindow> _replayWindows = {};
++  final Uint8List _noncePrefix = Uint8List.fromList(
++    List.generate(8, (_) => Random.secure().nextInt(256)),
++  );
++  int _nonceCounter = 0;
+ 
+   SessionCipher._(this._secretKey);
+ 
+@@ -251,9 +258,9 @@
+     Uint8List? associatedData,
+   }) async {
+     final nonce = Uint8List(nonceBytes);
+-    for (int i = 0; i < nonceBytes; i++) {
+-      nonce[i] = _random.nextInt(256);
+-    }
++    if (_nonceCounter > 0xffffffff) throw StateError('room key exhausted');
++    nonce.setRange(0, 8, _noncePrefix);
++    ByteData.sublistView(nonce).setUint32(8, _nonceCounter++, Endian.big);
+ 
+     final secretBox = await _aesGcm.encrypt(
+       plaintext,
+@@ -263,7 +270,9 @@
+     );
+ 
+     // secretBox.cipherText + secretBox.mac.bytes (16 bytes tag)
+-    final ciphertext = Uint8List(secretBox.cipherText.length + secretBox.mac.bytes.length);
++    final ciphertext = Uint8List(
++      secretBox.cipherText.length + secretBox.mac.bytes.length,
++    );
+     ciphertext.setRange(0, secretBox.cipherText.length, secretBox.cipherText);
+     ciphertext.setRange(
+       secretBox.cipherText.length,
+@@ -279,21 +288,14 @@
+     EncryptedPacket packet, {
+     Uint8List? associatedData,
+   }) async {
+-    final nonceId = base64.encode(packet.nonce);
+-    if (_seenNonces.contains(nonceId)) {
++    if (packet.nonce.length != nonceBytes) throw ArgumentError('invalid nonce');
++    final prefix = base64.encode(packet.nonce.sublist(0, 8));
++    final counter = ByteData.sublistView(packet.nonce).getUint32(8, Endian.big);
++    if (_replayWindows[prefix]?.rejects(counter) ?? false) {
+       throw StateError('replayed encrypted frame');
+     }
+ 
+-    _seenNonces.add(nonceId);
+-    _nonceOrder.addLast(nonceId);
+-    if (_nonceOrder.length > maxSeenNonces) {
+-      final oldest = _nonceOrder.removeFirst();
+-      _seenNonces.remove(oldest);
+-    }
+-
+     if (packet.ciphertext.length < tagBytes) {
+-      _seenNonces.remove(nonceId);
+-      _nonceOrder.remove(nonceId);
+       throw ArgumentError('ciphertext is shorter than authentication tag');
+     }
+ 
+@@ -314,13 +316,46 @@
+         aad: associatedData ?? Uint8List(0),
+       );
+ 
++      // Mutate replay state only after authentication. Never evict a sender:
++      // evicting it would make old captured packets acceptable again.
++      if (!_replayWindows.containsKey(prefix) &&
++          _replayWindows.length >= maxSenderPrefixes) {
++        throw StateError('too many sender sessions; create a new room');
++      }
++      final window = _replayWindows.putIfAbsent(prefix, _ReplayWindow.new);
++      window.accept(counter); // Recheck after await for concurrent duplicates.
+       return Uint8List.fromList(decrypted);
+-    } catch (e) {
+-      // 校验失败时将 nonce 移除，避免损坏包占用合法重试窗口
+-      _seenNonces.remove(nonceId);
+-      _nonceOrder.remove(nonceId);
++    } catch (_) {
+       rethrow;
+     }
+   }
+ }
+ 
++/// Records a bounded window without ever accepting counters older than it.
++class _ReplayWindow {
++  int highest = -1;
++  BigInt bits = BigInt.zero;
++  static final mask =
++      (BigInt.one << SessionCipher.replayWindowSize) - BigInt.one;
++
++  bool rejects(int counter) {
++    if (counter > highest) return false;
++    final delta = highest - counter;
++    return delta >= SessionCipher.replayWindowSize ||
++        (bits & (BigInt.one << delta)) != BigInt.zero;
++  }
++
++  void accept(int counter) {
++    if (rejects(counter)) throw StateError('replayed encrypted frame');
++    if (counter > highest) {
++      final shift = counter - highest;
++      bits =
++          shift >= SessionCipher.replayWindowSize
++              ? BigInt.one
++              : ((bits << shift) | BigInt.one) & mask;
++      highest = counter;
++    } else {
++      bits |= BigInt.one << (highest - counter);
++    }
++  }
++}
 --- a/lib/core/session/room_session.dart
 +++ b/lib/core/session/room_session.dart
-@@ -21,6 +21,7 @@
+@@ -1,4 +1,5 @@
+ import 'dart:async';
++import 'dart:convert';
+ import 'dart:math';
+ import 'dart:typed_data';
+ import '../audio/audio_io.dart';
+@@ -13,6 +14,7 @@
+ import '../protocol/payloads/ptt_state.dart';
+ import '../protocol/payloads/roster.dart';
+ import '../security/session_handshake.dart';
++import '../security/room_invite.dart';
+ import '../transport/room_transport.dart';
+ import 'chat_message.dart';
+ import 'device_code.dart';
+@@ -21,6 +23,7 @@
  import 'reconnect_controller.dart';
  
  enum RoomMode { wifiFullDuplex, bluetoothPtt }
@@ -797,7 +1061,40 @@
  enum RoomState { idle, connecting, inRoom, reconnecting, disconnected }
  
  /// Full Feature-Parity Central Room Session Controller.
-@@ -93,8 +94,12 @@
+@@ -48,15 +51,24 @@
+   final Uint8List sessionToken;
+   final RoomMode mode;
+ 
+-  /// 端到端 AES-GCM 安全信封编解码器。
+-  ///
+-  /// **默认为 null，即默认不加密。** 这是刻意的：已发布的 Kotlin 版 alpha.7
+-  /// 线上也没有默认开启强制加密，如果这一版单方面默认加密，升级到 alpha.8 的
+-  /// 用户就会和还没升级的人连不上。
+-  ///
+-  /// 帧类型 0x09/0x0a/0x0b 与旧版的 HANDSHAKE_HELLO/HANDSHAKE_CONFIRM/SEALED
+-  /// 一一对应，握手与密封的能力已经就位，等两版都具备后再协商开启。
++  /// Production entry points require a fresh room invitation before connecting.
++  /// Nullable only for legacy protocol tests and explicit internal use.
+   SecureFrameCodec? secureCodec;
++  RoomInvite? roomInvite;
++  bool _admitted = false;
++  bool _closed = false;
++  Future<void> _incomingQueue = Future.value();
++  Future<void> _outgoingQueue = Future.value();
++  int _pendingIncoming = 0;
++  int _pendingOutgoing = 0;
++
++  Future<void> protectWithInvite(RoomInvite invite) async {
++    secureCodec = await invite.createCodec();
++    roomInvite = invite;
++  }
++
++  // Leave room for the largest chat-history header when encryption is enabled.
++  int get maxChatTextBytes => secureCodec == null ? 480 : 320;
+ 
+   RoomState _state = RoomState.idle;
+   bool _isHost = false;
+@@ -93,8 +105,12 @@
  
    // 纯内存聊天状态
    final List<ChatMessage> _chatMessages = [];
@@ -812,7 +1109,39 @@
    final _unreadStreamController = StreamController<int>.broadcast(sync: true);
    int _unreadChatCount = 0;
    final Set<String> _seenChatKeys = <String>{};
-@@ -243,13 +248,26 @@
+@@ -201,6 +217,7 @@
+   /// Join an existing room as Client.
+   Future<void> joinRoom({bool startAudio = true}) async {
+     _isHost = false;
++    _admitted = false;
+     _selfMemberId = 0;
+     _members.clear();
+ 
+@@ -235,7 +252,22 @@
+   }
+ 
+   /// Process incoming binary frames
+-  Future<void> handleIncomingFrame(Frame frame) async {
++  Future<void> handleIncomingFrame(Frame frame) {
++    if (_closed) return Future.value();
++    if (secureCodec == null) return _handleIncomingFrame(frame);
++    // Keep async cryptography in wire order and bound unauthenticated work.
++    if (_pendingIncoming >= 256) return Future.value();
++    _pendingIncoming++;
++    final next = _incomingQueue
++        .then((_) async {
++          if (!_closed) await _handleIncomingFrame(frame);
++        })
++        .whenComplete(() => _pendingIncoming--);
++    _incomingQueue = next.catchError((Object _) {});
++    return next;
++  }
++
++  Future<void> _handleIncomingFrame(Frame frame) async {
+     if (frame.type == FrameType.sealed) {
+       if (secureCodec == null) {
+         AppLog.warn('RoomSession', '收到加密帧但未配置安全编解码器，已丢弃');
+@@ -243,14 +275,54 @@
        }
        try {
          final opened = await secureCodec!.open(frame);
@@ -837,10 +1166,38 @@
 +  }
 +
 +  Future<void> _dispatchIncomingFrame(Frame frame) async {
++    if (secureCodec != null) {
++      final hostCommand =
++          frame.type == FrameType.roster ||
++          frame.type == FrameType.hostHandover ||
++          frame.type == FrameType.hostAnnounce ||
++          frame.type == FrameType.chatSync;
++      if (hostCommand && (_isHost || frame.senderId != 1)) return;
++    }
++    if (roomInvite != null &&
++        !_isHost &&
++        !_admitted &&
++        frame.type != FrameType.admission) {
++      return;
++    }
      switch (frame.type) {
++      case FrameType.admission:
++        if (roomInvite != null &&
++            !_isHost &&
++            frame.senderId == 1 &&
++            frame.payload.length == 17 &&
++            frame.payload[0] >= 2 &&
++            frame.payload[0] <= 6 &&
++            _tokensEqual(frame.payload.sublist(1), sessionToken)) {
++          _admitted = true;
++          _selfMemberId = frame.payload[0];
++          transport?.updateSelfMemberId(_selfMemberId);
++        }
++        break;
        case FrameType.audio:
          _handleAudioFrame(frame);
-@@ -348,7 +366,9 @@
+         break;
+@@ -348,7 +420,9 @@
      if (!_isZeroToken(joinToken)) {
        for (final entry in _members.entries) {
          final existing = entry.value.sessionToken;
@@ -851,7 +1208,39 @@
            allocatedId = entry.key;
            break;
          }
-@@ -487,8 +507,9 @@
+@@ -384,6 +458,16 @@
+     );
+ 
+     _recordMemberIdentity(allocatedId, payload.nickname);
++    if (roomInvite != null) {
++      sendFrame(
++        Frame(
++          type: FrameType.admission,
++          senderId: 1,
++          seq: _nextSeq(),
++          payload: Uint8List.fromList([allocatedId, ...joinToken]),
++        ),
++      );
++    }
+     _broadcastRoster();
+     _notifyMembers();
+     _syncChatHistoryTo(allocatedId);
+@@ -403,12 +487,13 @@
+         isMuted: rm.isMuted,
+         isSpeaking: rm.isSpeaking,
+       );
+-      if (rm.nickname == selfNickname && !isHost) {
++      if (roomInvite == null && rm.nickname == selfNickname && !isHost) {
+         _selfMemberId = rm.memberId;
+         transport?.updateSelfMemberId(_selfMemberId);
+       }
+     }
+ 
++    if (roomInvite != null && !_members.containsKey(_selfMemberId)) return;
+     if (_state != RoomState.inRoom) {
+       _updateState(RoomState.inRoom);
+     }
+@@ -487,8 +572,9 @@
    }
  
    bool _isPlanFresh(HostTransferPlan plan) {
@@ -863,7 +1252,7 @@
      if (maxOrder < _highestSeenJoinOrder) return false;
      _highestSeenJoinOrder = maxOrder;
      return true;
-@@ -499,9 +520,9 @@
+@@ -499,9 +585,9 @@
      if (_isHost || _transferInProgress || _state != RoomState.inRoom) return;
  
      final currentHost = _members.values.cast<Member?>().firstWhere(
@@ -876,7 +1265,7 @@
  
      // 如果刚进房间名单里还没标出房主，先等待名单帧，不误判失联
      if (currentHost == null) return;
-@@ -601,12 +622,14 @@
+@@ -601,12 +687,14 @@
        final endpoint = known[m.memberId] ?? m.endpoint;
        if (endpoint.trim().isEmpty) continue;
        m.endpoint = endpoint;
@@ -897,7 +1286,7 @@
      }
  
      if (candidates.isEmpty) return null;
-@@ -616,14 +639,17 @@
+@@ -616,14 +704,17 @@
      try {
        return HostTransferPlan(
          successorId: preferredSuccessorId,
@@ -923,7 +1312,7 @@
        );
      } catch (e) {
        AppLog.error('RoomSession', '交接计划校验未通过', e);
-@@ -640,12 +666,14 @@
+@@ -640,12 +731,14 @@
      if (plan == null) return;
  
      _cachedPlan = plan;
@@ -944,7 +1333,7 @@
    }
  
    void _broadcastRoster() {
-@@ -654,15 +682,23 @@
+@@ -654,15 +747,23 @@
      // 名单变了，传输层的 UDP 白名单也要跟着变：端点注册只认在册成员号。
      _syncKnownMembersToTransport();
  
@@ -977,7 +1366,7 @@
      final frame = Frame(
        type: FrameType.roster,
        senderId: _selfMemberId,
-@@ -685,31 +721,29 @@
+@@ -685,31 +786,29 @@
      await audioIo.stopCapture();
      await audioIo.clearRemoteMembers();
  
@@ -1027,7 +1416,7 @@
  
      // 播放不再需要 Dart 定时器：抖动缓冲、解码、混音、送扬声器全在原生侧，
      // 由 AudioTrack 的写阻塞天然定速（原来的 Timer.periodic(20ms) 有调度漂移）。
-@@ -750,12 +784,15 @@
+@@ -750,12 +849,15 @@
    /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
    void pruneStaleMembers() {
      final now = DateTime.now();
@@ -1049,7 +1438,33 @@
      if (stale.isEmpty) return;
  
      for (final id in stale) {
-@@ -827,6 +864,7 @@
+@@ -817,16 +919,28 @@
+   /// Hook for network transmission
+   void Function(Frame frame)? onSendFrame;
+ 
+-  Future<void> sendFrame(Frame frame) async {
++  Future<void> sendFrame(Frame frame) {
++    if (_closed) return Future.value();
++    if (secureCodec == null) return _sendFrame(frame);
++    if (_pendingOutgoing >= 256) return Future.value();
++    _pendingOutgoing++;
++    final next = _outgoingQueue
++        .then((_) async {
++          if (!_closed) await _sendFrame(frame);
++        })
++        .whenComplete(() => _pendingOutgoing--);
++    _outgoingQueue = next.catchError((Object _) {});
++    return next;
++  }
++
++  Future<void> _sendFrame(Frame frame) async {
+     Frame outFrame = frame;
+-    if (secureCodec != null &&
+-        frame.type != FrameType.sealed &&
+-        frame.type != FrameType.handshakeHello &&
+-        frame.type != FrameType.handshakeConfirm) {
++    if (secureCodec != null) {
+       try {
          outFrame = await secureCodec!.seal(frame);
        } catch (e) {
          AppLog.error('RoomSession', '密封加密帧失败，已放弃发送', e);
@@ -1057,7 +1472,7 @@
        }
      }
      onSendFrame?.call(outFrame);
-@@ -847,19 +885,18 @@
+@@ -847,19 +961,18 @@
  
      final plan = _buildTransferPlan(preferredSuccessorId: targetMemberId);
      if (plan == null) {
@@ -1089,18 +1504,25 @@
      AppLog.info('RoomSession', '把房主转移给「${target.nickname}」');
  
      // 留一点时间让交接帧真的发出去，再自己降为普通成员重连过去。
-@@ -895,7 +932,9 @@
+@@ -895,9 +1008,14 @@
      }
      final trimmed = text.trim();
      if (trimmed.isEmpty) {
 -      throw ArgumentError('Chat message text cannot be empty or whitespace-only.');
+-    }
+-
 +      throw ArgumentError(
 +        'Chat message text cannot be empty or whitespace-only.',
 +      );
-     }
- 
++    }
++
++    if (utf8.encode(trimmed).length > maxChatTextBytes) {
++      throw ArgumentError('消息最多 $maxChatTextBytes UTF-8 字节。');
++    }
      final fullNickname = _members[_selfMemberId]?.nickname ?? selfNickname;
-@@ -929,7 +968,8 @@
+     final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
+     final code = DeviceCode.toNumeric(rawCode);
+@@ -929,7 +1047,8 @@
  
      // 本地立即追加一条 isLocal = true 消息
      _recordMemberIdentity(_selfMemberId, fullNickname);
@@ -1110,7 +1532,7 @@
      final prevNick = _previousNicknamesByCode[code]?.join('、');
  
      final localMsg = ChatMessage(
-@@ -976,16 +1016,19 @@
+@@ -976,16 +1095,19 @@
      // 5. 身份与曾用名关联
      _recordMemberIdentity(frame.senderId, sender.nickname);
      final split = DeviceCode.split(sender.nickname);
@@ -1137,7 +1559,7 @@
  
      // 6. 组装并追加消息
      final msg = ChatMessage(
-@@ -1041,7 +1084,8 @@
+@@ -1041,7 +1163,8 @@
      }
  
      // 仅接收定向发给本机或广播的历史同步帧
@@ -1147,7 +1569,7 @@
        return;
      }
  
-@@ -1051,7 +1095,8 @@
+@@ -1051,7 +1174,8 @@
      }
  
      _recordMemberIdentity(payload.senderId, payload.nickname);
@@ -1157,7 +1579,7 @@
      final prevNick = _previousNicknamesByCode[payload.senderCode]?.join('、');
  
      final msg = ChatMessage(
-@@ -1086,7 +1131,9 @@
+@@ -1086,7 +1210,9 @@
      if (idx == -1) return;
      final target = _chatMessages[idx];
  
@@ -1168,7 +1590,7 @@
      // 权限校验：只能删除自己发送的消息
      if (!target.isLocal && DeviceCode.toNumeric(target.senderCode) != myCode) {
        throw StateError('Cannot delete messages sent by other members.');
-@@ -1116,7 +1163,9 @@
+@@ -1116,7 +1242,9 @@
      final payload = ChatDeletePayload.decode(frame.payload);
      if (payload == null) return;
  
@@ -1179,7 +1601,7 @@
      if (idx == -1) return;
  
      final target = _chatMessages[idx];
-@@ -1153,7 +1202,9 @@
+@@ -1153,7 +1281,9 @@
      if (_currentNicknameByCode.containsKey(code)) {
        final oldNick = _currentNicknameByCode[code]!;
        if (oldNick != cleanNick) {
@@ -1190,7 +1612,17 @@
          _currentNicknameByCode[code] = cleanNick;
          // 同步更新之前该成员发出的历史消息
          bool changed = false;
-@@ -1281,8 +1332,14 @@
+@@ -1234,6 +1364,9 @@
+     await audioIo.stopPlayback();
+     await audioIo.clearRemoteMembers();
+     await transport?.stop();
++    _closed = true;
++    secureCodec = null;
++    roomInvite = null;
+ 
+     _members.clear();
+     _lastAudioAt.clear();
+@@ -1281,8 +1414,14 @@
    /// 原来是同步调用 `leave()` 之后立刻 close 三个 controller：`leave()` 跑到
    /// 第一个 await（stopCapture）就挂起了，等它恢复执行时再去 `_updateState`
    /// 和 `_notifyMembers`，写的已经是关掉的 controller，直接抛 StateError。
@@ -1322,7 +1754,7 @@
    }
  
    /// 转发在原生侧按链路地址完成，不需要成员号映射。
-@@ -227,7 +255,9 @@
+@@ -227,11 +255,20 @@
  
    /// 蓝牙按链路寻址，没有 UDP 那种自报成员号的白名单需求。
    @override
@@ -1333,7 +1765,19 @@
  
    /// BLE 帧经 invokeMethod 同步过桥，没有可刷写的本地缓冲。
    @override
-@@ -285,41 +315,43 @@
+-  Future<void> flush() async {}
++  Future<void> flush() async {
++    if (_role == BleRole.idle) return;
++    try {
++      await _channel.invokeMethod('flush').timeout(const Duration(seconds: 6));
++    } catch (e) {
++      AppLog.debug(_tag, '蓝牙发送队列清理失败：$e');
++    }
++  }
+ 
+   /// 蓝牙房不支持房主转移。
+   ///
+@@ -285,41 +322,43 @@
  
    void _listenIncomingData() {
      _dataSubscription?.cancel();
@@ -1400,7 +1844,7 @@
            psm: psm,
            memberCount: event['memberCount'] as int? ?? 1,
            rssi: event['rssi'] as int? ?? 0,
-@@ -327,7 +359,10 @@
+@@ -327,7 +366,10 @@
          );
          _emitRooms();
        },
@@ -1426,7 +1870,18 @@
          _buf.clear();
          return;
        }
-@@ -107,16 +104,20 @@
+@@ -67,6 +64,10 @@
+ /// 语音单独走 UDP 是因为 TCP 的队头阻塞会让丢包变成持续卡顿；控制帧量小、
+ /// 必须可靠，所以留在 TCP 上。
+ class LanTransport implements RoomTransport {
++  /// Encrypted app rooms use reliable TCP for all frames. No unauthenticated
++  /// UDP endpoint registration; sealed audio cannot be classified before opening.
++  final bool controlOnly;
++  LanTransport({this.controlOnly = false});
+   static const int controlPort = 8988;
+   static const int audioPort = 8989;
+ 
+@@ -107,16 +108,20 @@
    bool get isHost => _role == TransportRole.host;
  
    @override
@@ -1451,7 +1906,14 @@
        _sendUdpToHost(
          Frame(
            type: FrameType.heartbeat,
-@@ -142,9 +143,9 @@
+@@ -136,15 +141,15 @@
+   }
+ 
+   @override
+-  bool get supportsHostTransfer => true;
++  bool get supportsHostTransfer => !controlOnly;
+ 
+   /// 已知成员的 IP。来自各自 UDP 语音包的源地址——能发语音就说明这条路通，
    /// 正好是交接后重连要用的端点。
    @override
    Map<int, String> get peerEndpoints => {
@@ -1464,7 +1926,35 @@
  
    @override
    Future<bool> becomeHost() async {
-@@ -221,6 +222,14 @@
+@@ -194,12 +199,17 @@
+       onError: (Object e) => AppLog.error(_tag, '监听连接时出错', e),
+     );
+ 
+-    if (!await _bindUdp(audioPort)) {
++    if (!controlOnly && !await _bindUdp(audioPort)) {
+       await stop();
+       return false;
+     }
+ 
+-    AppLog.info(_tag, '房间已开启：控制 TCP $controlPort，语音 UDP $audioPort');
++    AppLog.info(
++      _tag,
++      controlOnly
++          ? '加密房间已开启：TCP $controlPort'
++          : '房间已开启：控制 TCP $controlPort，语音 UDP $audioPort',
++    );
+     return true;
+   }
+ 
+@@ -213,6 +223,7 @@
+       return;
+     }
+ 
++    socket.setOption(SocketOption.tcpNoDelay, true);
+     final accumulator = _FrameAccumulator();
+     _clientLabels[socket] = label;
+     AppLog.info(_tag, '成员接入：$label');
+@@ -221,6 +232,14 @@
      socket.listen(
        (chunk) {
          for (final frame in accumulator.add(chunk)) {
@@ -1479,7 +1969,7 @@
            _relayControl(frame, exclude: socket);
            _deliver(frame);
          }
-@@ -272,7 +281,10 @@
+@@ -272,12 +291,16 @@
        return false;
      } on TimeoutException {
        if (!silent) {
@@ -1491,7 +1981,28 @@
        }
        _role = TransportRole.idle;
        return false;
-@@ -349,9 +361,15 @@
+     }
+ 
++    _hostSocket!.setOption(SocketOption.tcpNoDelay, true);
+     final accumulator = _FrameAccumulator();
+     _hostSocket!.listen(
+       (chunk) {
+@@ -291,12 +314,12 @@
+     );
+ 
+     // 语音用临时端口，房主从数据包的源地址学习端点。
+-    if (!await _bindUdp(0)) {
++    if (!controlOnly && !await _bindUdp(0)) {
+       await stop();
+       return false;
+     }
+ 
+-    _startUdpKeepalive();
++    if (!controlOnly) _startUdpKeepalive();
+     _notifyPeerCount();
+     AppLog.info(_tag, '已连接房主 ${hostAddress.address}:$port');
+     return true;
+@@ -349,9 +372,15 @@
        return;
      }
  
@@ -1508,7 +2019,7 @@
          AppLog.warn(_tag, '丢弃非房主来源的伪造语音包: ${datagram.address.address}');
          return;
        }
-@@ -374,8 +392,10 @@
+@@ -374,8 +403,10 @@
          return;
        }
  
@@ -1566,7 +2077,7 @@
 -  static const String currentVersion = '0.1.0-alpha.10';
 -  static const String latestReleaseUrl =
 -      'https://api.github.com/repos/Starlordzz/sunsetripple/releases/latest';
-+  static const String currentVersion = '0.1.0-dev.1';
++  static const String currentVersion = '0.1.0-dev.2';
  
    Future<UpdateState> checkUpdate() async {
 -    final client = HttpClient();
@@ -1609,7 +2120,18 @@
    /// 真正的语义版本比较：只有 remote 严格大于 current 时才返回 true
 --- a/lib/ui/pages/home_page.dart
 +++ b/lib/ui/pages/home_page.dart
-@@ -44,6 +44,10 @@
+@@ -1,7 +1,10 @@
+ import 'dart:async';
++import 'dart:convert';
+ import 'dart:io';
+ import 'package:flutter/material.dart';
+ import '../../core/audio/audio_io.dart';
++import '../../core/security/room_invite.dart';
++import '../widgets/room_invite_dialog.dart';
+ import '../../core/session/device_code.dart';
+ import '../../core/session/room_session.dart';
+ import '../../core/transport/ble_l2cap_transport.dart';
+@@ -44,6 +47,10 @@
    final _nicknameController = TextEditingController();
    String? _defaultNickname;
    final _lanDiscovery = LanRoomDiscovery();
@@ -1620,7 +2142,7 @@
    RoomMode _selectedMode = RoomMode.wifiFullDuplex;
    bool _isScanning = false;
    List<WifiP2pPeer> _p2pPeers = [];
-@@ -87,16 +91,128 @@
+@@ -87,16 +94,146 @@
      }
    }
  
@@ -1725,6 +2247,12 @@
 +  Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
++    final invite = await requestRoomInvite(context);
++    if (!mounted) return;
++    if (invite == null) {
++      setState(() => _busy = false);
++      return;
++    }
 +    await _stopBleScanning();
 +    if (!mounted) return;
 +    final transport = BleL2capTransport();
@@ -1743,10 +2271,22 @@
 +      selfNickname: _identityNickname,
 +      mode: RoomMode.bluetoothPtt,
 +    );
++    await session.protectWithInvite(invite);
 +    session.transport = transport;
 +    session.onSendFrame = transport.send;
 +    transport.incoming.listen(session.handleIncomingFrame);
++    final joined = session.stateStream
++        .firstWhere((state) => state == RoomState.inRoom)
++        .timeout(const Duration(seconds: 8));
 +    await session.joinRoom(startAudio: false);
++    try {
++      await joined;
++    } on TimeoutException {
++      await session.dispose();
++      if (mounted) setState(() => _busy = false);
++      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
++      return;
++    }
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -1756,7 +2296,7 @@
    }
  
    void _startPeriodicScan() {
-@@ -120,6 +236,8 @@
+@@ -120,6 +257,8 @@
      _periodicScanTimer?.cancel();
      _p2pSubscription?.cancel();
      _nicknameController.dispose();
@@ -1765,7 +2305,7 @@
      _lanDiscovery.dispose();
      super.dispose();
    }
-@@ -142,7 +260,8 @@
+@@ -142,7 +281,8 @@
          onTap: () => FocusScope.of(context).unfocus(),
          child: CustomScrollView(
            physics: const AlwaysScrollableScrollPhysics(
@@ -1775,7 +2315,7 @@
            slivers: [
              SliverToBoxAdapter(
                child: Column(
-@@ -162,29 +281,38 @@
+@@ -162,29 +302,38 @@
                            color: cardBg,
                            borderRadius: BorderRadius.circular(18),
                            border: Border.all(
@@ -1824,7 +2364,7 @@
                                  ),
                                ),
                              ),
-@@ -194,7 +322,9 @@
+@@ -194,7 +343,9 @@
                                    '${s.deviceCodeTooltip} (#${DeviceCode.current})',
                                child: Container(
                                  padding: const EdgeInsets.symmetric(
@@ -1835,7 +2375,7 @@
                                  decoration: BoxDecoration(
                                    color: (isNight
                                            ? AppTheme.nightSkyBlue
-@@ -209,9 +339,10 @@
+@@ -209,9 +360,10 @@
                                      fontFamily: 'monospace',
                                      fontWeight: FontWeight.w700,
                                      letterSpacing: 0.8,
@@ -1849,7 +2389,7 @@
                                    ),
                                  ),
                                ),
-@@ -244,8 +375,8 @@
+@@ -244,8 +396,8 @@
                                  isSelected:
                                      _selectedMode == RoomMode.wifiFullDuplex,
                                  isNight: isNight,
@@ -1860,7 +2400,7 @@
                                ),
                              ),
                              const SizedBox(width: 12),
-@@ -257,8 +388,7 @@
+@@ -257,8 +409,7 @@
                                  isSelected:
                                      _selectedMode == RoomMode.bluetoothPtt,
                                  isNight: isNight,
@@ -1870,18 +2410,18 @@
                                ),
                              ),
                            ],
-@@ -267,6 +397,10 @@
+@@ -267,6 +418,10 @@
                      ),
                    ),
  
 +                  const Padding(
 +                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-+                    child: Text('当前房间未启用端到端加密，仅限可信设备测试；附近设备可以申请加入。'),
++                    child: Text('语音和聊天默认加密。加入需要房主的邀请码，请仅分享给信任的人。'),
 +                  ),
                    const SizedBox(height: 18),
  
                    // 3. 建房 + 扫描
-@@ -280,14 +414,17 @@
+@@ -280,14 +435,17 @@
                            Expanded(
                              flex: 6,
                              child: ElevatedButton(
@@ -1904,7 +2444,7 @@
                                  shape: RoundedRectangleBorder(
                                    borderRadius: BorderRadius.circular(28),
                                  ),
-@@ -300,8 +437,9 @@
+@@ -300,8 +458,9 @@
                                        ? s.createWifiRoom
                                        : s.createBleRoom,
                                    style: const TextStyle(
@@ -1916,7 +2456,7 @@
                                  ),
                                ),
                              ),
-@@ -310,16 +448,20 @@
+@@ -310,16 +469,20 @@
                            Expanded(
                              flex: 5,
                              child: OutlinedButton(
@@ -1942,7 +2482,7 @@
                                  shape: RoundedRectangleBorder(
                                    borderRadius: BorderRadius.circular(28),
                                  ),
-@@ -335,18 +477,20 @@
+@@ -335,18 +498,20 @@
                                          height: 18,
                                          child: CircularProgressIndicator(
                                            strokeWidth: 2.2,
@@ -1969,7 +2509,7 @@
                                        ),
                                      const SizedBox(width: 6),
                                      Text(
-@@ -354,9 +498,10 @@
+@@ -354,9 +519,10 @@
                                        style: TextStyle(
                                          fontSize: 16,
                                          fontWeight: FontWeight.bold,
@@ -1983,7 +2523,7 @@
                                        ),
                                      ),
                                    ],
-@@ -397,9 +542,10 @@
+@@ -397,9 +563,10 @@
                              Text(
                                s.detectingRooms,
                                style: TextStyle(
@@ -1997,7 +2537,7 @@
                                  fontSize: 14,
                                ),
                              ),
-@@ -419,178 +565,213 @@
+@@ -419,178 +586,213 @@
                child: StageExitItem(
                  stage: stage,
                  index: 4,
@@ -2382,7 +2922,23 @@
                ),
              ),
  
-@@ -633,12 +814,17 @@
+@@ -625,7 +827,14 @@
+   String get _nickname {
+     final s = AppStrings.of(context);
+     final text = _nicknameController.text.trim();
+-    return text.isEmpty ? s.defaultNickname : text;
++    if (text.isEmpty) return s.defaultNickname;
++    var nickname = '';
++    for (final rune in text.runes) {
++      final candidate = nickname + String.fromCharCode(rune);
++      if (utf8.encode(candidate).length > 48) break;
++      nickname = candidate;
++    }
++    return nickname;
+   }
+ 
+   /// 走 roster 的身份名，带十六进制短码，房间里好区分同名的人。
+@@ -633,12 +842,17 @@
    String get _identityNickname => DeviceCode.attach(_nickname);
  
    void _onCreateRoom() async {
@@ -2403,11 +2959,23 @@
  
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -651,13 +837,26 @@
+@@ -646,18 +860,37 @@
+       mode: _selectedMode,
+     );
+ 
++    await session.protectWithInvite(RoomInvite.generate());
++    if (!mounted) {
++      await session.dispose();
++      return;
++    }
++
+     if (_selectedMode == RoomMode.wifiFullDuplex) {
+       _isHostingWifiDirect = true;
        unawaited(WifiDirectManager.instance.createGroup());
        _startPeriodicScan();
-       final transport = LanTransport();
+-      final transport = LanTransport();
 -      await transport.startHost();
++      final transport = LanTransport(controlOnly: true);
 +      if (!await transport.startHost()) {
 +        await transport.dispose();
 +        _stopPeriodicScan();
@@ -2432,7 +3000,7 @@
        session.transport = transport;
        session.onSendFrame = transport.send;
        transport.incoming.listen(session.handleIncomingFrame);
-@@ -677,10 +876,17 @@
+@@ -677,10 +910,23 @@
        );
      }
  
@@ -2448,14 +3016,22 @@
    void _onJoinRoom(DiscoveredRoom room) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
++    final invite = await requestRoomInvite(context);
++    if (!mounted) return;
++    if (invite == null) {
++      setState(() => _busy = false);
++      return;
++    }
      FocusScope.of(context).unfocus();
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -689,10 +895,15 @@
+@@ -688,38 +934,71 @@
+       mode: RoomMode.wifiFullDuplex,
      );
  
-     final transport = LanTransport();
+-    final transport = LanTransport();
 -    await transport.startClient(
++    final transport = LanTransport(controlOnly: true);
 +    if (!await transport.startClient(
        hostAddress: room.hostAddress,
        port: room.port,
@@ -2466,14 +3042,27 @@
 +      _showConnectionError('连接 Wi-Fi 房失败，请重新扫描后重试。');
 +      return;
 +    }
++    await session.protectWithInvite(invite);
      session.transport = transport;
      session.onSendFrame = transport.send;
      transport.incoming.listen(session.handleIncomingFrame);
-@@ -700,26 +911,36 @@
-     // 同 _onCreateRoom：开麦推迟到转场跑完。
-     await session.joinRoom(startAudio: false);
  
+     // 同 _onCreateRoom：开麦推迟到转场跑完。
++    final joined = session.stateStream
++        .firstWhere((state) => state == RoomState.inRoom)
++        .timeout(const Duration(seconds: 8));
+     await session.joinRoom(startAudio: false);
+-
 -    if (mounted) widget.onEnterRoom(session, room.roomName);
++    try {
++      await joined;
++    } on TimeoutException {
++      await session.dispose();
++      if (mounted) setState(() => _busy = false);
++      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
++      return;
++    }
++
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -2485,6 +3074,12 @@
    void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
++    final invite = await requestRoomInvite(context);
++    if (!mounted) return;
++    if (invite == null) {
++      setState(() => _busy = false);
++      return;
++    }
      FocusScope.of(context).unfocus();
      final s = AppStrings.of(context);
      ScaffoldMessenger.of(context).showSnackBar(
@@ -2510,7 +3105,7 @@
          ScaffoldMessenger.of(context).showSnackBar(
            SnackBar(
              content: Text(s.directConnectPermissionFailed),
-@@ -730,6 +951,7 @@
+@@ -730,6 +1009,7 @@
        return;
      }
  
@@ -2518,26 +3113,41 @@
      final hostIp = InternetAddress(connectionInfo.groupOwnerAddress);
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -738,17 +960,24 @@
+@@ -737,18 +1017,37 @@
+       mode: RoomMode.wifiFullDuplex,
      );
  
-     final transport = LanTransport();
+-    final transport = LanTransport();
 -    await transport.startClient(
 -      hostAddress: hostIp,
 -      port: 8988,
 -    );
++    final transport = LanTransport(controlOnly: true);
 +    if (!await transport.startClient(hostAddress: hostIp, port: 8988)) {
 +      await transport.dispose();
 +      if (mounted) setState(() => _busy = false);
 +      _showConnectionError('已连接 Wi-Fi Direct，但房间服务不可用。');
 +      return;
 +    }
++    await session.protectWithInvite(invite);
      session.transport = transport;
      session.onSendFrame = transport.send;
      transport.incoming.listen(session.handleIncomingFrame);
  
++    final joined = session.stateStream
++        .firstWhere((state) => state == RoomState.inRoom)
++        .timeout(const Duration(seconds: 8));
      await session.joinRoom(startAudio: false);
- 
+-
++    try {
++      await joined;
++    } on TimeoutException {
++      await session.dispose();
++      if (mounted) setState(() => _busy = false);
++      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
++      return;
++    }
++
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -2547,7 +3157,7 @@
        final displayName =
            peer.name.isNotEmpty ? s.defaultWifiRoomTitle(peer.name) : s.wifiRoom;
        widget.onEnterRoom(session, displayName);
-@@ -792,9 +1021,12 @@
+@@ -792,9 +1091,12 @@
            color: isSelected ? activeColor.withValues(alpha: 0.12) : cardBg,
            borderRadius: BorderRadius.circular(18),
            border: Border.all(
@@ -2563,7 +3173,7 @@
              width: isSelected ? 2.0 : 1.0,
            ),
          ),
-@@ -803,8 +1035,11 @@
+@@ -803,8 +1105,11 @@
            children: [
              Row(
                children: [
@@ -2577,7 +3187,7 @@
                  const SizedBox(width: 7),
                  Flexible(
                    child: Text(
-@@ -822,10 +1057,7 @@
+@@ -822,10 +1127,7 @@
              const SizedBox(height: 6),
              Text(
                subtitle,
@@ -2591,7 +3201,15 @@
          ),
 --- a/lib/ui/pages/session_stage.dart
 +++ b/lib/ui/pages/session_stage.dart
-@@ -65,6 +65,7 @@
+@@ -12,6 +12,7 @@
+ import 'about_page.dart';
+ import '../theme/app_theme.dart';
+ import '../widgets/room_chat_sheet.dart';
++import '../widgets/room_invite_dialog.dart';
+ import '../../l10n/app_strings.dart';
+ 
+ /// 首页与房间共用的一张"舞台"。
+@@ -65,6 +66,7 @@
    late final AudioIo _audioIo;
  
    RoomSession? _session;
@@ -2599,7 +3217,7 @@
    String _roomName = "";
  
    @override
-@@ -81,6 +82,7 @@
+@@ -81,6 +83,7 @@
  
    @override
    void dispose() {
@@ -2607,7 +3225,7 @@
      _stage.dispose();
      super.dispose();
    }
-@@ -97,22 +99,27 @@
+@@ -97,22 +100,27 @@
      // 的构造和前台服务启动都压在 Android 主线程上，一次上百毫秒，
      // 塞进转场里必然掉帧。等动画落位再开。
      _stage.forward(from: 0.0).whenComplete(() {
@@ -2640,7 +3258,7 @@
          _session = null;
          _roomName = "";
        });
-@@ -125,10 +132,11 @@
+@@ -125,10 +133,11 @@
      showModalBottomSheet(
        context: context,
        backgroundColor: Colors.transparent,
@@ -2656,7 +3274,7 @@
      );
    }
  
-@@ -139,10 +147,7 @@
+@@ -139,10 +148,7 @@
        isScrollControlled: true,
        useSafeArea: true,
        backgroundColor: Colors.transparent,
@@ -2668,7 +3286,7 @@
      ).then((_) {
        session.markChatRead();
      });
-@@ -178,19 +183,20 @@
+@@ -178,19 +184,20 @@
                    audioIo: _audioIo,
                    onEnterRoom: _onEnterRoom,
                  ),
@@ -2701,7 +3319,7 @@
                ),
              ),
  
-@@ -209,10 +215,11 @@
+@@ -209,10 +216,11 @@
                      stage: _stage,
                      onLeave: _onLeaveRoom,
                    ),
@@ -2717,7 +3335,7 @@
                  ),
                ),
  
-@@ -224,8 +231,9 @@
+@@ -224,8 +232,9 @@
                right: 0,
                child: AnimatedBuilder(
                  animation: _stage,
@@ -2729,7 +3347,7 @@
                ),
              ),
            ],
-@@ -235,7 +243,10 @@
+@@ -235,7 +244,10 @@
    }
  
    Widget _buildHeaderLayer(
@@ -2741,7 +3359,7 @@
      final stage = _stage.value;
      // 背景形变走自己那一段区间，不跟着前景的进出走。
      final bg = StageChoreography.background.transform(stage);
-@@ -249,7 +260,12 @@
+@@ -249,7 +261,12 @@
            Positioned.fill(
              child: RepaintBoundary(
                child: _buildBackground(
@@ -2755,7 +3373,7 @@
              ),
            ),
            ..._buildHomeHeaderOverlay(stage),
-@@ -274,14 +290,13 @@
+@@ -274,14 +291,13 @@
      );
  
      Widget canvasFor(double waveIntensity) => CelestialCanvas(
@@ -2777,7 +3395,7 @@
  
      if (session == null) return canvasFor(0.0);
  
-@@ -297,18 +312,21 @@
+@@ -297,18 +313,21 @@
    List<Widget> _buildHomeHeaderOverlay(double stage) {
      final s = AppStrings.of(context);
      // 标题随首页元素顺畅淡出抽走
@@ -2808,7 +3426,7 @@
  
      return [
        Positioned(
-@@ -340,7 +358,9 @@
+@@ -340,7 +359,9 @@
                  iconSize: 28,
                  padding: const EdgeInsets.all(10),
                  icon: Icon(
@@ -2819,7 +3437,7 @@
                    color: Colors.white,
                  ),
                  onPressed: widget.onToggleTheme,
-@@ -387,17 +407,20 @@
+@@ -387,17 +408,20 @@
  
    List<Widget> _buildRoomHeaderOverlay(RoomSession session, double stage) {
      final s = AppStrings.of(context);
@@ -2848,7 +3466,20 @@
  
      return [
        Positioned(
-@@ -443,9 +466,10 @@
+@@ -421,6 +445,12 @@
+           Row(
+             mainAxisSize: MainAxisSize.min,
+             children: [
++              if (session.roomInvite != null)
++                IconButton(
++                  tooltip: '房间邀请码',
++                  icon: const Icon(Icons.key, color: Colors.white),
++                  onPressed: () => showRoomInvite(context, session.roomInvite!),
++                ),
+               StreamBuilder<int>(
+                 stream: session.unreadChatStream,
+                 initialData: session.unreadChatCount,
+@@ -443,9 +473,10 @@
                              fontWeight: FontWeight.bold,
                            ),
                          ),
@@ -2862,7 +3493,7 @@
                          child: const Icon(
                            Icons.chat_bubble_outline_rounded,
                            color: Colors.white,
-@@ -490,7 +514,9 @@
+@@ -490,7 +521,9 @@
                ),
                const SizedBox(height: 6),
                Text(
@@ -2873,6 +3504,691 @@
                  maxLines: 1,
                  overflow: TextOverflow.ellipsis,
                  style: TextStyle(
+--- a/lib/ui/widgets/room_chat_sheet.dart
++++ b/lib/ui/widgets/room_chat_sheet.dart
+@@ -86,10 +86,10 @@
+ 
+     final s = AppStrings.of(context);
+     final byteCount = utf8.encode(text).length;
+-    if (byteCount > 480) {
++    if (byteCount > widget.session.maxChatTextBytes) {
+       ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+-          content: Text(s.chatMessageTooLong),
++          content: Text('消息最多 ${widget.session.maxChatTextBytes} UTF-8 字节。'),
+           duration: const Duration(seconds: 2),
+         ),
+       );
+@@ -120,23 +120,24 @@
+     final s = AppStrings.of(context);
+     final confirmed = await showDialog<bool>(
+       context: context,
+-      builder: (ctx) => AlertDialog(
+-        title: Text(s.chatRecall),
+-        content: Text(s.chatRecallConfirm),
+-        actions: [
+-          TextButton(
+-            onPressed: () => Navigator.pop(ctx, false),
+-            child: Text(s.cancel),
++      builder:
++          (ctx) => AlertDialog(
++            title: Text(s.chatRecall),
++            content: Text(s.chatRecallConfirm),
++            actions: [
++              TextButton(
++                onPressed: () => Navigator.pop(ctx, false),
++                child: Text(s.cancel),
++              ),
++              FilledButton(
++                style: FilledButton.styleFrom(
++                  backgroundColor: AppTheme.darkLeaveRosePink,
++                ),
++                onPressed: () => Navigator.pop(ctx, true),
++                child: Text(s.chatRecall),
++              ),
++            ],
+           ),
+-          FilledButton(
+-            style: FilledButton.styleFrom(
+-              backgroundColor: AppTheme.darkLeaveRosePink,
+-            ),
+-            onPressed: () => Navigator.pop(ctx, true),
+-            child: Text(s.chatRecall),
+-          ),
+-        ],
+-      ),
+     );
+ 
+     if (confirmed == true && mounted) {
+@@ -152,9 +153,9 @@
+         }
+       } catch (e) {
+         if (mounted) {
+-          ScaffoldMessenger.of(context).showSnackBar(
+-            SnackBar(content: Text(s.chatRecallFailed)),
+-          );
++          ScaffoldMessenger.of(
++            context,
++          ).showSnackBar(SnackBar(content: Text(s.chatRecallFailed)));
+         }
+       }
+     }
+@@ -207,9 +208,10 @@
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+               decoration: BoxDecoration(
+-                color:
+-                    (isNight ? AppTheme.moonSilverWhite : AppTheme.sunsetCoral)
+-                        .withValues(alpha: 0.18),
++                color: (isNight
++                        ? AppTheme.moonSilverWhite
++                        : AppTheme.sunsetCoral)
++                    .withValues(alpha: 0.18),
+                 borderRadius: BorderRadius.circular(4),
+               ),
+               child: Row(
+@@ -218,9 +220,10 @@
+                   Icon(
+                     Icons.star,
+                     size: 10,
+-                    color: isNight
+-                        ? AppTheme.moonSilverWhite
+-                        : AppTheme.sunsetCoral,
++                    color:
++                        isNight
++                            ? AppTheme.moonSilverWhite
++                            : AppTheme.sunsetCoral,
+                   ),
+                   const SizedBox(width: 2),
+                   Text(
+@@ -228,9 +231,10 @@
+                     style: TextStyle(
+                       fontSize: 10,
+                       fontWeight: FontWeight.bold,
+-                      color: isNight
+-                          ? AppTheme.moonSilverWhite
+-                          : AppTheme.sunsetCoral,
++                      color:
++                          isNight
++                              ? AppTheme.moonSilverWhite
++                              : AppTheme.sunsetCoral,
+                     ),
+                   ),
+                 ],
+@@ -340,13 +344,17 @@
+ 
+     // 未唤起键盘时高度占屏幕约 74%（平板 65%），底部紧贴屏幕边缘彻底盖住底层控制栏；
+     // 唤起键盘时，高度自适应键盘上方空间，直接由 viewInsets 驱动，彻底杜绝回落时的时延 Overflow。
+-    final double maxAvailableHeight =
+-        (screenHeight - topPadding - keyboardHeight - 16).clamp(240.0, screenHeight);
+-    final double defaultHeight =
+-        (screenHeight * (isTablet ? 0.65 : 0.74)).clamp(280.0, screenHeight);
+-    final double targetHeight = keyboardHeight > 0
+-        ? maxAvailableHeight
+-        : defaultHeight.clamp(280.0, screenHeight - topPadding - 16);
++    final double maxAvailableHeight = (screenHeight -
++            topPadding -
++            keyboardHeight -
++            16)
++        .clamp(240.0, screenHeight);
++    final double defaultHeight = (screenHeight * (isTablet ? 0.65 : 0.74))
++        .clamp(280.0, screenHeight);
++    final double targetHeight =
++        keyboardHeight > 0
++            ? maxAvailableHeight
++            : defaultHeight.clamp(280.0, screenHeight - topPadding - 16);
+ 
+     return Material(
+       color: Colors.transparent,
+@@ -363,8 +371,9 @@
+               height: targetHeight,
+               decoration: BoxDecoration(
+                 color: bg,
+-                borderRadius:
+-                    const BorderRadius.vertical(top: Radius.circular(24)),
++                borderRadius: const BorderRadius.vertical(
++                  top: Radius.circular(24),
++                ),
+                 boxShadow: [
+                   BoxShadow(
+                     color: Colors.black.withValues(alpha: 0.2),
+@@ -390,7 +399,9 @@
+                     ),
+                     Padding(
+                       padding: const EdgeInsets.symmetric(
+-                          horizontal: 16, vertical: 8),
++                        horizontal: 16,
++                        vertical: 8,
++                      ),
+                       child: Row(
+                         children: [
+                           Icon(
+@@ -409,8 +420,11 @@
+                           ),
+                           const Spacer(),
+                           IconButton(
+-                            icon: Icon(Icons.close_rounded,
+-                                color: textSecondary, size: 22),
++                            icon: Icon(
++                              Icons.close_rounded,
++                              color: textSecondary,
++                              size: 22,
++                            ),
+                             tooltip: s.chatCloseSheet,
+                             onPressed: () => Navigator.pop(context),
+                           ),
+@@ -421,173 +435,201 @@
+ 
+                     // 2. 消息气泡列表
+                     Expanded(
+-                      child: messages.isEmpty
+-                          ? Center(
+-                              child: Padding(
+-                                padding: const EdgeInsets.all(24),
+-                                child: Text(
+-                                  s.chatEmptyHint,
+-                                  textAlign: TextAlign.center,
+-                                  style: TextStyle(
+-                                    fontSize: 14,
+-                                    color:
+-                                        textSecondary.withValues(alpha: 0.75),
+-                                    height: 1.5,
++                      child:
++                          messages.isEmpty
++                              ? Center(
++                                child: Padding(
++                                  padding: const EdgeInsets.all(24),
++                                  child: Text(
++                                    s.chatEmptyHint,
++                                    textAlign: TextAlign.center,
++                                    style: TextStyle(
++                                      fontSize: 14,
++                                      color: textSecondary.withValues(
++                                        alpha: 0.75,
++                                      ),
++                                      height: 1.5,
++                                    ),
+                                   ),
+                                 ),
+-                              ),
+-                            )
+-                          : ListView.builder(
+-                              controller: _scrollController,
+-                              padding: const EdgeInsets.symmetric(
+-                                  horizontal: 12, vertical: 10),
+-                              itemCount: messages.length,
+-                              itemBuilder: (context, index) {
+-                                final msg = messages[index];
+-                                final isLocal = msg.isLocal;
+-                                final isFormer = !isLocal &&
+-                                    !activeMemberIds.contains(msg.senderId);
+-
+-                                final (baseName, _) =
+-                                    DeviceCode.split(msg.senderNickname);
+-                                final hasConflict =
+-                                    (baseNameToCodes[baseName]?.length ?? 0) >
+-                                        1;
+-
+-                                return Padding(
+-                                  padding:
+-                                      const EdgeInsets.symmetric(vertical: 6),
+-                                  child: Row(
+-                                    mainAxisAlignment: isLocal
+-                                        ? MainAxisAlignment.end
+-                                        : MainAxisAlignment.start,
+-                                    crossAxisAlignment:
+-                                        CrossAxisAlignment.start,
+-                                    children: [
+-                                      // 远端消息头像框
+-                                      if (!isLocal) ...[
+-                                        AvatarFrame(
+-                                          senderCode: msg.senderCode,
+-                                          nickname: msg.senderNickname,
+-                                          isHost: msg.isHost,
+-                                          size: 34,
+-                                          isNight: isNight,
+-                                        ),
+-                                        const SizedBox(width: 8),
+-                                      ],
+-
+-                                      // 气泡与名字栏
+-                                      Flexible(
+-                                        child: Column(
+-                                          crossAxisAlignment: isLocal
+-                                              ? CrossAxisAlignment.end
+-                                              : CrossAxisAlignment.start,
+-                                          children: [
+-                                            // 署名与身份标签（Wrap 结构自适应折行）
+-                                            _buildBubbleHeader(
+-                                              context: context,
+-                                              msg: msg,
+-                                              isLocal: isLocal,
+-                                              isFormer: isFormer,
+-                                              hasConflict: hasConflict,
+-                                              s: s,
+-                                              textSecondary: textSecondary,
+-                                              accentColor: accentColor,
+-                                              isNight: isNight,
+-                                            ),
+-
+-                                            // 气泡本体（长按支持撤回）
+-                                            GestureDetector(
+-                                              onLongPress: isLocal
+-                                                  ? () => _handleRecall(msg)
+-                                                  : null,
+-                                              child: Container(
+-                                                constraints: BoxConstraints(
+-                                                  maxWidth: isTablet
+-                                                      ? 440
+-                                                      : (screenWidth * 0.70)
+-                                                          .clamp(200.0, 420.0),
+-                                                ),
+-                                                padding:
+-                                                    const EdgeInsets.symmetric(
+-                                                  horizontal: 13,
+-                                                  vertical: 9,
+-                                                ),
+-                                                decoration: BoxDecoration(
+-                                                  color: isLocal
+-                                                      ? (isNight
+-                                                          ? AppTheme
+-                                                              .nightSkyBlue
+-                                                          : AppTheme
+-                                                              .sunsetCoral)
+-                                                      : (isNight
+-                                                          ? const Color(
+-                                                              0xFF1E2D44)
+-                                                          : const Color(
+-                                                              0xFFEFE7DE)),
+-                                                  borderRadius:
+-                                                      BorderRadius.only(
+-                                                    topLeft:
+-                                                        const Radius.circular(
+-                                                            16),
+-                                                    topRight:
+-                                                        const Radius.circular(
+-                                                            16),
+-                                                    bottomLeft: Radius.circular(
+-                                                        isLocal ? 16 : 4),
+-                                                    bottomRight:
+-                                                        Radius.circular(
+-                                                            isLocal ? 4 : 16),
++                              )
++                              : ListView.builder(
++                                controller: _scrollController,
++                                padding: const EdgeInsets.symmetric(
++                                  horizontal: 12,
++                                  vertical: 10,
++                                ),
++                                itemCount: messages.length,
++                                itemBuilder: (context, index) {
++                                  final msg = messages[index];
++                                  final isLocal = msg.isLocal;
++                                  final isFormer =
++                                      !isLocal &&
++                                      !activeMemberIds.contains(msg.senderId);
++
++                                  final (baseName, _) = DeviceCode.split(
++                                    msg.senderNickname,
++                                  );
++                                  final hasConflict =
++                                      (baseNameToCodes[baseName]?.length ?? 0) >
++                                      1;
++
++                                  return Padding(
++                                    padding: const EdgeInsets.symmetric(
++                                      vertical: 6,
++                                    ),
++                                    child: Row(
++                                      mainAxisAlignment:
++                                          isLocal
++                                              ? MainAxisAlignment.end
++                                              : MainAxisAlignment.start,
++                                      crossAxisAlignment:
++                                          CrossAxisAlignment.start,
++                                      children: [
++                                        // 远端消息头像框
++                                        if (!isLocal) ...[
++                                          AvatarFrame(
++                                            senderCode: msg.senderCode,
++                                            nickname: msg.senderNickname,
++                                            isHost: msg.isHost,
++                                            size: 34,
++                                            isNight: isNight,
++                                          ),
++                                          const SizedBox(width: 8),
++                                        ],
++
++                                        // 气泡与名字栏
++                                        Flexible(
++                                          child: Column(
++                                            crossAxisAlignment:
++                                                isLocal
++                                                    ? CrossAxisAlignment.end
++                                                    : CrossAxisAlignment.start,
++                                            children: [
++                                              // 署名与身份标签（Wrap 结构自适应折行）
++                                              _buildBubbleHeader(
++                                                context: context,
++                                                msg: msg,
++                                                isLocal: isLocal,
++                                                isFormer: isFormer,
++                                                hasConflict: hasConflict,
++                                                s: s,
++                                                textSecondary: textSecondary,
++                                                accentColor: accentColor,
++                                                isNight: isNight,
++                                              ),
++
++                                              // 气泡本体（长按支持撤回）
++                                              GestureDetector(
++                                                onLongPress:
++                                                    isLocal
++                                                        ? () =>
++                                                            _handleRecall(msg)
++                                                        : null,
++                                                child: Container(
++                                                  constraints: BoxConstraints(
++                                                    maxWidth:
++                                                        isTablet
++                                                            ? 440
++                                                            : (screenWidth *
++                                                                    0.70)
++                                                                .clamp(
++                                                                  200.0,
++                                                                  420.0,
++                                                                ),
+                                                   ),
+-                                                  border: isLocal
+-                                                      ? null
+-                                                      : Border.all(
+-                                                          color: textSecondary
+-                                                              .withValues(
+-                                                                  alpha: 0.15),
+-                                                          width: 0.6,
+-                                                        ),
+-                                                ),
+-                                                child: Text(
+-                                                  msg.text,
+-                                                  softWrap: true,
+-                                                  style: TextStyle(
+-                                                    fontSize: 14.5,
+-                                                    color: isLocal
+-                                                        ? Colors.white
+-                                                        : textPrimary,
+-                                                    height: 1.35,
++                                                  padding:
++                                                      const EdgeInsets.symmetric(
++                                                        horizontal: 13,
++                                                        vertical: 9,
++                                                      ),
++                                                  decoration: BoxDecoration(
++                                                    color:
++                                                        isLocal
++                                                            ? (isNight
++                                                                ? AppTheme
++                                                                    .nightSkyBlue
++                                                                : AppTheme
++                                                                    .sunsetCoral)
++                                                            : (isNight
++                                                                ? const Color(
++                                                                  0xFF1E2D44,
++                                                                )
++                                                                : const Color(
++                                                                  0xFFEFE7DE,
++                                                                )),
++                                                    borderRadius: BorderRadius.only(
++                                                      topLeft:
++                                                          const Radius.circular(
++                                                            16,
++                                                          ),
++                                                      topRight:
++                                                          const Radius.circular(
++                                                            16,
++                                                          ),
++                                                      bottomLeft:
++                                                          Radius.circular(
++                                                            isLocal ? 16 : 4,
++                                                          ),
++                                                      bottomRight:
++                                                          Radius.circular(
++                                                            isLocal ? 4 : 16,
++                                                          ),
++                                                    ),
++                                                    border:
++                                                        isLocal
++                                                            ? null
++                                                            : Border.all(
++                                                              color: textSecondary
++                                                                  .withValues(
++                                                                    alpha: 0.15,
++                                                                  ),
++                                                              width: 0.6,
++                                                            ),
++                                                  ),
++                                                  child: Text(
++                                                    msg.text,
++                                                    softWrap: true,
++                                                    style: TextStyle(
++                                                      fontSize: 14.5,
++                                                      color:
++                                                          isLocal
++                                                              ? Colors.white
++                                                              : textPrimary,
++                                                      height: 1.35,
++                                                    ),
+                                                   ),
+                                                 ),
+                                               ),
+-                                            ),
+-                                          ],
++                                            ],
++                                          ),
+                                         ),
+-                                      ),
+-
+-                                      // 本机消息头像框
+-                                      if (isLocal) ...[
+-                                        const SizedBox(width: 8),
+-                                        AvatarFrame(
+-                                          senderCode: msg.senderCode,
+-                                          nickname: msg.senderNickname,
+-                                          isHost: msg.isHost,
+-                                          size: 34,
+-                                          isNight: isNight,
+-                                        ),
++
++                                        // 本机消息头像框
++                                        if (isLocal) ...[
++                                          const SizedBox(width: 8),
++                                          AvatarFrame(
++                                            senderCode: msg.senderCode,
++                                            nickname: msg.senderNickname,
++                                            isHost: msg.isHost,
++                                            size: 34,
++                                            isNight: isNight,
++                                          ),
++                                        ],
+                                       ],
+-                                    ],
+-                                  ),
+-                                );
+-                              },
+-                            ),
++                                    ),
++                                  );
++                                },
++                              ),
+                     ),
+ 
+                     // 3. 底部输入与发送栏
+                     const Divider(height: 1, thickness: 0.8),
+                     Padding(
+                       padding: const EdgeInsets.symmetric(
+-                          horizontal: 12, vertical: 8),
++                        horizontal: 12,
++                        vertical: 8,
++                      ),
+                       child: Row(
+                         children: [
+                           Expanded(
+@@ -598,23 +640,27 @@
+                                 controller: _textController,
+                                 maxLines: 3,
+                                 minLines: 1,
+-                                style:
+-                                    TextStyle(fontSize: 15, color: textPrimary),
++                                style: TextStyle(
++                                  fontSize: 15,
++                                  color: textPrimary,
++                                ),
+                                 decoration: InputDecoration(
+                                   hintText: s.chatInputPlaceholder,
+                                   hintStyle: TextStyle(
+                                     fontSize: 13.5,
+-                                    color:
+-                                        textSecondary.withValues(alpha: 0.65),
++                                    color: textSecondary.withValues(
++                                      alpha: 0.65,
++                                    ),
+                                   ),
+                                   contentPadding: const EdgeInsets.symmetric(
+                                     horizontal: 14,
+                                     vertical: 10,
+                                   ),
+                                   filled: true,
+-                                  fillColor: isNight
+-                                      ? const Color(0xFF121B2B)
+-                                      : const Color(0xFFF1ECE5),
++                                  fillColor:
++                                      isNight
++                                          ? const Color(0xFF121B2B)
++                                          : const Color(0xFFF1ECE5),
+                                   border: OutlineInputBorder(
+                                     borderRadius: BorderRadius.circular(20),
+                                     borderSide: BorderSide.none,
+@@ -630,15 +676,19 @@
+                             liveRegion: _isSending,
+                             button: true,
+                             child: IconButton(
+-                              icon: _isSending
+-                                  ? const SizedBox(
+-                                      width: 20,
+-                                      height: 20,
+-                                      child: CircularProgressIndicator(
+-                                          strokeWidth: 2),
+-                                    )
+-                                  : Icon(Icons.send_rounded,
+-                                      color: accentColor),
++                              icon:
++                                  _isSending
++                                      ? const SizedBox(
++                                        width: 20,
++                                        height: 20,
++                                        child: CircularProgressIndicator(
++                                          strokeWidth: 2,
++                                        ),
++                                      )
++                                      : Icon(
++                                        Icons.send_rounded,
++                                        color: accentColor,
++                                      ),
+                               tooltip: _isSending ? s.chatSending : s.chatSend,
+                               onPressed: _isSending ? null : _handleSend,
+                             ),
+--- /dev/null
++++ b/lib/ui/widgets/room_invite_dialog.dart
+@@ -0,0 +1,90 @@
++import 'package:flutter/material.dart';
++import 'package:flutter/services.dart';
++import '../../core/security/room_invite.dart';
++
++Future<RoomInvite?> requestRoomInvite(BuildContext context) =>
++    showDialog<RoomInvite>(
++      context: context,
++      builder: (_) => const _InviteDialog(),
++    );
++
++Future<void> showRoomInvite(BuildContext context, RoomInvite invite) =>
++    showDialog<void>(
++      context: context,
++      builder:
++          (dialogContext) => AlertDialog(
++            title: const Text('房间邀请码'),
++            content: Column(
++              mainAxisSize: MainAxisSize.min,
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                SelectableText(
++                  invite.code,
++                  style: const TextStyle(fontFamily: 'monospace', fontSize: 20),
++                ),
++                const SizedBox(height: 16),
++                const Text('仅分享给信任的人。持有邀请码的人可以加入、收听并查看房内消息；重新建房会更换邀请码。'),
++              ],
++            ),
++            actions: [
++              TextButton(
++                onPressed: () async {
++                  await Clipboard.setData(ClipboardData(text: invite.code));
++                  if (dialogContext.mounted) Navigator.pop(dialogContext);
++                },
++                child: const Text('复制邀请码'),
++              ),
++              TextButton(
++                onPressed: () => Navigator.pop(dialogContext),
++                child: const Text('关闭'),
++              ),
++            ],
++          ),
++    );
++
++class _InviteDialog extends StatefulWidget {
++  const _InviteDialog();
++  @override
++  State<_InviteDialog> createState() => _InviteDialogState();
++}
++
++class _InviteDialogState extends State<_InviteDialog> {
++  final controller = TextEditingController();
++  String? error;
++  @override
++  void dispose() {
++    controller.dispose();
++    super.dispose();
++  }
++
++  void submit() {
++    try {
++      Navigator.pop(context, RoomInvite.parse(controller.text));
++    } on FormatException catch (e) {
++      setState(() => error = e.message);
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) => AlertDialog(
++    title: const Text('输入房间邀请码'),
++    content: TextField(
++      key: const ValueKey('room-invite-input'),
++      controller: controller,
++      autofocus: true,
++      autocorrect: false,
++      enableSuggestions: false,
++      obscureText: true,
++      maxLength: 22,
++      onSubmitted: (_) => submit(),
++      decoration: InputDecoration(labelText: '房主提供的 22 位邀请码', errorText: error),
++    ),
++    actions: [
++      TextButton(
++        onPressed: () => Navigator.pop(context),
++        child: const Text('取消'),
++      ),
++      TextButton(onPressed: submit, child: const Text('验证并加入')),
++    ],
++  );
++}
 --- a/native/src/protocol_frame.cpp
 +++ b/native/src/protocol_frame.cpp
 @@ -15,8 +15,8 @@
@@ -2918,7 +4234,7 @@
  }
  
  size_t sunset_ring_buffer_available_write(const SunsetRingBuffer* rb) {
---- a/native/test/safety_test.cpp
+--- /dev/null
 +++ b/native/test/safety_test.cpp
 @@ -0,0 +1,26 @@
 +#include "protocol_frame.h"
@@ -3518,8 +4834,8 @@
  # versionName 取 `+` 前半段，versionCode 取后半段。
 -# 0.1.0-alpha.11 / versionCode 12
 -version: 0.1.0-alpha.11+12
-+# DawnMesh 0.1.0-dev.1 / versionCode 1
-+version: 0.1.0-dev.1+1
++# DawnMesh 0.1.0-dev.2 / versionCode 2
++version: 0.1.0-dev.2+2
  
  environment:
 -  sdk: '>=3.0.0 <4.0.0'
@@ -3529,9 +4845,57 @@
  
  dependencies:
    flutter:
---- a/test/ble_home_test.dart
+--- /dev/null
++++ b/scripts/check.sh
+@@ -0,0 +1,14 @@
++#!/usr/bin/env bash
++set -euo pipefail
++cd "$(dirname "$0")/.."
++./scripts/flutter.sh pub get
++./scripts/flutter.sh analyze
++./scripts/flutter.sh test --concurrency=1
++if command -v clang++ >/dev/null; then
++  dawnmesh_check_dir="$(mktemp -d)"
++  trap 'rm -rf "$dawnmesh_check_dir"' EXIT
++  clang++ -std=c++17 -Wall -Wextra -fsanitize=address,undefined -I native/src \
++    native/test/safety_test.cpp native/src/protocol_frame.cpp native/src/ring_buffer.cpp \
++    -o "$dawnmesh_check_dir/native-test"
++  "$dawnmesh_check_dir/native-test"
++fi
+--- /dev/null
++++ b/scripts/flutter.sh
+@@ -0,0 +1,10 @@
++#!/usr/bin/env bash
++set -euo pipefail
++dawnmesh_root="$(cd "$(dirname "$0")/.." && pwd)"
++export JAVA_HOME="$dawnmesh_root/.tools/jdk/Contents/Home"
++export ANDROID_HOME="$dawnmesh_root/.tools/android-sdk"
++export ANDROID_SDK_ROOT="$ANDROID_HOME"
++export GRADLE_USER_HOME="$dawnmesh_root/.tools/gradle-cache"
++export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
++export CI=true
++exec "$dawnmesh_root/.tools/flutter/bin/flutter" "$@"
+--- /dev/null
++++ b/scripts/gradle.sh
+@@ -0,0 +1,9 @@
++#!/usr/bin/env bash
++set -euo pipefail
++dawnmesh_root="$(cd "$(dirname "$0")/.." && pwd)"
++export JAVA_HOME="$dawnmesh_root/.tools/jdk/Contents/Home"
++export ANDROID_HOME="$dawnmesh_root/.tools/android-sdk"
++export ANDROID_SDK_ROOT="$ANDROID_HOME"
++export GRADLE_USER_HOME="$dawnmesh_root/.tools/gradle-cache"
++export PATH="$JAVA_HOME/bin:$PATH"
++exec "$dawnmesh_root/android/gradlew" -p "$dawnmesh_root/android" "$@"
+--- /dev/null
 +++ b/test/ble_home_test.dart
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,197 @@
++import 'package:sunset_ripple/core/security/room_invite.dart';
++import 'package:sunset_ripple/core/security/session_handshake.dart';
++import 'package:sunset_ripple/core/protocol/frame.dart';
++import 'package:sunset_ripple/core/protocol/frame_type.dart';
++import 'package:sunset_ripple/core/protocol/payloads/join_request.dart';
++import 'package:sunset_ripple/core/protocol/payloads/roster.dart';
 +import 'package:flutter/material.dart';
 +import 'package:flutter/services.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -3545,17 +4909,68 @@
 +  const scanChannel = 'host.msknet.sunsetripple/ble_l2cap_scan';
 +  final calls = <MethodCall>[];
 +  bool advertisingWorks = true;
++  late RoomInvite invite;
++  late SecureFrameCodec hostCodec;
 +  RoomSession? entered;
 +  final messenger =
 +      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 +
-+  setUp(() {
++  setUp(() async {
++    invite = RoomInvite.generate();
++    hostCodec = await invite.createCodec();
 +    calls.clear();
 +    advertisingWorks = true;
 +    entered = null;
 +    messenger.setMockMethodCallHandler(channel, (call) async {
 +      calls.add(call);
 +      if (call.method == 'startAdvertising') return advertisingWorks;
++      if (call.method == 'sendL2capData') {
++        final sealed = Frame.decode(call.arguments['data'] as Uint8List)!;
++        expect(sealed.type, FrameType.sealed);
++        final plain = await hostCodec.open(sealed);
++        if (plain.type == FrameType.joinReq) {
++          final join = JoinRequestPayload.decode(plain.payload)!;
++          final admission = await hostCodec.seal(
++            Frame(
++              type: FrameType.admission,
++              senderId: 1,
++              seq: 0,
++              payload: Uint8List.fromList([2, ...join.sessionToken]),
++            ),
++          );
++          await messenger.handlePlatformMessage(
++            'host.msknet.sunsetripple/ble_l2cap_data',
++            const StandardMethodCodec().encodeSuccessEnvelope({
++              'data': admission.encode(),
++              'peerAddress': 'host',
++            }),
++            (_) {},
++          );
++          final response = await hostCodec.seal(
++            Frame(
++              type: FrameType.roster,
++              senderId: 1,
++              seq: 1,
++              payload:
++                  RosterPayload(
++                    hostId: 1,
++                    members: [
++                      RosterMember(memberId: 1, flags: 1, nickname: 'Host'),
++                      RosterMember(memberId: 2, nickname: join.nickname),
++                    ],
++                  ).encode(),
++            ),
++          );
++          await messenger.handlePlatformMessage(
++            'host.msknet.sunsetripple/ble_l2cap_data',
++            const StandardMethodCodec().encodeSuccessEnvelope({
++              'data': response.encode(),
++              'peerAddress': 'host',
++            }),
++            (_) {},
++          );
++        }
++      }
 +      return true;
 +    });
 +    for (final name in [
@@ -3638,6 +5053,11 @@
 +        await Future<void>.delayed(const Duration(milliseconds: 50));
 +      });
 +      await tester.pump();
++      await tester.enterText(
++        find.byKey(const ValueKey('room-invite-input')),
++        invite.code,
++      );
++      await tester.tap(find.text('验证并加入'));
 +      await pumpUntil(tester, () => entered != null);
 +      expect(
 +        calls.where((c) => c.method == 'connectL2cap').single.arguments['psm'],
@@ -3667,7 +5087,7 @@
 +    await tester.pump(const Duration(seconds: 4));
 +  });
 +}
---- a/test/dawnmesh_security_test.dart
+--- /dev/null
 +++ b/test/dawnmesh_security_test.dart
 @@ -0,0 +1,62 @@
 +import 'dart:typed_data';
@@ -3732,7 +5152,7 @@
 +    },
 +  );
 +}
---- a/test/dawnmesh_transport_security_test.dart
+--- /dev/null
 +++ b/test/dawnmesh_transport_security_test.dart
 @@ -0,0 +1,68 @@
 +import 'dart:async';
@@ -3916,3 +5336,247 @@
 +    );
    });
  }
+--- /dev/null
++++ b/test/room_invite_test.dart
+@@ -0,0 +1,228 @@
++import 'dart:async';
++import 'dart:convert';
++import 'dart:io';
++import 'dart:typed_data';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/audio/audio_io.dart';
++import 'package:sunset_ripple/core/protocol/frame.dart';
++import 'package:sunset_ripple/core/protocol/frame_type.dart';
++import 'package:sunset_ripple/core/protocol/payloads/roster.dart';
++import 'package:sunset_ripple/core/security/room_invite.dart';
++import 'package:sunset_ripple/core/security/session_crypto.dart';
++import 'package:sunset_ripple/core/session/room_session.dart';
++import 'package:sunset_ripple/core/transport/lan_transport.dart';
++
++Future<void> until(bool Function() condition) async {
++  final end = DateTime.now().add(const Duration(seconds: 3));
++  while (!condition() && DateTime.now().isBefore(end)) {
++    await Future<void>.delayed(const Duration(milliseconds: 10));
++  }
++  expect(condition(), isTrue);
++}
++
++void main() {
++  test('invitation is canonical, random, and redacted', () {
++    final invite = RoomInvite.generate();
++    expect(invite.code.length, 22);
++    expect(RoomInvite.parse(' ${invite.code} ').code, invite.code);
++    expect(RoomInvite.generate().code, isNot(invite.code));
++    expect(invite.toString(), isNot(contains(invite.code)));
++    expect(() => RoomInvite.parse('password'), throwsFormatException);
++    expect(
++      () => RoomInvite.parse('AAAAAAAAAAAAAAAAAAAAAB'),
++      throwsFormatException,
++    );
++  });
++
++  test(
++    'wrong key, modified ciphertext, and concurrent replay are rejected',
++    () async {
++      final invite = RoomInvite.generate();
++      final sender = await invite.createCodec();
++      final receiver = await invite.createCodec();
++      final wrong = await RoomInvite.generate().createCodec();
++      final sealed = await sender.seal(
++        Frame(
++          type: FrameType.chat,
++          senderId: 1,
++          seq: 0,
++          payload: Uint8List.fromList(utf8.encode('private')),
++        ),
++      );
++      await expectLater(wrong.open(sealed), throwsA(anything));
++      final modified = Frame(
++        type: sealed.type,
++        senderId: 1,
++        seq: 0,
++        payload: Uint8List.fromList(sealed.payload)..[20] ^= 1,
++      );
++      await expectLater(receiver.open(modified), throwsA(anything));
++      final results = await Future.wait(
++        List.generate(2, (_) async {
++          try {
++            await receiver.open(sealed);
++            return true;
++          } catch (_) {
++            return false;
++          }
++        }),
++      );
++      expect(results.where((accepted) => accepted).length, 1);
++    },
++  );
++
++  test('old counters remain rejected after replay window advances', () async {
++    final sender = await SessionCipher.fromKey(Uint8List(32));
++    final receiver = await SessionCipher.fromKey(Uint8List(32));
++    final first = await sender.encrypt(Uint8List.fromList([1]));
++    await receiver.decrypt(first);
++    for (var i = 0; i <= SessionCipher.replayWindowSize; i++) {
++      await receiver.decrypt(await sender.encrypt(Uint8List.fromList([2])));
++    }
++    await expectLater(receiver.decrypt(first), throwsStateError);
++  });
++
++  test(
++    'captured roster cannot admit a fresh client without its challenge',
++    () async {
++      final invite = RoomInvite.generate();
++      final hostCodec = await invite.createCodec();
++      final guest = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Guest');
++      addTearDown(guest.dispose);
++      await guest.protectWithInvite(invite);
++      await guest.joinRoom(startAudio: false);
++      final roster = Frame(
++        type: FrameType.roster,
++        senderId: 1,
++        seq: 1,
++        payload:
++            RosterPayload(
++              hostId: 1,
++              members: [
++                RosterMember(memberId: 1, flags: 1, nickname: 'Host'),
++                RosterMember(memberId: 2, nickname: 'Guest'),
++              ],
++            ).encode(),
++      );
++      await guest.handleIncomingFrame(await hostCodec.seal(roster));
++      expect(guest.state, RoomState.connecting);
++      await guest.handleIncomingFrame(
++        await hostCodec.seal(
++          Frame(
++            type: FrameType.admission,
++            senderId: 1,
++            seq: 2,
++            payload: Uint8List.fromList([2, ...Uint8List(16)]),
++          ),
++        ),
++      );
++      await guest.handleIncomingFrame(await hostCodec.seal(roster));
++      expect(guest.state, RoomState.connecting);
++      await guest.handleIncomingFrame(
++        await hostCodec.seal(
++          Frame(
++            type: FrameType.admission,
++            senderId: 1,
++            seq: 3,
++            payload: Uint8List.fromList([2, ...guest.sessionToken]),
++          ),
++        ),
++      );
++      await guest.handleIncomingFrame(await hostCodec.seal(roster));
++      expect(guest.state, RoomState.inRoom);
++    },
++  );
++
++  test(
++    'real TCP protected rooms carry chat, history and audio; wrong invite cannot join',
++    () async {
++      final invite = RoomInvite.generate();
++      final wire = <Frame>[];
++      final sessions = <RoomSession>[];
++      final subs = <StreamSubscription<Frame>>[];
++      addTearDown(() async {
++        for (final sub in subs) {
++          await sub.cancel();
++        }
++        for (final session in sessions.reversed) {
++          await session.dispose();
++        }
++      });
++      Future<RoomSession> make(
++        String name,
++        RoomInvite key, {
++        bool host = false,
++      }) async {
++        final session = RoomSession(audioIo: MockAudioIo(), selfNickname: name);
++        sessions.add(session);
++        final transport = LanTransport(controlOnly: true);
++        session.transport = transport;
++        await session.protectWithInvite(key);
++        session.onSendFrame = (frame) {
++          wire.add(frame);
++          transport.send(frame);
++        };
++        subs.add(transport.incoming.listen(session.handleIncomingFrame));
++        expect(
++          host
++              ? await transport.startHost()
++              : await transport.startClient(
++                hostAddress: InternetAddress.loopbackIPv4,
++              ),
++          isTrue,
++        );
++        if (host) {
++          await session.createRoom(startAudio: false);
++        } else {
++          await session.joinRoom(startAudio: false);
++        }
++        return session;
++      }
++
++      final host = await make('Host', invite, host: true);
++      final guest = await make('Guest', invite);
++      await until(() => guest.state == RoomState.inRoom);
++      final message = '秘密${'x' * 314}'; // 320 UTF-8 bytes
++      await host.sendChat(message);
++      await until(() => guest.chatMessages.any((m) => m.text == message));
++      await expectLater(host.sendChat('$message!'), throwsArgumentError);
++      final lateGuest = await make('Later', invite);
++      await until(() => lateGuest.chatMessages.any((m) => m.text == message));
++      await guest.sendChat('guest secret');
++      await until(
++        () =>
++            host.chatMessages.any((m) => m.text == 'guest secret') &&
++            lateGuest.chatMessages.any((m) => m.text == 'guest secret'),
++      );
++      await guest.sendFrame(
++        Frame(
++          type: FrameType.audio,
++          senderId: guest.selfMemberId,
++          seq: 90,
++          payload: Uint8List.fromList([11, 22, 33]),
++        ),
++      );
++      await until(
++        () => (lateGuest.audioIo as MockAudioIo).submittedFrames.isNotEmpty,
++      );
++      expect(
++        Frame.decode(
++          (lateGuest.audioIo as MockAudioIo).submittedFrames.single,
++        )!.payload,
++        [11, 22, 33],
++      );
++      final wrong = await make('Wrong', RoomInvite.generate());
++      await Future<void>.delayed(const Duration(milliseconds: 150));
++      expect(wrong.state, RoomState.connecting);
++      expect(host.members.length, 3);
++      expect(wire, isNotEmpty);
++      expect(wire.every((frame) => frame.type == FrameType.sealed), isTrue);
++      expect(
++        wire.any(
++          (frame) => latin1.decode(frame.encode()).contains('guest secret'),
++        ),
++        isFalse,
++      );
++    },
++  );
++}
+--- a/.gitignore
++++ b/.gitignore
+@@ -34,3 +34,10 @@
+ native/CMakePresets.json
+ native/build_native.bat
+ native/build/
++android/key.properties
++.pub-cache/
++.flutter-plugins*
++
++# Local Android/Flutter development toolchain
++.tools/
++artifacts/

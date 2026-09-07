@@ -1,0 +1,296 @@
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.2-release.apk
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=DawnMesh, OU=Independent Development
+Signer #1 certificate SHA-256 digest: 58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446
+Signer #1 certificate SHA-1 digest: 93f3e377a613ca6f60f01dff8dab4dbba858a3c2
+Signer #1 certificate MD5 digest: 3a6426a0521117c4ffcda1e907734f7c
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 3072
+Signer #1 public key SHA-256 digest: 04652d52898219540693fa649832222c9eabd25d8dd5a077dde14a470fcdc14d
+Signer #1 public key SHA-1 digest: 81e715e2a199a968a54d63ec3072d56ee4d3f85e
+Signer #1 public key MD5 digest: 35a25d1e029022e490f3ea6d6f71ec05
+
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/aapt dump badging /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.2-release.apk
+package: name='dev.dawnmesh.intercom' versionCode='2' versionName='0.1.0-dev.2' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+sdkVersion:'26'
+targetSdkVersion:'35'
+uses-permission: name='android.permission.RECORD_AUDIO'
+uses-permission: name='android.permission.MODIFY_AUDIO_SETTINGS'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.FOREGROUND_SERVICE_MICROPHONE'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+uses-permission: name='android.permission.ACCESS_WIFI_STATE'
+uses-permission: name='android.permission.CHANGE_WIFI_STATE'
+uses-permission: name='android.permission.CHANGE_WIFI_MULTICAST_STATE'
+uses-permission: name='android.permission.NEARBY_WIFI_DEVICES'
+uses-permission: name='android.permission.ACCESS_FINE_LOCATION' maxSdkVersion='32'
+uses-permission: name='android.permission.ACCESS_COARSE_LOCATION' maxSdkVersion='32'
+uses-permission: name='android.permission.BLUETOOTH' maxSdkVersion='30'
+uses-permission: name='android.permission.BLUETOOTH_ADMIN' maxSdkVersion='30'
+uses-permission: name='android.permission.BLUETOOTH_CONNECT'
+uses-permission: name='android.permission.BLUETOOTH_SCAN'
+uses-permission: name='android.permission.BLUETOOTH_ADVERTISE'
+uses-permission: name='dev.dawnmesh.intercom.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+application-label:'DawnMesh'
+application-label-af:'DawnMesh'
+application-label-am:'DawnMesh'
+application-label-ar:'DawnMesh'
+application-label-as:'DawnMesh'
+application-label-az:'DawnMesh'
+application-label-be:'DawnMesh'
+application-label-bg:'DawnMesh'
+application-label-bn:'DawnMesh'
+application-label-bs:'DawnMesh'
+application-label-ca:'DawnMesh'
+application-label-cs:'DawnMesh'
+application-label-da:'DawnMesh'
+application-label-de:'DawnMesh'
+application-label-el:'DawnMesh'
+application-label-en-AU:'DawnMesh'
+application-label-en-CA:'DawnMesh'
+application-label-en-GB:'DawnMesh'
+application-label-en-IN:'DawnMesh'
+application-label-en-XC:'DawnMesh'
+application-label-es:'DawnMesh'
+application-label-es-US:'DawnMesh'
+application-label-et:'DawnMesh'
+application-label-eu:'DawnMesh'
+application-label-fa:'DawnMesh'
+application-label-fi:'DawnMesh'
+application-label-fr:'DawnMesh'
+application-label-fr-CA:'DawnMesh'
+application-label-gl:'DawnMesh'
+application-label-gu:'DawnMesh'
+application-label-hi:'DawnMesh'
+application-label-hr:'DawnMesh'
+application-label-hu:'DawnMesh'
+application-label-hy:'DawnMesh'
+application-label-in:'DawnMesh'
+application-label-is:'DawnMesh'
+application-label-it:'DawnMesh'
+application-label-iw:'DawnMesh'
+application-label-ja:'DawnMesh'
+application-label-ka:'DawnMesh'
+application-label-kk:'DawnMesh'
+application-label-km:'DawnMesh'
+application-label-kn:'DawnMesh'
+application-label-ko:'DawnMesh'
+application-label-ky:'DawnMesh'
+application-label-lo:'DawnMesh'
+application-label-lt:'DawnMesh'
+application-label-lv:'DawnMesh'
+application-label-mk:'DawnMesh'
+application-label-ml:'DawnMesh'
+application-label-mn:'DawnMesh'
+application-label-mr:'DawnMesh'
+application-label-ms:'DawnMesh'
+application-label-my:'DawnMesh'
+application-label-nb:'DawnMesh'
+application-label-ne:'DawnMesh'
+application-label-nl:'DawnMesh'
+application-label-or:'DawnMesh'
+application-label-pa:'DawnMesh'
+application-label-pl:'DawnMesh'
+application-label-pt:'DawnMesh'
+application-label-pt-BR:'DawnMesh'
+application-label-pt-PT:'DawnMesh'
+application-label-ro:'DawnMesh'
+application-label-ru:'DawnMesh'
+application-label-si:'DawnMesh'
+application-label-sk:'DawnMesh'
+application-label-sl:'DawnMesh'
+application-label-sq:'DawnMesh'
+application-label-sr:'DawnMesh'
+application-label-sr-Latn:'DawnMesh'
+application-label-sv:'DawnMesh'
+application-label-sw:'DawnMesh'
+application-label-ta:'DawnMesh'
+application-label-te:'DawnMesh'
+application-label-th:'DawnMesh'
+application-label-tl:'DawnMesh'
+application-label-tr:'DawnMesh'
+application-label-uk:'DawnMesh'
+application-label-ur:'DawnMesh'
+application-label-uz:'DawnMesh'
+application-label-vi:'DawnMesh'
+application-label-zh:'DawnMesh'
+application-label-zh-CN:'DawnMesh'
+application-label-zh-HK:'DawnMesh'
+application-label-zh-TW:'DawnMesh'
+application-label-zu:'DawnMesh'
+application-icon-160:'res/BW.xml'
+application-icon-240:'res/BW.xml'
+application-icon-320:'res/BW.xml'
+application-icon-480:'res/BW.xml'
+application-icon-640:'res/BW.xml'
+application-icon-65534:'res/BW.xml'
+application: label='DawnMesh' icon='res/BW.xml'
+launchable-activity: name='host.msknet.sunsetripple.MainActivity'  label='' icon=''
+uses-library-not-required:'androidx.window.extensions'
+uses-library-not-required:'androidx.window.sidecar'
+feature-group: label=''
+  uses-feature-not-required: name='android.hardware.bluetooth_le'
+  uses-feature: name='android.hardware.microphone'
+  uses-feature-not-required: name='android.hardware.wifi.direct'
+  uses-feature: name='android.hardware.bluetooth'
+  uses-implied-feature: name='android.hardware.bluetooth' reason='requested android.permission.BLUETOOTH permission, requested android.permission.BLUETOOTH_ADMIN permission, and targetSdkVersion > 4'
+  uses-feature: name='android.hardware.faketouch'
+  uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+  uses-feature: name='android.hardware.location'
+  uses-implied-feature: name='android.hardware.location' reason='requested android.permission.ACCESS_COARSE_LOCATION permission, and requested android.permission.ACCESS_FINE_LOCATION permission'
+  uses-feature: name='android.hardware.wifi'
+  uses-implied-feature: name='android.hardware.wifi' reason='requested android.permission.ACCESS_WIFI_STATE permission, requested android.permission.CHANGE_WIFI_MULTICAST_STATE permission, and requested android.permission.CHANGE_WIFI_STATE permission'
+main
+other-receivers
+other-services
+supports-screens: 'small' 'normal' 'large' 'xlarge'
+supports-any-density: 'true'
+locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de' 'el' 'en-AU' 'en-CA' 'en-GB' 'en-IN' 'en-XC' 'es' 'es-US' 'et' 'eu' 'fa' 'fi' 'fr' 'fr-CA' 'gl' 'gu' 'hi' 'hr' 'hu' 'hy' 'in' 'is' 'it' 'iw' 'ja' 'ka' 'kk' 'km' 'kn' 'ko' 'ky' 'lo' 'lt' 'lv' 'mk' 'ml' 'mn' 'mr' 'ms' 'my' 'nb' 'ne' 'nl' 'or' 'pa' 'pl' 'pt' 'pt-BR' 'pt-PT' 'ro' 'ru' 'si' 'sk' 'sl' 'sq' 'sr' 'sr-Latn' 'sv' 'sw' 'ta' 'te' 'th' 'tl' 'tr' 'uk' 'ur' 'uz' 'vi' 'zh' 'zh-CN' 'zh-HK' 'zh-TW' 'zu'
+densities: '160' '240' '320' '480' '640' '65534'
+native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'
+
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/zipalign -c -P 16 -v 4 /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.2-release.apk
+Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.2-release.apk (4)...
+      87 META-INF/com/android/build/gradle/app-metadata.properties (OK - compressed)
+     208 META-INF/version-control-info.textproto (OK - compressed)
+     316 assets/dexopt/baseline.prof (OK)
+     564 assets/dexopt/baseline.profm (OK)
+     677 classes.dex (OK - compressed)
+  376832 lib/arm64-v8a/libapp.so (OK)
+ 5832704 lib/arm64-v8a/libflutter.so (OK)
+16891904 lib/arm64-v8a/libsunset_ripple_native.so (OK)
+17154048 lib/armeabi-v7a/libapp.so (OK)
+23183360 lib/armeabi-v7a/libflutter.so (OK)
+31031296 lib/armeabi-v7a/libsunset_ripple_native.so (OK)
+31195136 lib/x86_64/libapp.so (OK)
+36716544 lib/x86_64/libflutter.so (OK)
+48857088 lib/x86_64/libsunset_ripple_native.so (OK)
+49102245 assets/flutter_assets/AssetManifest.bin (OK - compressed)
+49102319 assets/flutter_assets/AssetManifest.json (OK - compressed)
+49102392 assets/flutter_assets/FontManifest.json (OK - compressed)
+49102522 assets/flutter_assets/NOTICES.Z (OK - compressed)
+49184388 assets/flutter_assets/NativeAssetsManifest.json (OK - compressed)
+49184518 assets/flutter_assets/fonts/MaterialIcons-Regular.otf (OK - compressed)
+49188039 assets/flutter_assets/shaders/ink_sparkle.frag (OK - compressed)
+49193241 DebugProbesKt.bin (OK - compressed)
+49194096 META-INF/androidx.activity_activity.version (OK - compressed)
+49194194 META-INF/androidx.annotation_annotation-experimental.version (OK - compressed)
+49194280 META-INF/androidx.arch.core_core-runtime.version (OK - compressed)
+49194410 META-INF/androidx.core_core-ktx.version (OK - compressed)
+49194484 META-INF/androidx.core_core.version (OK - compressed)
+49194570 META-INF/androidx.customview_customview.version (OK - compressed)
+49194651 META-INF/androidx.fragment_fragment.version (OK - compressed)
+49194740 META-INF/androidx.interpolator_interpolator.version (OK - compressed)
+49194841 META-INF/androidx.lifecycle_lifecycle-livedata-core-ktx.version (OK - compressed)
+49194938 META-INF/androidx.lifecycle_lifecycle-livedata-core.version (OK - compressed)
+49195030 META-INF/androidx.lifecycle_lifecycle-livedata.version (OK - compressed)
+49195121 META-INF/androidx.lifecycle_lifecycle-process.version (OK - compressed)
+49195212 META-INF/androidx.lifecycle_lifecycle-runtime.version (OK - compressed)
+49195316 META-INF/androidx.lifecycle_lifecycle-viewmodel-savedstate.version (OK - compressed)
+49195409 META-INF/androidx.lifecycle_lifecycle-viewmodel.version (OK - compressed)
+49195486 META-INF/androidx.loader_loader.version (OK - compressed)
+49195583 META-INF/androidx.profileinstaller_profileinstaller.version (OK - compressed)
+49195668 META-INF/androidx.savedstate_savedstate.version (OK - compressed)
+49195755 META-INF/androidx.startup_startup-runtime.version (OK - compressed)
+49195834 META-INF/androidx.tracing_tracing.version (OK - compressed)
+49195937 META-INF/androidx.versionedparcelable_versionedparcelable.version (OK - compressed)
+49196020 META-INF/androidx.viewpager_viewpager.version (OK - compressed)
+49196111 META-INF/androidx.window.extensions.core_core.version (OK - compressed)
+49196193 META-INF/androidx.window_window-java.version (OK - compressed)
+49196270 META-INF/androidx.window_window.version (OK - compressed)
+49196351 META-INF/kotlinx_coroutines_android.version (OK - compressed)
+49196428 META-INF/kotlinx_coroutines_core.version (OK - compressed)
+49196487 META-INF/services/k0.a (OK - compressed)
+49196546 META-INF/services/k0.b (OK - compressed)
+49196611 kotlin-tooling-metadata.json (OK - compressed)
+49196966 kotlin/annotation/annotation.kotlin_builtins (OK - compressed)
+49197601 kotlin/collections/collections.kotlin_builtins (OK - compressed)
+49199196 kotlin/coroutines/coroutines.kotlin_builtins (OK - compressed)
+49199423 kotlin/internal/internal.kotlin_builtins (OK - compressed)
+49199876 kotlin/kotlin.kotlin_builtins (OK - compressed)
+49204946 kotlin/ranges/ranges.kotlin_builtins (OK - compressed)
+49206278 kotlin/reflect/reflect.kotlin_builtins (OK - compressed)
+49207592 AndroidManifest.xml (OK - compressed)
+49210340 res/0w.xml (OK - compressed)
+49210712 res/2K.9.png (OK)
+49210980 res/5c.png (OK)
+49211158 res/9m.xml (OK - compressed)
+49211372 res/9w.png (OK)
+49211817 res/BW.xml (OK - compressed)
+49212080 res/C_.9.png (OK)
+49212336 res/FS.png (OK)
+49213060 res/Fd.xml (OK - compressed)
+49213468 res/Ma.9.png (OK)
+49213755 res/P8.xml (OK - compressed)
+49214152 res/Qr.xml (OK - compressed)
+49214764 res/RJ.png (OK)
+49215798 res/RV.xml (OK - compressed)
+49216193 res/S8.xml (OK - compressed)
+49216720 res/U-.9.png (OK)
+49216983 res/Ws.xml (OK - compressed)
+49217490 res/Zn.xml (OK - compressed)
+49217715 res/a0.xml (OK - compressed)
+49218290 res/c6.xml (OK - compressed)
+49218514 res/cV.xml (OK - compressed)
+49218814 res/df.xml (OK - compressed)
+49219108 res/gK.9.png (OK)
+49219363 res/iQ.xml (OK - compressed)
+49219821 res/iS.xml (OK - compressed)
+49220436 res/je.9.png (OK)
+49220688 res/lR.xml (OK - compressed)
+49220986 res/nz.xml (OK - compressed)
+49221280 res/o-.png (OK)
+49222728 res/o_.9.png (OK)
+49223020 res/pQ.xml (OK - compressed)
+49223388 res/pY.png (OK)
+49223536 res/pu.png (OK)
+49224488 res/s4.png (OK)
+49224628 res/sA.9.png (OK)
+49224884 res/vL.9.png (OK)
+49225152 res/wN.9.png (OK)
+49225417 res/xN.xml (OK - compressed)
+49226248 res/xa.9.png (OK)
+49226509 res/yP.xml (OK - compressed)
+49226912 res/yn.png (OK)
+49227464 res/z-.9.png (OK)
+49227732 resources.arsc (OK)
+Verification succesful
+
+ELF PT_LOAD: lib/arm64-v8a/libapp.so: [65536, 65536, 65536]: PASS 64-bit >= 16384
+
+ELF PT_LOAD: lib/arm64-v8a/libflutter.so: [65536, 65536, 65536, 65536]: PASS 64-bit >= 16384
+
+ELF PT_LOAD: lib/arm64-v8a/libsunset_ripple_native.so: [16384, 16384, 16384]: PASS 64-bit >= 16384
+
+ELF PT_LOAD: lib/armeabi-v7a/libapp.so: [16384, 16384, 16384]: 32-bit ABI (4 KB permitted)
+
+ELF PT_LOAD: lib/armeabi-v7a/libflutter.so: [65536, 65536, 65536, 65536]: 32-bit ABI (4 KB permitted)
+
+ELF PT_LOAD: lib/armeabi-v7a/libsunset_ripple_native.so: [4096, 4096, 4096]: 32-bit ABI (4 KB permitted)
+
+ELF PT_LOAD: lib/x86_64/libapp.so: [65536, 65536, 65536]: PASS 64-bit >= 16384
+
+ELF PT_LOAD: lib/x86_64/libflutter.so: [65536, 65536, 65536, 65536]: PASS 64-bit >= 16384
+
+ELF PT_LOAD: lib/x86_64/libsunset_ripple_native.so: [16384, 16384, 16384]: PASS 64-bit >= 16384
+
+SHA256 fdb35830f846e7eb77c99a6b8c33a277a4a9a32b4043e11ff3100288f95a2877
+
+lib/arm64-v8a/libapp.so: GNU_RELRO=False, PT_LOAD flags=[4, 5, 6]
+lib/arm64-v8a/libflutter.so: GNU_RELRO=True, PT_LOAD flags=[4, 5, 6, 6]
+lib/arm64-v8a/libsunset_ripple_native.so: GNU_RELRO=True, PT_LOAD flags=[5, 6, 6]
+lib/armeabi-v7a/libapp.so: GNU_RELRO=False, PT_LOAD flags=[4, 5, 6]
+lib/armeabi-v7a/libflutter.so: GNU_RELRO=True, PT_LOAD flags=[4, 5, 6, 6]
+lib/armeabi-v7a/libsunset_ripple_native.so: GNU_RELRO=True, PT_LOAD flags=[5, 6, 6]
+lib/x86_64/libapp.so: GNU_RELRO=False, PT_LOAD flags=[4, 5, 6]
+lib/x86_64/libflutter.so: GNU_RELRO=True, PT_LOAD flags=[4, 5, 6, 6]
+lib/x86_64/libsunset_ripple_native.so: GNU_RELRO=True, PT_LOAD flags=[5, 6, 6]
