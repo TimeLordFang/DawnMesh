@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -147,20 +146,23 @@ class EncryptedPacket {
 
 /// 基于 AES-256-GCM 的会话加密器。
 ///
-/// 具备 12 字节 Nonce、128 位认证标签、65536 深度 Nonce 防重放窗口。
+/// 具备 12 字节 Nonce、128 位认证标签、每发送端 1024 帧滑动防重放窗口。
 class SessionCipher {
   static const int nonceBytes = 12;
   static const int tagBits = 128;
   static const int tagBytes = 16;
-  static const int maxSeenNonces = 65536;
+  static const int replayWindowSize = 1024;
+  static const int maxSenderPrefixes = 128;
 
   final crypt.SecretKey _secretKey;
   final crypt.AesGcm _aesGcm = crypt.AesGcm.with256bits(
     nonceLength: nonceBytes,
   );
-  final Set<String> _seenNonces = <String>{};
-  final ListQueue<String> _nonceOrder = ListQueue<String>();
-  final Random _random = Random.secure();
+  final Map<String, _ReplayWindow> _replayWindows = {};
+  final Uint8List _noncePrefix = Uint8List.fromList(
+    List.generate(8, (_) => Random.secure().nextInt(256)),
+  );
+  int _nonceCounter = 0;
 
   SessionCipher._(this._secretKey);
 
@@ -256,9 +258,9 @@ class SessionCipher {
     Uint8List? associatedData,
   }) async {
     final nonce = Uint8List(nonceBytes);
-    for (int i = 0; i < nonceBytes; i++) {
-      nonce[i] = _random.nextInt(256);
-    }
+    if (_nonceCounter > 0xffffffff) throw StateError('room key exhausted');
+    nonce.setRange(0, 8, _noncePrefix);
+    ByteData.sublistView(nonce).setUint32(8, _nonceCounter++, Endian.big);
 
     final secretBox = await _aesGcm.encrypt(
       plaintext,
@@ -286,8 +288,10 @@ class SessionCipher {
     EncryptedPacket packet, {
     Uint8List? associatedData,
   }) async {
-    final nonceId = base64.encode(packet.nonce);
-    if (_seenNonces.contains(nonceId)) {
+    if (packet.nonce.length != nonceBytes) throw ArgumentError('invalid nonce');
+    final prefix = base64.encode(packet.nonce.sublist(0, 8));
+    final counter = ByteData.sublistView(packet.nonce).getUint32(8, Endian.big);
+    if (_replayWindows[prefix]?.rejects(counter) ?? false) {
       throw StateError('replayed encrypted frame');
     }
 
@@ -312,17 +316,46 @@ class SessionCipher {
         aad: associatedData ?? Uint8List(0),
       );
 
-      // Admit only authenticated packets. Invalid traffic must not evict the
-      // replay window; recheck after await to reject concurrent duplicates.
-      if (!_seenNonces.add(nonceId))
-        throw StateError('replayed encrypted frame');
-      _nonceOrder.addLast(nonceId);
-      if (_nonceOrder.length > maxSeenNonces) {
-        _seenNonces.remove(_nonceOrder.removeFirst());
+      // Mutate replay state only after authentication. Never evict a sender:
+      // evicting it would make old captured packets acceptable again.
+      if (!_replayWindows.containsKey(prefix) &&
+          _replayWindows.length >= maxSenderPrefixes) {
+        throw StateError('too many sender sessions; create a new room');
       }
+      final window = _replayWindows.putIfAbsent(prefix, _ReplayWindow.new);
+      window.accept(counter); // Recheck after await for concurrent duplicates.
       return Uint8List.fromList(decrypted);
     } catch (_) {
       rethrow;
+    }
+  }
+}
+
+/// Records a bounded window without ever accepting counters older than it.
+class _ReplayWindow {
+  int highest = -1;
+  BigInt bits = BigInt.zero;
+  static final mask =
+      (BigInt.one << SessionCipher.replayWindowSize) - BigInt.one;
+
+  bool rejects(int counter) {
+    if (counter > highest) return false;
+    final delta = highest - counter;
+    return delta >= SessionCipher.replayWindowSize ||
+        (bits & (BigInt.one << delta)) != BigInt.zero;
+  }
+
+  void accept(int counter) {
+    if (rejects(counter)) throw StateError('replayed encrypted frame');
+    if (counter > highest) {
+      final shift = counter - highest;
+      bits =
+          shift >= SessionCipher.replayWindowSize
+              ? BigInt.one
+              : ((bits << shift) | BigInt.one) & mask;
+      highest = counter;
+    } else {
+      bits |= BigInt.one << (highest - counter);
     }
   }
 }

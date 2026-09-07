@@ -51,16 +51,16 @@ class RoomSession {
   final Uint8List sessionToken;
   final RoomMode mode;
 
-  /// 端到端 AES-GCM 安全信封编解码器。
-  ///
-  /// **默认为 null，即默认不加密。** 这是刻意的：已发布的 Kotlin 版 alpha.7
-  /// 线上也没有默认开启强制加密，如果这一版单方面默认加密，升级到 alpha.8 的
-  /// 用户就会和还没升级的人连不上。
-  ///
-  /// 帧类型 0x09/0x0a/0x0b 与旧版的 HANDSHAKE_HELLO/HANDSHAKE_CONFIRM/SEALED
-  /// 一一对应，握手与密封的能力已经就位，等两版都具备后再协商开启。
+  /// Production entry points require a fresh room invitation before connecting.
+  /// Nullable only for legacy protocol tests and explicit internal use.
   SecureFrameCodec? secureCodec;
   RoomInvite? roomInvite;
+  bool _admitted = false;
+  bool _closed = false;
+  Future<void> _incomingQueue = Future.value();
+  Future<void> _outgoingQueue = Future.value();
+  int _pendingIncoming = 0;
+  int _pendingOutgoing = 0;
 
   Future<void> protectWithInvite(RoomInvite invite) async {
     secureCodec = await invite.createCodec();
@@ -217,6 +217,7 @@ class RoomSession {
   /// Join an existing room as Client.
   Future<void> joinRoom({bool startAudio = true}) async {
     _isHost = false;
+    _admitted = false;
     _selfMemberId = 0;
     _members.clear();
 
@@ -251,7 +252,22 @@ class RoomSession {
   }
 
   /// Process incoming binary frames
-  Future<void> handleIncomingFrame(Frame frame) async {
+  Future<void> handleIncomingFrame(Frame frame) {
+    if (_closed) return Future.value();
+    if (secureCodec == null) return _handleIncomingFrame(frame);
+    // Keep async cryptography in wire order and bound unauthenticated work.
+    if (_pendingIncoming >= 256) return Future.value();
+    _pendingIncoming++;
+    final next = _incomingQueue
+        .then((_) async {
+          if (!_closed) await _handleIncomingFrame(frame);
+        })
+        .whenComplete(() => _pendingIncoming--);
+    _incomingQueue = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _handleIncomingFrame(Frame frame) async {
     if (frame.type == FrameType.sealed) {
       if (secureCodec == null) {
         AppLog.warn('RoomSession', '收到加密帧但未配置安全编解码器，已丢弃');
@@ -287,7 +303,26 @@ class RoomSession {
           frame.type == FrameType.chatSync;
       if (hostCommand && (_isHost || frame.senderId != 1)) return;
     }
+    if (roomInvite != null &&
+        !_isHost &&
+        !_admitted &&
+        frame.type != FrameType.admission) {
+      return;
+    }
     switch (frame.type) {
+      case FrameType.admission:
+        if (roomInvite != null &&
+            !_isHost &&
+            frame.senderId == 1 &&
+            frame.payload.length == 17 &&
+            frame.payload[0] >= 2 &&
+            frame.payload[0] <= 6 &&
+            _tokensEqual(frame.payload.sublist(1), sessionToken)) {
+          _admitted = true;
+          _selfMemberId = frame.payload[0];
+          transport?.updateSelfMemberId(_selfMemberId);
+        }
+        break;
       case FrameType.audio:
         _handleAudioFrame(frame);
         break;
@@ -423,6 +458,16 @@ class RoomSession {
     );
 
     _recordMemberIdentity(allocatedId, payload.nickname);
+    if (roomInvite != null) {
+      sendFrame(
+        Frame(
+          type: FrameType.admission,
+          senderId: 1,
+          seq: _nextSeq(),
+          payload: Uint8List.fromList([allocatedId, ...joinToken]),
+        ),
+      );
+    }
     _broadcastRoster();
     _notifyMembers();
     _syncChatHistoryTo(allocatedId);
@@ -442,12 +487,13 @@ class RoomSession {
         isMuted: rm.isMuted,
         isSpeaking: rm.isSpeaking,
       );
-      if (rm.nickname == selfNickname && !isHost) {
+      if (roomInvite == null && rm.nickname == selfNickname && !isHost) {
         _selfMemberId = rm.memberId;
         transport?.updateSelfMemberId(_selfMemberId);
       }
     }
 
+    if (roomInvite != null && !_members.containsKey(_selfMemberId)) return;
     if (_state != RoomState.inRoom) {
       _updateState(RoomState.inRoom);
     }
@@ -873,12 +919,23 @@ class RoomSession {
   /// Hook for network transmission
   void Function(Frame frame)? onSendFrame;
 
-  Future<void> sendFrame(Frame frame) async {
+  Future<void> sendFrame(Frame frame) {
+    if (_closed) return Future.value();
+    if (secureCodec == null) return _sendFrame(frame);
+    if (_pendingOutgoing >= 256) return Future.value();
+    _pendingOutgoing++;
+    final next = _outgoingQueue
+        .then((_) async {
+          if (!_closed) await _sendFrame(frame);
+        })
+        .whenComplete(() => _pendingOutgoing--);
+    _outgoingQueue = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _sendFrame(Frame frame) async {
     Frame outFrame = frame;
-    if (secureCodec != null &&
-        frame.type != FrameType.sealed &&
-        frame.type != FrameType.handshakeHello &&
-        frame.type != FrameType.handshakeConfirm) {
+    if (secureCodec != null) {
       try {
         outFrame = await secureCodec!.seal(frame);
       } catch (e) {
@@ -1307,6 +1364,7 @@ class RoomSession {
     await audioIo.stopPlayback();
     await audioIo.clearRemoteMembers();
     await transport?.stop();
+    _closed = true;
     secureCodec = null;
     roomInvite = null;
 

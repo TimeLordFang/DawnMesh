@@ -39,7 +39,7 @@ class MainActivity : FlutterActivity() {
                 val wanted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) listOf(
                     Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN,
                     Manifest.permission.BLUETOOTH_ADVERTISE,
-                ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                 val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
                 if (missing.isEmpty()) result.success(true) else {
                     permissionResult = result
@@ -126,6 +126,7 @@ class MainActivity : FlutterActivity() {
         } else {
             // Android 12 及以下，扫描 WiFi/蓝牙设备必须有精确位置权限。
             wanted += Manifest.permission.ACCESS_FINE_LOCATION
+            wanted += Manifest.permission.ACCESS_COARSE_LOCATION
         }
 
         val missing = wanted.filter {

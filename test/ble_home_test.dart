@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:sunset_ripple/core/security/room_invite.dart';
 import 'package:sunset_ripple/core/security/session_handshake.dart';
 import 'package:sunset_ripple/core/protocol/frame.dart';
@@ -39,6 +38,22 @@ void main() {
         final plain = await hostCodec.open(sealed);
         if (plain.type == FrameType.joinReq) {
           final join = JoinRequestPayload.decode(plain.payload)!;
+          final admission = await hostCodec.seal(
+            Frame(
+              type: FrameType.admission,
+              senderId: 1,
+              seq: 0,
+              payload: Uint8List.fromList([2, ...join.sessionToken]),
+            ),
+          );
+          await messenger.handlePlatformMessage(
+            'host.msknet.sunsetripple/ble_l2cap_data',
+            const StandardMethodCodec().encodeSuccessEnvelope({
+              'data': admission.encode(),
+              'peerAddress': 'host',
+            }),
+            (_) {},
+          );
           final response = await hostCodec.seal(
             Frame(
               type: FrameType.roster,

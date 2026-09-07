@@ -13,7 +13,8 @@ enum FrameType {
   sealed(0x0b),
   chat(0x0c),
   chatSync(0x0d),
-  chatDelete(0x0e);
+  chatDelete(0x0e),
+  admission(0x10);
 
   final int value;
   const FrameType(this.value);

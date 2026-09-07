@@ -204,7 +204,12 @@ class LanTransport implements RoomTransport {
       return false;
     }
 
-    AppLog.info(_tag, '房间已开启：控制 TCP $controlPort，语音 UDP $audioPort');
+    AppLog.info(
+      _tag,
+      controlOnly
+          ? '加密房间已开启：TCP $controlPort'
+          : '房间已开启：控制 TCP $controlPort，语音 UDP $audioPort',
+    );
     return true;
   }
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-flutter pub get
-flutter analyze
-flutter test --concurrency=1
+./scripts/flutter.sh pub get
+./scripts/flutter.sh analyze
+./scripts/flutter.sh test --concurrency=1
 if command -v clang++ >/dev/null; then
   dawnmesh_check_dir="$(mktemp -d)"
   trap 'rm -rf "$dawnmesh_check_dir"' EXIT

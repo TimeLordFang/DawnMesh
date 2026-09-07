@@ -34,6 +34,8 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="32"/>
 
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32"/>
+
     <!-- 蓝牙房：Android 12 之前的旧权限模型 -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"

@@ -259,6 +259,10 @@ class BleL2capPlugin(
         memberCount: Int,
         result: MethodChannel.Result,
     ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("UNSUPPORTED", "蓝牙对讲需要 Android 10 或更新版本", null)
+            return
+        }
         stopEverything()
         isHost = true
         advertisedRoomName = roomName
@@ -502,6 +506,10 @@ class BleL2capPlugin(
     }
 
     private fun connectL2cap(address: String, psm: Int, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("UNSUPPORTED", "蓝牙对讲需要 Android 10 或更新版本", null)
+            return
+        }
         val a = adapter ?: run {
             result.error("UNSUPPORTED", "没有蓝牙适配器", null)
             return
