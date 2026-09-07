@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.content.Context
 import android.net.wifi.WifiManager
 import io.flutter.embedding.android.FlutterActivity
@@ -29,6 +28,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        DebugLogBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         nicknamePreferences = NicknamePreferencesPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
@@ -81,9 +81,9 @@ class MainActivity : FlutterActivity() {
                 setReferenceCounted(true)
                 acquire()
             }
-            Log.i(TAG, "已成功获取 WiFi MulticastLock 组播锁")
+            DebugLogBridge.i(TAG, "已成功获取 WiFi MulticastLock 组播锁")
         } catch (e: Exception) {
-            Log.w(TAG, "获取 WiFi MulticastLock 失败", e)
+            DebugLogBridge.w(TAG, "获取 WiFi MulticastLock 失败", e)
         }
     }
 
@@ -107,8 +107,9 @@ class MainActivity : FlutterActivity() {
             }
             multicastLock = null
         } catch (e: Exception) {
-            Log.w(TAG, "释放 WiFi MulticastLock 失败", e)
+            DebugLogBridge.w(TAG, "释放 WiFi MulticastLock 失败", e)
         }
+        DebugLogBridge.detach()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -141,7 +142,7 @@ class MainActivity : FlutterActivity() {
 
         if (missing.isEmpty()) return
 
-        Log.i(TAG, "申请运行时权限：${missing.joinToString()}")
+        DebugLogBridge.i(TAG, "申请运行时权限：${missing.joinToString()}")
         permissionsInFlight = true
         requestPermissions(missing.toTypedArray(), REQUEST_CODE_RUNTIME_PERMISSIONS)
     }
@@ -160,7 +161,7 @@ class MainActivity : FlutterActivity() {
         permissions.forEachIndexed { index, permission ->
             val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
             if (!granted) {
-                Log.w(TAG, "权限被拒绝：$permission")
+                DebugLogBridge.w(TAG, "权限被拒绝：$permission")
             }
         }
     }

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T14:05:54" hostname="homemacmini.local" time="0.109">
+<testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T15:06:24" hostname="homemacmini.local" time="0.111">
   <properties/>
-  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.007"/>
-  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.102"/>
-  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.0"/>
+  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.004"/>
+  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.105"/>
+  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

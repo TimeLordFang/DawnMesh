@@ -1,10 +1,10 @@
-# 验证记录（2026-09-07）
+# 验证记录（2026-09-08）
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.6-release.apk`，**52,673,304 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.6` / versionCode **6**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`4ee0826d4b43244b11d5c266af94752ed6a79f3a7ecd08918c297af0ed172fcb`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.7-release.apk`，**53,247,568 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.7` / versionCode **7**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`c4be066a9d673dc7c1dffa3b5135d5b61afd4df8ae014ec9b9a72fe65fc55ff2`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
@@ -17,7 +17,7 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **156 项通过，0 失败** |
+| Flutter 全量测试（串行） | **160 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
 | `:app:testDebugUnitTest` | Kotlin **18 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
@@ -31,6 +31,14 @@
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。额外记录 GNU_RELRO：Flutter 引擎与本项目 C++ 具备该段；Flutter 3.29.3 生成的 `libapp.so` 没有该段。未对 Flutter 预编译运行时/AOT 生成器做进一步二进制加固审计。以上均为静态包检查，**没有据此声称已在 16 KB 手机运行通过**。
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
+
+## dev.7 本轮完成情况
+
+- 主页和房间页新增调试日志入口；记录默认关闭，用户开启后把状态持久化到 Android 私有设置，关闭时立即停止记录并清空内存。
+- 页面最多保留最近 400 条，支持 DEBUG/INFO/WARN/ERROR 筛选、关键字搜索、复制当前结果和手动清空；日志不写入文件，重启应用不恢复旧内容。
+- Android 原生音频、BLE、Wi-Fi Direct 和前台服务日志通过 EventChannel 进入同一页面。旧红米复测时可直接观察 Opus 编码超时、抖动缓冲、AudioTrack underrun 和 L2CAP 链路异常。
+- 复制日志会隐藏 IP、MAC 和长令牌；关闭记录后原生层也停止向 Logcat 和 Flutter 转发，减少常态性能及隐私开销。
+- 新增开关、持久化、内存清空、页面筛选和交互回归测试。本轮未改变邀请码、加密、发现和语音传输协议，可与 dev.6 互通并使用同一签名覆盖升级。
 
 ## dev.6 本轮完成情况
 
@@ -82,6 +90,7 @@
 14. 原始 BLE 广播多厂商段解析、段顺序变化、仅主包、非法 UTF-8/元数据与 Unicode 截断。
 15. 音频缓冲覆盖可靠流非音频序号间隔、欠载重缓冲、短句截止时间、蓝牙突发、上限丢旧及非可靠序号回绕。
 16. 新模式切换器覆盖 Wi-Fi/蓝牙交互、360×640 矮屏进出房转场、常见直板屏与 2 倍字号布局。
+17. 调试日志默认关闭、启停与关闭清空、私有设置持久化，以及页面显示、级别筛选和清空交互。
 
 ## 按约定由你执行
 

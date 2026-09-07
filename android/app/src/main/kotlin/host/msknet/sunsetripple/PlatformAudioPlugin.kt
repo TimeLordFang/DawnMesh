@@ -17,7 +17,6 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import host.msknet.sunsetripple.audio.JitterBuffer
 import host.msknet.sunsetripple.audio.OpusCodec
 import host.msknet.sunsetripple.audio.PollResult

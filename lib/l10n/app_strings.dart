@@ -64,6 +64,43 @@ class AppStrings {
   String get qualityFair => isEn ? 'Fair' : '一般';
   String get qualityPoor => isEn ? 'Poor' : '较差';
 
+  // Debug Logs
+  String get debugLogsTitle => isEn ? 'Debug logs' : '调试日志';
+  String get tooltipDebugLogs => isEn ? 'Open debug logs' : '查看调试日志';
+  String get debugLoggingSwitch => isEn ? 'Capture debug logs' : '记录调试日志';
+  String get debugLoggingEnabled => isEn ? 'On' : '已开启';
+  String get debugLoggingDisabled => isEn ? 'Off' : '已关闭';
+  String get debugLoggingDescription =>
+      isEn
+          ? 'Capture app, audio, Bluetooth and Wi-Fi Direct events on this device'
+          : '在本机记录应用、音频、蓝牙和 Wi-Fi Direct 事件';
+  String get debugLogDisabledHint =>
+      isEn
+          ? 'Turn logging on before reproducing a problem'
+          : '遇到问题前先开启，随后重新操作一次';
+  String get debugLogEmpty => isEn ? 'Waiting for logs' : '正在等待日志';
+  String get debugLogEmptyHint =>
+      isEn ? 'Use the app and new events will appear here' : '继续操作应用，新事件会显示在这里';
+  String get searchDebugLogs => isEn ? 'Search tag or message' : '搜索模块或日志内容';
+  String get clearSearch => isEn ? 'Clear search' : '清除搜索';
+  String get copyDebugLogs => isEn ? 'Copy visible logs' : '复制当前日志';
+  String get clearDebugLogs => isEn ? 'Clear logs' : '清空日志';
+  String get debugLogsCopied =>
+      isEn ? 'Logs copied with private addresses redacted' : '日志已复制，地址和长令牌已隐藏';
+  String get debugLogsCleared => isEn ? 'Logs cleared' : '日志已清空';
+  String get debugLogSaveFailed =>
+      isEn ? 'Could not save the logging setting' : '无法保存调试日志开关';
+  String get debugLogPrivacyNote =>
+      isEn
+          ? 'Logs stay in memory and are cleared when logging is turned off or the app exits. Review them before sharing.'
+          : '日志仅保存在内存中；关闭记录或退出应用后清空。对外发送前请检查内容。';
+  String get debugLogAll => isEn ? 'All' : '全部';
+  String get debugLogDebug => 'DEBUG';
+  String get debugLogInfo => 'INFO';
+  String get debugLogWarning => 'WARN';
+  String get debugLogError => 'ERROR';
+  String debugLogCount(int count) => isEn ? '$count entries' : '$count 条日志';
+
   // Host Election & Transfer
   String get transferHost => isEn ? 'Change host' : '更换房主';
   String get selectNewHost => isEn ? 'Who will take over?' : '交给谁来接着聊';

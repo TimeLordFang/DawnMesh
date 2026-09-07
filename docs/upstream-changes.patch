@@ -15,7 +15,7 @@
 +++ b/android/app/build.gradle.kts
 @@ -9,7 +9,7 @@
  }
- 
+
  // 发布签名从 android/key.properties 读取（该文件不入库）。格式：
 -//   storeFile=../keystore/sunsetripple.jks   # 相对 android/app/ 或绝对路径
 +//   storeFile=../keystore/dawnmesh.jks   # 相对 android/app/ 或绝对路径
@@ -24,7 +24,7 @@
  //   keyPassword=...
 @@ -22,10 +22,10 @@
  val hasReleaseSigning = keystorePropertiesFile.exists()
- 
+
  android {
 -    // 必须与线上已发布版本一致，否则装不上去覆盖升级。
 +    // 保留 Kotlin namespace；独立 applicationId 在 defaultConfig 中配置。
@@ -33,12 +33,12 @@
 -    ndkVersion = flutter.ndkVersion
 +    compileSdk = 35
 +    ndkVersion = "27.0.12077973"
- 
+
      compileOptions {
          sourceCompatibility = JavaVersion.VERSION_11
 @@ -37,16 +37,17 @@
      }
- 
+
      defaultConfig {
 -        applicationId = "host.msknet.sunsetripple"
 +        applicationId = "dev.dawnmesh.intercom"
@@ -48,7 +48,7 @@
 +        targetSdk = 35
          versionCode = flutter.versionCode
          versionName = flutter.versionName
- 
+
          externalNativeBuild {
              cmake {
                  cppFlags += "-std=c++17"
@@ -57,7 +57,7 @@
          }
          ndk {
 @@ -77,15 +78,8 @@
- 
+
      buildTypes {
          release {
 -            signingConfig = if (hasReleaseSigning) {
@@ -98,7 +98,7 @@
 @@ -1,6 +1,8 @@
  <manifest xmlns:android="http://schemas.android.com/apk/res/android"
      xmlns:tools="http://schemas.android.com/tools">
- 
+
 +    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 +
      <!-- 语音采集与通话音频路由 -->
@@ -107,14 +107,14 @@
 @@ -34,6 +36,8 @@
          android:name="android.permission.ACCESS_FINE_LOCATION"
          android:maxSdkVersion="32"/>
- 
+
 +    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32"/>
 +
      <!-- 蓝牙房：Android 12 之前的旧权限模型 -->
      <uses-permission
          android:name="android.permission.BLUETOOTH"
 @@ -66,6 +70,7 @@
- 
+
      <application
          android:label="@string/app_name"
 +        android:allowBackup="false"
@@ -136,7 +136,7 @@
              android:exported="false"
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/BleL2capPlugin.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BleL2capPlugin.kt
-@@ -14,6 +14,7 @@
+@@ -14,11 +14,11 @@
  import android.bluetooth.le.ScanSettings
  import android.content.Context
  import android.content.pm.PackageManager
@@ -144,7 +144,12 @@
  import android.os.Build
  import android.os.Handler
  import android.os.Looper
-@@ -39,7 +40,7 @@
+ import android.os.ParcelUuid
+-import android.util.Log
+ import io.flutter.plugin.common.BinaryMessenger
+ import io.flutter.plugin.common.EventChannel
+ import io.flutter.plugin.common.MethodCall
+@@ -39,7 +39,7 @@
   * 厂商自定义数据里；客户端扫描时读出来，再用它建立 L2CAP 通道。
   *
   * 广播预算（各 31 字节）：
@@ -153,7 +158,7 @@
   *   扫描响应 厂商数据 = 1+1+2(公司ID) + 2(PSM) + 1(人数) + 房名 UTF-8(≤24)
   *
   * L2CAP CoC 需要 API 29（Android 10）；低于此版本的设备开不了蓝牙房。
-@@ -91,6 +92,9 @@
+@@ -91,6 +91,9 @@
      private var acceptThread: Thread? = null
      private val accepting = AtomicBoolean(false)
      private var advertiseCallback: AdvertiseCallback? = null
@@ -163,16 +168,16 @@
      private var advertisedRoomName: String = ""
      private var advertisedPsm: Int = 0
      private var advertisedMemberCount: Int = 1
-@@ -160,7 +164,7 @@
+@@ -160,7 +163,7 @@
              }
- 
+
              "startScan" -> {
 -                val error = supportError()
 +                val error = supportError(scanning = true)
                  if (error != null) {
                      result.error("UNSUPPORTED", error, null)
                      return
-@@ -181,7 +185,7 @@
+@@ -181,7 +184,7 @@
                  }
                  val address = call.argument<String>("address")
                  val psm = call.argument<Int>("psm") ?: 0
@@ -181,10 +186,10 @@
                      result.error("BAD_ARGS", "connectL2cap 需要 address 与有效的 psm", null)
                      return
                  }
-@@ -197,6 +201,16 @@
+@@ -197,6 +200,16 @@
                  result.success(sendData(data, excludeAddress = null))
              }
- 
+
 +            "flush" -> {
 +                val pending = peers.values.map { it.flush() }.toTypedArray()
 +                java.util.concurrent.CompletableFuture.allOf(*pending).whenComplete { _, error ->
@@ -198,16 +203,16 @@
              "stop" -> {
                  stopEverything()
                  result.success(true)
-@@ -207,7 +221,7 @@
+@@ -207,7 +220,7 @@
      }
- 
+
      /** 返回 null 表示可用，否则是给用户看的原因。 */
 -    private fun supportError(): String? {
 +    private fun supportError(scanning: Boolean = false): String? {
          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
              return "蓝牙房需要 Android 10 及以上（L2CAP 通道）"
          }
-@@ -215,8 +229,15 @@
+@@ -215,8 +228,15 @@
              return "本机不支持低功耗蓝牙"
          }
          val a = adapter ?: return "本机没有蓝牙适配器"
@@ -224,8 +229,8 @@
 +        }
          return null
      }
- 
-@@ -238,6 +259,10 @@
+
+@@ -238,6 +258,10 @@
          memberCount: Int,
          result: MethodChannel.Result,
      ) {
@@ -236,10 +241,10 @@
          stopEverything()
          isHost = true
          advertisedRoomName = roomName
-@@ -271,25 +296,36 @@
+@@ -271,25 +295,36 @@
              return
          }
- 
+
 +        pendingAdvertisingResult = result
          val callback = object : AdvertiseCallback() {
              override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
@@ -252,7 +257,7 @@
 +                    pendingAdvertisingResult = null
 +                }
              }
- 
+
              override fun onStartFailure(errorCode: Int) {
 -                Log.e(TAG, "BLE 广播失败，errorCode=$errorCode")
                  mainHandler.post {
@@ -279,10 +284,10 @@
 +                stopEverything()
 +            }
 +        }, 8_000)
- 
+
          try {
              @Suppress("MissingPermission")
-@@ -301,8 +337,9 @@
+@@ -301,8 +336,9 @@
              )
          } catch (e: Exception) {
              Log.e(TAG, "startAdvertising 抛异常", e)
@@ -292,8 +297,8 @@
 -            result.error("ADVERTISE_FAILED", "蓝牙广播开启失败：${e.message}", null)
          }
      }
- 
-@@ -337,10 +374,16 @@
+
+@@ -337,10 +373,16 @@
              .setIncludeDeviceName(false) // 设备名会挤爆 31 字节预算
              .setIncludeTxPowerLevel(false)
              .addServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -304,17 +309,17 @@
 +                advertisedMemberCount.toByte(),
 +            ))
              .build()
- 
+
      private fun buildScanResponse(): AdvertiseData {
 -        val nameBytes = truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
 +        val nameBytes = BleRoomAdvertisement.truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
          val payload = ByteArray(3 + nameBytes.size)
          payload[0] = (advertisedPsm ushr 8).toByte()
          payload[1] = advertisedPsm.toByte()
-@@ -353,17 +396,6 @@
+@@ -353,17 +395,6 @@
              .build()
      }
- 
+
 -    /** 按 UTF-8 字节数截断，且不切断多字节字符（中文房名会踩到）。 */
 -    private fun truncateUtf8(text: String, maxBytes: Int): ByteArray {
 -        var candidate = text
@@ -329,22 +334,22 @@
      private fun acceptLoop(server: BluetoothServerSocket) {
          while (accepting.get()) {
              val socket = try {
-@@ -400,6 +432,7 @@
+@@ -400,6 +431,7 @@
              .build()
          val settings = ScanSettings.Builder()
              .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
 +            .setReportDelay(0)
              .build()
- 
+
          return try {
-@@ -428,24 +461,14 @@
+@@ -428,24 +460,14 @@
      private val scanCallback = object : ScanCallback() {
          override fun onScanResult(callbackType: Int, result: ScanResult?) {
              val record = result?.scanRecord ?: return
 -            val payload = record.getManufacturerSpecificData(MANUFACTURER_ID) ?: return
 -            if (payload.size < 3) return
 +            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
- 
+
 -            val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
 -            if (psm <= 0) return
 -            val memberCount = payload[2].toInt() and 0xFF
@@ -366,7 +371,7 @@
                  "rssi" to result.rssi,
              )
              mainHandler.post { scanSink?.success(info) }
-@@ -454,13 +477,17 @@
+@@ -454,13 +476,17 @@
          override fun onScanFailed(errorCode: Int) {
              Log.e(TAG, "BLE 扫描失败，errorCode=$errorCode")
              mainHandler.post {
@@ -377,7 +382,7 @@
 +            mainHandler.post { stopScan() }
          }
      }
- 
+
      private fun connectL2cap(address: String, psm: Int, result: MethodChannel.Result) {
 +        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
 +            result.error("UNSUPPORTED", "蓝牙对讲需要 Android 10 或更新版本", null)
@@ -386,10 +391,10 @@
          val a = adapter ?: run {
              result.error("UNSUPPORTED", "没有蓝牙适配器", null)
              return
-@@ -468,58 +495,75 @@
+@@ -468,58 +494,75 @@
          isHost = false
          stopScan()
- 
+
 -        // connect() 是阻塞调用，绝不能放在主线程。
 +        val generation = ++connectionGeneration
 +        val completed = AtomicBoolean(false)
@@ -448,9 +453,9 @@
 -        }, "sunset-ble-connect").start()
 +        }, "dawnmesh-ble-connect").start()
      }
- 
+
      // ------------------------------------------------------------ 链路与收发
- 
+
      private inner class PeerLink(val socket: BluetoothSocket, val address: String) {
          val alive = AtomicBoolean(true)
 -        private val writeLock = Any()
@@ -465,7 +470,7 @@
 +                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
 +            },
 +        )
- 
+
 -        fun write(data: ByteArray) {
 -            synchronized(writeLock) {
 -                if (!alive.get()) return
@@ -486,20 +491,20 @@
 +        fun flush() = writer.flush()
 +        fun close() { writer.close() }
      }
- 
+
      private fun registerPeer(socket: BluetoothSocket): PeerLink {
          val address = socket.remoteDevice?.address ?: "unknown"
          val link = PeerLink(socket, address)
          peers[address] = link
 -        Log.i(TAG, "蓝牙链路建立：$address")
 +        Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
- 
+
          Thread({ readLoop(link) }, "sunset-ble-read-$address").start()
          return link
-@@ -558,6 +602,11 @@
+@@ -558,6 +601,11 @@
                  payload.copyInto(full, FRAME_HEADER_SIZE)
              }
- 
+
 +            // Host-only roster, handover, snapshot and chat-history commands
 +            // must never be injected by an incoming client link.
 +            val type = header[0].toInt() and 0xFF
@@ -507,8 +512,8 @@
 +
              // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
              if (isHost) sendData(full, excludeAddress = link.address)
- 
-@@ -594,8 +643,7 @@
+
+@@ -594,8 +642,7 @@
              if (address == excludeAddress) continue
              if (!link.alive.get()) continue
              try {
@@ -518,18 +523,18 @@
              } catch (e: IOException) {
                  Log.w(TAG, "向 $address 发送失败，断开该链路", e)
                  removePeer(link)
-@@ -605,7 +653,7 @@
+@@ -605,7 +652,7 @@
      }
- 
+
      private fun removePeer(link: PeerLink) {
 -        peers.remove(link.address)
 +        peers.remove(link.address, link)
          link.close()
          if (hostLink === link) hostLink = null
      }
-@@ -613,6 +661,11 @@
+@@ -613,6 +660,11 @@
      // ---------------------------------------------------------------- 收尾
- 
+
      private fun stopEverything() {
 +        connectionGeneration++
 +        try { pendingConnectSocket?.close() } catch (_: IOException) {}
@@ -537,9 +542,9 @@
 +        pendingAdvertisingResult?.error("CANCELLED", "蓝牙房创建已取消", null)
 +        pendingAdvertisingResult = null
          stopScan()
- 
+
          accepting.set(false)
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/BleRoomAdvertisement.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BleRoomAdvertisement.kt
 @@ -0,0 +1,65 @@
 +package host.msknet.sunsetripple
@@ -607,7 +612,7 @@
 +        return text.substring(0, end).toByteArray(Charsets.UTF_8)
 +    }
 +}
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/BoundedFrameWriter.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BoundedFrameWriter.kt
 @@ -0,0 +1,102 @@
 +package host.msknet.sunsetripple
@@ -712,7 +717,7 @@
 +        }
 +    }
 +}
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/CallControlBridge.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/CallControlBridge.kt
 @@ -0,0 +1,58 @@
 +package host.msknet.sunsetripple
@@ -773,7 +778,7 @@
 +        context = null
 +    }
 +}
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/CallPanelGraphics.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/CallPanelGraphics.kt
 @@ -0,0 +1,205 @@
 +package host.msknet.sunsetripple
@@ -981,7 +986,91 @@
 +        canvas.drawText(when { muted -> "接收保持开启"; pressed -> "正在发送"; automatic -> "有声音时发送"; else -> "松开即可收听" }, cx, cy + 55 * density, paint)
 +    }
 +}
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/DebugLogBridge.kt
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/DebugLogBridge.kt
+@@ -0,0 +1,81 @@
++package host.msknet.sunsetripple
++
++import android.content.Context
++import android.os.Handler
++import android.os.Looper
++import android.util.Log as AndroidLog
++import io.flutter.plugin.common.BinaryMessenger
++import io.flutter.plugin.common.EventChannel
++
++/** Routes native diagnostics to the in-app log page only when the user enables it. */
++internal object DebugLogBridge : EventChannel.StreamHandler {
++    private const val CHANNEL = "dev.dawnmesh.intercom/debug_logs"
++    private const val PREFERENCES = "dawnmesh_profile"
++    private const val ENABLED_KEY = "debug_logging_enabled"
++
++    private val main = Handler(Looper.getMainLooper())
++    @Volatile private var enabled = false
++    @Volatile private var sink: EventChannel.EventSink? = null
++    private var channel: EventChannel? = null
++
++    fun attach(context: Context, messenger: BinaryMessenger) {
++        enabled = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
++            .getBoolean(ENABLED_KEY, false)
++        channel?.setStreamHandler(null)
++        channel = EventChannel(messenger, CHANNEL).also { it.setStreamHandler(this) }
++    }
++
++    fun detach() {
++        channel?.setStreamHandler(null)
++        channel = null
++        sink = null
++    }
++
++    fun setEnabled(value: Boolean) {
++        enabled = value
++    }
++
++    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
++        sink = events
++    }
++
++    override fun onCancel(arguments: Any?) {
++        sink = null
++    }
++
++    fun d(tag: String, message: String) = write("debug", tag, message)
++    fun i(tag: String, message: String) = write("info", tag, message)
++    fun w(tag: String, message: String, error: Throwable? = null) =
++        write("warn", tag, message, error)
++    fun e(tag: String, message: String, error: Throwable? = null) =
++        write("error", tag, message, error)
++
++    private fun write(level: String, tag: String, message: String, error: Throwable? = null) {
++        if (!enabled) return
++        when (level) {
++            "debug" -> AndroidLog.d(tag, message)
++            "info" -> AndroidLog.i(tag, message)
++            "warn" -> AndroidLog.w(tag, message, error)
++            else -> AndroidLog.e(tag, message, error)
++        }
++        val payload = mapOf(
++            "level" to level,
++            "tag" to tag,
++            "message" to message,
++            "error" to error?.let { "${it.javaClass.simpleName}: ${it.message.orEmpty()}" },
++        )
++        main.post {
++            if (enabled) sink?.success(payload)
++        }
++    }
++}
++
++/** Drop-in facade for existing native diagnostics. */
++internal object Log {
++    fun d(tag: String, message: String) = DebugLogBridge.d(tag, message)
++    fun i(tag: String, message: String) = DebugLogBridge.i(tag, message)
++    fun w(tag: String, message: String, error: Throwable? = null) =
++        DebugLogBridge.w(tag, message, error)
++    fun e(tag: String, message: String, error: Throwable? = null) =
++        DebugLogBridge.e(tag, message, error)
++}
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/HoldToTalkGesture.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/HoldToTalkGesture.kt
 @@ -0,0 +1,34 @@
 +package host.msknet.sunsetripple
@@ -1020,7 +1109,7 @@
 +}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt
-@@ -8,115 +8,121 @@
+@@ -8,115 +8,120 @@
  import android.content.Context
  import android.content.Intent
  import android.content.pm.ServiceInfo
@@ -1028,10 +1117,10 @@
  import android.os.Build
 +import android.os.Handler
  import android.os.IBinder
+-import android.util.Log
 +import android.os.Looper
 +import android.os.PowerManager
- import android.util.Log
- 
+
 -/**
 - * 通话期间的前台服务。
 - *
@@ -1050,7 +1139,7 @@
 +        private const val CHANNEL_ID = "dawnmesh_call_v2"
          private const val NOTIFICATION_ID = 4802
 +        @Volatile private var running = false
- 
+
 -        fun start(context: Context) {
 -            val intent = Intent(context, IntercomForegroundService::class.java)
 -            try {
@@ -1070,7 +1159,7 @@
 +            Log.e(TAG, "无法启动通话前台服务", e)
 +            false
          }
- 
+
          fun stop(context: Context) {
 -            try {
 -                context.stopService(Intent(context, IntercomForegroundService::class.java))
@@ -1109,7 +1198,7 @@
 +                .build()
          }
      }
- 
+
 +    private var cpuLock: PowerManager.WakeLock? = null
 +    private var wifiLock: WifiManager.WifiLock? = null
 +    private val handler = Handler(Looper.getMainLooper())
@@ -1122,7 +1211,7 @@
 +    }
 +
      override fun onBind(intent: Intent?): IBinder? = null
- 
+
      override fun onCreate() {
          super.onCreate()
 -        createChannel()
@@ -1134,7 +1223,7 @@
 +            setShowBadge(false)
 +        })
      }
- 
+
      override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
          try {
 -            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1170,7 +1259,7 @@
 -        // 通话是一次性的，被系统杀掉后不要自动重启一个空会话。
          return START_NOT_STICKY
      }
- 
+
 -    private fun createChannel() {
 -        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 -
@@ -1221,7 +1310,7 @@
 -            .build()
 -    }
  }
---- /dev/null
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/LockScreenTalkActivity.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/LockScreenTalkActivity.kt
 @@ -0,0 +1,310 @@
 +package host.msknet.sunsetripple
@@ -1536,18 +1625,23 @@
 +}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/MainActivity.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/MainActivity.kt
-@@ -9,6 +9,7 @@
+@@ -4,11 +4,11 @@
+ import android.content.pm.PackageManager
+ import android.os.Build
+ import android.os.Bundle
+-import android.util.Log
+ import android.content.Context
  import android.net.wifi.WifiManager
  import io.flutter.embedding.android.FlutterActivity
  import io.flutter.embedding.engine.FlutterEngine
 +import io.flutter.plugin.common.MethodChannel
- 
+
  class MainActivity : FlutterActivity() {
- 
-@@ -17,6 +18,10 @@
+
+@@ -17,6 +17,10 @@
          private const val REQUEST_CODE_RUNTIME_PERMISSIONS = 4801
      }
- 
+
 +    private var permissionChannel: MethodChannel? = null
 +    private var permissionResult: MethodChannel.Result? = null
 +    private var permissionsInFlight = false
@@ -1555,10 +1649,11 @@
      private var audioPlugin: PlatformAudioPlugin? = null
      private var blePlugin: BleL2capPlugin? = null
      private var wifiDirectPlugin: WifiDirectPlugin? = null
-@@ -24,6 +29,28 @@
- 
+@@ -24,6 +28,29 @@
+
      override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
          super.configureFlutterEngine(flutterEngine)
++        DebugLogBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 +        CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 +        nicknamePreferences = NicknamePreferencesPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 +        permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
@@ -1584,9 +1679,18 @@
          audioPlugin = PlatformAudioPlugin(
              applicationContext,
              flutterEngine.dartExecutor.binaryMessenger,
-@@ -61,6 +88,13 @@
+@@ -54,13 +81,20 @@
+                 setReferenceCounted(true)
+                 acquire()
+             }
+-            Log.i(TAG, "已成功获取 WiFi MulticastLock 组播锁")
++            DebugLogBridge.i(TAG, "已成功获取 WiFi MulticastLock 组播锁")
+         } catch (e: Exception) {
+-            Log.w(TAG, "获取 WiFi MulticastLock 失败", e)
++            DebugLogBridge.w(TAG, "获取 WiFi MulticastLock 失败", e)
+         }
      }
- 
+
      override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
 +        CallControlBridge.detach()
 +        nicknamePreferences?.dispose()
@@ -1598,35 +1702,54 @@
          audioPlugin?.dispose()
          audioPlugin = null
          blePlugin?.dispose()
-@@ -98,6 +132,7 @@
+@@ -73,8 +107,9 @@
+             }
+             multicastLock = null
+         } catch (e: Exception) {
+-            Log.w(TAG, "释放 WiFi MulticastLock 失败", e)
++            DebugLogBridge.w(TAG, "释放 WiFi MulticastLock 失败", e)
+         }
++        DebugLogBridge.detach()
+         super.cleanUpFlutterEngine(flutterEngine)
+     }
+
+@@ -98,6 +133,7 @@
          } else {
              // Android 12 及以下，扫描 WiFi/蓝牙设备必须有精确位置权限。
              wanted += Manifest.permission.ACCESS_FINE_LOCATION
 +            wanted += Manifest.permission.ACCESS_COARSE_LOCATION
          }
- 
+
          val missing = wanted.filter {
-@@ -107,6 +142,7 @@
+@@ -106,7 +142,8 @@
+
          if (missing.isEmpty()) return
- 
-         Log.i(TAG, "申请运行时权限：${missing.joinToString()}")
+
+-        Log.i(TAG, "申请运行时权限：${missing.joinToString()}")
++        DebugLogBridge.i(TAG, "申请运行时权限：${missing.joinToString()}")
 +        permissionsInFlight = true
          requestPermissions(missing.toTypedArray(), REQUEST_CODE_RUNTIME_PERMISSIONS)
      }
- 
-@@ -117,6 +153,9 @@
+
+@@ -117,11 +154,14 @@
      ) {
          super.onRequestPermissionsResult(requestCode, permissions, grantResults)
          if (requestCode != REQUEST_CODE_RUNTIME_PERMISSIONS) return
 +        permissionsInFlight = false
 +        permissionResult?.success(grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED })
 +        permissionResult = null
- 
+
          permissions.forEachIndexed { index, permission ->
              val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
---- /dev/null
+             if (!granted) {
+-                Log.w(TAG, "权限被拒绝：$permission")
++                DebugLogBridge.w(TAG, "权限被拒绝：$permission")
+             }
+         }
+     }
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/NicknamePreferencesPlugin.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/NicknamePreferencesPlugin.kt
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,65 @@
 +package host.msknet.sunsetripple
 +
 +import android.content.Context
@@ -1649,6 +1772,10 @@
 +                    val name = preferences.getString("nickname", null)
 +                    main.post { result.success(name) }
 +                }
++                "getDebugLoggingEnabled" -> worker.execute {
++                    val enabled = preferences.getBoolean("debug_logging_enabled", false)
++                    main.post { result.success(enabled) }
++                }
 +                "setNickname" -> {
 +                    val name = call.argument<String>("nickname")
 +                    if (name == null || name.toByteArray(Charsets.UTF_8).size > 256) {
@@ -1658,6 +1785,24 @@
 +                        main.post {
 +                            if (saved) result.success(null)
 +                            else result.error("SAVE_FAILED", "昵称未写入存储", null)
++                        }
++                    }
++                }
++                "setDebugLoggingEnabled" -> {
++                    val enabled = call.argument<Boolean>("enabled")
++                    if (enabled == null) {
++                        result.error("BAD_DEBUG_SETTING", "调试日志开关无效", null)
++                    } else worker.execute {
++                        val saved = preferences.edit()
++                            .putBoolean("debug_logging_enabled", enabled)
++                            .commit()
++                        main.post {
++                            if (saved) {
++                                DebugLogBridge.setEnabled(enabled)
++                                result.success(null)
++                            } else {
++                                result.error("SAVE_FAILED", "调试日志开关未写入存储", null)
++                            }
 +                        }
 +                    }
 +                }
@@ -1672,9 +1817,17 @@
 +}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt
-@@ -65,8 +65,8 @@
+@@ -17,7 +17,6 @@
+ import android.os.Build
+ import android.os.Handler
+ import android.os.Looper
+-import android.util.Log
+ import host.msknet.sunsetripple.audio.JitterBuffer
+ import host.msknet.sunsetripple.audio.OpusCodec
+ import host.msknet.sunsetripple.audio.PollResult
+@@ -65,8 +64,8 @@
      }
- 
+
      /** 一路远端音频流：抖动缓冲 + 它专属的解码器（Opus 解码器有状态，不能共用）。 */
 -    private class RemoteStream {
 -        val jitter = JitterBuffer()
@@ -1682,8 +1835,8 @@
 +        val jitter = JitterBuffer(prebufferFrames = if (bluetooth) 6 else 3, ordered = true)
          val codec = OpusCodec()
      }
- 
-@@ -146,6 +146,10 @@
+
+@@ -146,6 +145,10 @@
                      )
                      return
                  }
@@ -1692,34 +1845,34 @@
 +                    return
 +                }
                  currentBitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
- 
+
                  // AudioRecord / AudioTrack 的构造、AEC/NS/AGC 挂载、前台服务启动
-@@ -157,6 +161,7 @@
+@@ -157,6 +160,7 @@
                      val captureOk = playbackOk && startCapture()
                      // 收尾也在后台做：stopPlayback 会 join 播放线程。
                      if (playbackOk && !captureOk) stopPlayback()
 +                    if (!captureOk) IntercomForegroundService.stop(context)
- 
+
                      mainHandler.post {
                          when {
-@@ -256,7 +261,7 @@
+@@ -256,7 +260,7 @@
          }
- 
+
          val packet = data.copyOfRange(FRAME_HEADER_SIZE, FRAME_HEADER_SIZE + payloadLength)
 -        remotes.getOrPut(senderId) { RemoteStream() }.jitter.put(seq, packet)
 +        remotes.getOrPut(senderId) { RemoteStream(currentBitrate <= OpusCodec.BLUETOOTH_BITRATE) }.jitter.put(seq, packet)
      }
- 
+
      // ------------------------------------------------------------------ 采集
-@@ -323,12 +328,15 @@
+@@ -323,12 +327,15 @@
              start()
          }
- 
+
 -        IntercomForegroundService.start(context)
          Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${currentBitrate}bps）")
          return true
      }
- 
+
      private fun captureLoop(record: AudioRecord) {
 +        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
 +        var slowEncodes = 0
@@ -1728,18 +1881,18 @@
          val pcm = ShortArray(SAMPLES_PER_FRAME)
          var consecutiveErrors = 0
          var offset = 0
-@@ -371,6 +379,7 @@
- 
+@@ -371,6 +378,7 @@
+
              if (muted.get()) continue
- 
+
 +            val encodeStart = System.nanoTime()
              val level = rms(pcm)
              val packet = try {
                  uplinkCodec?.encode(pcm) ?: continue
-@@ -379,6 +388,12 @@
+@@ -379,6 +387,12 @@
                  continue
              }
- 
+
 +            if (System.nanoTime() - encodeStart > 20_000_000) slowEncodes++
 +            if (System.nanoTime() - lastReport > 10_000_000_000L) {
 +                if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
@@ -1749,7 +1902,7 @@
              val event = mapOf<String, Any>("data" to packet, "level" to level)
              mainHandler.post { eventSink?.success(event) }
          }
-@@ -518,11 +533,18 @@
+@@ -518,11 +532,18 @@
       * 没人说话时写静音帧，保持时钟连续，避免下次出声时的爆音与欠载。
       */
      private fun playbackLoop(track: AudioTrack) {
@@ -1759,7 +1912,7 @@
          val mix = IntArray(SAMPLES_PER_FRAME)
          val out = ShortArray(SAMPLES_PER_FRAME)
          var consecutiveErrors = 0
- 
+
          while (playing.get()) {
 +            if (System.nanoTime() - lastReport > 10_000_000_000L) {
 +                for ((id, stream) in remotes) Log.d(TAG, "音频缓冲 #$id: ${stream.jitter.diagnostics()}; trackUnderruns=${track.underrunCount}")
@@ -1767,13 +1920,28 @@
 +            }
              java.util.Arrays.fill(mix, 0)
              var contributors = 0
- 
+
+@@ -743,4 +764,4 @@
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/WifiDirectPlugin.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/WifiDirectPlugin.kt
-@@ -170,8 +170,32 @@
+@@ -11,7 +11,6 @@
+ import android.net.wifi.p2p.WifiP2pManager
+ import android.os.Build
+ import android.os.Looper
+-import android.util.Log
+ import io.flutter.plugin.common.BinaryMessenger
+ import io.flutter.plugin.common.EventChannel
+ import io.flutter.plugin.common.MethodCall
+@@ -170,8 +169,32 @@
          eventSink?.success(data)
      }
- 
+
 -    private fun createGroupInternal(result: MethodChannel.Result) {
 -        manager?.createGroup(channel, object : WifiP2pManager.ActionListener {
 +    private fun configuredGroup(
@@ -1805,7 +1973,7 @@
              override fun onSuccess() {
                  Log.i(TAG, "创建 Wi-Fi Direct 群组成功 (Group Owner)")
                  manager?.discoverPeers(channel, null)
-@@ -182,20 +206,30 @@
+@@ -182,20 +205,30 @@
                  Log.w(TAG, "创建 Wi-Fi Direct 群组失败: $reason")
                  if (reason == WifiP2pManager.BUSY) {
                      android.os.Handler(Looper.getMainLooper()).postDelayed({
@@ -1838,10 +2006,10 @@
 +            p2pManager.createGroup(p2pChannel, listener)
 +        }
      }
- 
+
      // MARK: - MethodChannel
-@@ -212,15 +246,23 @@
- 
+@@ -212,15 +245,23 @@
+
              "createGroup" -> {
                  Log.i(TAG, "收到 Flutter createGroup 请求, manager=$manager, channel=$channel")
 +                val config = configuredGroup(
@@ -1857,7 +2025,7 @@
 -                        createGroupInternal(result)
 +                        createGroupInternal(config, result)
                      }
- 
+
                      override fun onFailure(reason: Int) {
 -                        createGroupInternal(result)
 +                        createGroupInternal(config, result)
@@ -1865,10 +2033,10 @@
 -                }) ?: createGroupInternal(result)
 +                }) ?: createGroupInternal(config, result)
              }
- 
+
              "removeGroup" -> {
-@@ -266,14 +308,35 @@
- 
+@@ -266,14 +307,35 @@
+
              "connect" -> {
                  val address = call.argument<String>("deviceAddress")
 +                val networkName = call.argument<String>("networkName")
@@ -1877,7 +2045,7 @@
                      result.error("INVALID_ARGS", "缺少 deviceAddress 参数", null)
                      return
                  }
- 
+
 -                val config = WifiP2pConfig().apply {
 -                    deviceAddress = address
 -                    groupOwnerIntent = 0
@@ -1904,13 +2072,13 @@
 +                        groupOwnerIntent = 0
 +                    }
                  }
- 
+
                  manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/JitterBuffer.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/JitterBuffer.kt
 @@ -1,56 +1,65 @@
  package host.msknet.sunsetripple.audio
- 
+
 -/** 从抖动缓冲取一帧的结果。 */
  sealed class PollResult {
 -    /** 预缓冲未满或已欠载：这一拍不出声，不要用 PLC 硬补。 */
@@ -1922,7 +2090,7 @@
 -    /** 正常取到一个包。 */
      class Packet(val data: ByteArray) : PollResult()
  }
- 
+
 -/**
 - * 每路远端音频流一个实例。按 16 位回绕序号缓存 Opus 包：
 - * 乱序重排、丢包位置报 [PollResult.Lost]、攒满 [prebufferFrames] 帧才开始出帧以吸收网络抖动。
@@ -1954,7 +2122,7 @@
 +    private var lastArrivalAt = Long.MIN_VALUE
 +    private var underruns = 0
 +    private var dropped = 0
- 
+
      @Synchronized
      fun put(seq16: Int, payload: ByteArray) {
 -        val seq = unwrap(seq16)
@@ -1973,7 +2141,7 @@
 +        while (buf.size > maxBuffer) { buf.remove(buf.firstKey()); dropped++ }
 +        if (started && next < buf.firstKey() && buf.size == maxBuffer) next = buf.firstKey()
      }
- 
+
      @Synchronized
      fun poll(): PollResult {
 +        if (buf.isEmpty()) {
@@ -2002,7 +2170,7 @@
          next++
          return if (head == null) PollResult.Lost else PollResult.Packet(head)
 @@ -58,27 +67,19 @@
- 
+
      @Synchronized
      fun reset() {
 -        buf.clear()
@@ -2016,7 +2184,7 @@
 +    @Synchronized fun hasStarted(): Boolean = started
 +    @Synchronized fun pendingCount(): Int = buf.size
 +    @Synchronized fun diagnostics(): String = "queued=${buf.size}, target=$target, rebuffer=$underruns, dropped=$dropped"
- 
+
 -    @Synchronized
 -    fun hasStarted(): Boolean = started
 -
@@ -2043,7 +2211,7 @@
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/OpusCodec.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/OpusCodec.kt
 @@ -30,17 +30,24 @@
- 
+
      private val encoder = OpusEncoder(
          SAMPLE_RATE, 1, OpusApplication.OPUS_APPLICATION_VOIP
 -    ).also { it.bitrate = bitrateBps }
@@ -2052,24 +2220,24 @@
 +        // Concentus is JVM code: moderate complexity leaves headroom on older CPUs.
 +        it.complexity = 5
 +    }
- 
+
      private val decoder = OpusDecoder(SAMPLE_RATE, 1)
      private val encodeBuffer = ByteArray(MAX_PACKET_BYTES)
 +    private val decodeBuffer = ShortArray(FRAME_SAMPLES)
- 
+
 +    @Synchronized
      fun setBitrate(bitrateBps: Int) {
          require(bitrateBps in 6_000..64_000) { "码率超出 Opus 允许范围: $bitrateBps" }
          encoder.bitrate = bitrateBps
      }
- 
+
      /** 编码一帧（320 样本）PCM，返回 Opus 包。 */
 +    @Synchronized
      fun encode(pcm: ShortArray): ByteArray {
          val n = encoder.encode(pcm, 0, FRAME_SAMPLES, encodeBuffer, 0, encodeBuffer.size)
          return encodeBuffer.copyOf(n)
 @@ -48,7 +55,7 @@
- 
+
      /** 解码一个 Opus 包为一帧 PCM；传 null 触发丢包隐藏（PLC）补帧。 */
      fun decode(packet: ByteArray?): ShortArray {
 -        val out = ShortArray(FRAME_SAMPLES)
@@ -2094,7 +2262,7 @@
 -    <string name="app_name">SunsetRipple</string>
 +    <string name="app_name">DawnMesh</string>
  </resources>
---- /dev/null
+--- a/android/app/src/test/kotlin/host/msknet/sunsetripple/BleRoomAdvertisementTest.kt
 +++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/BleRoomAdvertisementTest.kt
 @@ -0,0 +1,38 @@
 +package host.msknet.sunsetripple
@@ -2135,7 +2303,7 @@
 +        assertEquals(text, String(BleRoomAdvertisement.truncateUtf8(text, 10), Charsets.UTF_8))
 +    }
 +}
---- /dev/null
+--- a/android/app/src/test/kotlin/host/msknet/sunsetripple/BoundedFrameWriterTest.kt
 +++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/BoundedFrameWriterTest.kt
 @@ -0,0 +1,53 @@
 +package host.msknet.sunsetripple
@@ -2191,7 +2359,7 @@
 +        } finally { writer.close() }
 +    }
 +}
---- /dev/null
+--- a/android/app/src/test/kotlin/host/msknet/sunsetripple/HoldToTalkGestureTest.kt
 +++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/HoldToTalkGestureTest.kt
 @@ -0,0 +1,53 @@
 +package host.msknet.sunsetripple
@@ -2247,7 +2415,7 @@
 +        assertEquals(emptyList<Boolean>(), states)
 +    }
 +}
---- /dev/null
+--- a/android/app/src/test/kotlin/host/msknet/sunsetripple/audio/JitterBufferTest.kt
 +++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/audio/JitterBufferTest.kt
 @@ -0,0 +1,57 @@
 +package host.msknet.sunsetripple.audio
@@ -2327,7 +2495,7 @@
 -distributionUrl=https\://services.gradle.org/distributions/gradle-8.9-all.zip
  distributionUrl=https\://services.gradle.org/distributions/gradle-8.12-all.zip
 +distributionSha256Sum=7ebdac923867a3cec0098302416d1e3c6c0c729fc4e2e05c10637a8af33a76c5
---- /dev/null
+--- a/android/key.properties.example
 +++ b/android/key.properties.example
 @@ -0,0 +1,5 @@
 +# storeFile relative to android/app; DO NOT COMMIT key.properties or keystore.
@@ -2346,7 +2514,7 @@
              maven { url = uri("https://maven.aliyun.com/repository/google") }
              maven { url = uri("https://maven.aliyun.com/repository/central") }
              maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
---- /dev/null
+--- a/lib/core/audio/voice_activity_gate.dart
 +++ b/lib/core/audio/voice_activity_gate.dart
 @@ -0,0 +1,39 @@
 +import 'dart:collection';
@@ -2388,7 +2556,76 @@
 +    isOpen = false;
 +  }
 +}
---- /dev/null
+--- a/lib/core/diagnostics/app_log.dart
++++ b/lib/core/diagnostics/app_log.dart
+@@ -26,7 +26,8 @@
+
+   @override
+   String toString() {
+-    final ts = '${time.hour.toString().padLeft(2, '0')}:'
++    final ts =
++        '${time.hour.toString().padLeft(2, '0')}:'
+         '${time.minute.toString().padLeft(2, '0')}:'
+         '${time.second.toString().padLeft(2, '0')}';
+     final suffix = error == null ? '' : ' <- $error';
+@@ -42,12 +43,16 @@
+ class AppLog {
+   AppLog._();
+
+-  static const int _maxRetained = 200;
++  static const int maxRetained = 400;
+
+   static final Queue<LogEntry> _retained = Queue<LogEntry>();
+   static final StreamController<LogEntry> _controller =
+       StreamController<LogEntry>.broadcast();
++  static bool _enabled = false;
+
++  /// 调试日志默认关闭；开启状态由 Android 私有设置在启动时恢复。
++  static bool get isEnabled => _enabled;
++
+   /// 全量日志流（诊断面板用）。
+   static Stream<LogEntry> get stream => _controller.stream;
+
+@@ -58,6 +63,12 @@
+   /// 最近的日志，新的在前。
+   static List<LogEntry> get recent => _retained.toList().reversed.toList();
+
++  static void setEnabled(bool enabled) {
++    if (_enabled == enabled) return;
++    _enabled = enabled;
++    if (!enabled) clear();
++  }
++
+   static void debug(String tag, String message) =>
+       _add(LogLevel.debug, tag, message, null);
+
+@@ -70,7 +81,16 @@
+   static void error(String tag, String message, [Object? error]) =>
+       _add(LogLevel.error, tag, message, error);
+
++  /// 接收 Android 原生音频、蓝牙和 Wi-Fi Direct 层转发的日志。
++  static void native(
++    LogLevel level,
++    String tag,
++    String message, [
++    Object? error,
++  ]) => _add(level, tag, message, error);
++
+   static void _add(LogLevel level, String tag, String message, Object? error) {
++    if (!_enabled) return;
+     final entry = LogEntry(
+       level: level,
+       tag: tag,
+@@ -79,7 +99,7 @@
+     );
+
+     _retained.addLast(entry);
+-    while (_retained.length > _maxRetained) {
++    while (_retained.length > maxRetained) {
+       _retained.removeFirst();
+     }
+
+--- a/lib/core/platform/background_call_controls.dart
 +++ b/lib/core/platform/background_call_controls.dart
 @@ -0,0 +1,47 @@
 +import 'package:flutter/services.dart';
@@ -2438,6 +2675,44 @@
 +    }
 +  }
 +}
+--- a/lib/core/platform/native_debug_log_channel.dart
++++ b/lib/core/platform/native_debug_log_channel.dart
+@@ -0,0 +1,35 @@
++import 'dart:async';
++
++import 'package:flutter/services.dart';
++
++import '../diagnostics/app_log.dart';
++
++/// 把 Android 原生音频、BLE 与 Wi-Fi Direct 诊断送进应用内日志总线。
++class NativeDebugLogChannel {
++  NativeDebugLogChannel._();
++
++  static const _events = EventChannel('dev.dawnmesh.intercom/debug_logs');
++  static StreamSubscription<dynamic>? _subscription;
++
++  static void start() {
++    _subscription ??= _events.receiveBroadcastStream().listen(
++      _handleEvent,
++      // 非 Android 平台或 widget tests 没有原生实现，静默忽略即可。
++      onError: (_) {},
++    );
++  }
++
++  static void _handleEvent(dynamic event) {
++    if (event is! Map) return;
++    final level = switch (event['level']) {
++      'debug' => LogLevel.debug,
++      'warn' => LogLevel.warn,
++      'error' => LogLevel.error,
++      _ => LogLevel.info,
++    };
++    final tag = event['tag'];
++    final message = event['message'];
++    if (tag is! String || message is! String) return;
++    AppLog.native(level, tag, message, event['error']);
++  }
++}
 --- a/lib/core/platform/platform_audio_channel.dart
 +++ b/lib/core/platform/platform_audio_channel.dart
 @@ -159,7 +159,7 @@
@@ -2449,7 +2724,44 @@
        case 'CAPTURE_FAILED':
          return '麦克风被其他应用占用，$what 失败';
        case 'PLAYBACK_FAILED':
---- /dev/null
+--- a/lib/core/preferences/debug_log_settings_store.dart
++++ b/lib/core/preferences/debug_log_settings_store.dart
+@@ -0,0 +1,34 @@
++import 'package:flutter/services.dart';
++
++import '../diagnostics/app_log.dart';
++
++/// 调试日志开关保存在 Android 应用私有设置中，不包含任何日志内容。
++class DebugLogSettingsStore {
++  static const channel = MethodChannel('dev.dawnmesh.intercom/preferences');
++
++  Future<bool> load() async {
++    try {
++      return await channel.invokeMethod<bool>('getDebugLoggingEnabled') ??
++          false;
++    } on MissingPluginException {
++      return false;
++    } on PlatformException {
++      return false;
++    }
++  }
++
++  Future<bool> save(bool enabled) async {
++    try {
++      await channel.invokeMethod<void>('setDebugLoggingEnabled', {
++        'enabled': enabled,
++      });
++      return true;
++    } on MissingPluginException {
++      // Widget tests and non-Android hosts have no private preference plugin.
++      return true;
++    } on PlatformException catch (error) {
++      AppLog.warn('设置', '调试日志开关保存失败', error);
++      return false;
++    }
++  }
++}
+--- a/lib/core/preferences/nickname_store.dart
 +++ b/lib/core/preferences/nickname_store.dart
 @@ -0,0 +1,27 @@
 +import 'package:flutter/services.dart';
@@ -2488,10 +2800,10 @@
 -  chatDelete(0x0e);
 +  chatDelete(0x0e),
 +  admission(0x10);
- 
+
    final int value;
    const FrameType(this.value);
---- /dev/null
+--- a/lib/core/security/room_admission.dart
 +++ b/lib/core/security/room_admission.dart
 @@ -0,0 +1,160 @@
 +import 'dart:convert';
@@ -2654,7 +2966,7 @@
 +  final DateTime created;
 +  _Pending(this.keys, this.created);
 +}
---- /dev/null
+--- a/lib/core/security/room_invite.dart
 +++ b/lib/core/security/room_invite.dart
 @@ -0,0 +1,44 @@
 +import 'dart:convert';
@@ -2717,11 +3029,11 @@
 +        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
 +        .join(':');
    }
- 
+
    /// 6 位安全短码：取 SHA-256 前 4 字节大端无符号整数模 1,000,000，分成三三两段（如 "123 456"）。
 @@ -67,10 +68,12 @@
      secureRandom.seed(KeyParameter(seed));
- 
+
      final keyGen = ECKeyGenerator();
 -    keyGen.init(ParametersWithRandom(
 -      ECKeyGeneratorParameters(_domainParams),
@@ -2733,13 +3045,13 @@
 +        secureRandom,
 +      ),
 +    );
- 
+
      final pair = keyGen.generateKeyPair();
      final priv = pair.privateKey as ECPrivateKey;
 @@ -96,10 +99,9 @@
      signer.init(true, PrivateKeyParameter(privateKey));
      final sig = signer.generateSignature(payload) as ECSignature;
- 
+
 -    final seq = ASN1Sequence(elements: [
 -      ASN1Integer(sig.r),
 -      ASN1Integer(sig.s),
@@ -2751,7 +3063,7 @@
    }
  }
 @@ -144,18 +146,23 @@
- 
+
  /// 基于 AES-256-GCM 的会话加密器。
  ///
 -/// 具备 12 字节 Nonce、128 位认证标签、65536 深度 Nonce 防重放窗口。
@@ -2763,7 +3075,7 @@
 -  static const int maxSeenNonces = 65536;
 +  static const int replayWindowSize = 1024;
 +  static const int maxSenderPrefixes = 128;
- 
+
    final crypt.SecretKey _secretKey;
 -  final crypt.AesGcm _aesGcm = crypt.AesGcm.with256bits(nonceLength: nonceBytes);
 -  final Set<String> _seenNonces = <String>{};
@@ -2777,9 +3089,9 @@
 +    List.generate(8, (_) => Random.secure().nextInt(256)),
 +  );
 +  int _nonceCounter = 0;
- 
+
    SessionCipher._(this._secretKey);
- 
+
 @@ -251,9 +258,9 @@
      Uint8List? associatedData,
    }) async {
@@ -2790,12 +3102,12 @@
 +    if (_nonceCounter > 0xffffffff) throw StateError('room key exhausted');
 +    nonce.setRange(0, 8, _noncePrefix);
 +    ByteData.sublistView(nonce).setUint32(8, _nonceCounter++, Endian.big);
- 
+
      final secretBox = await _aesGcm.encrypt(
        plaintext,
 @@ -263,7 +270,9 @@
      );
- 
+
      // secretBox.cipherText + secretBox.mac.bytes (16 bytes tag)
 -    final ciphertext = Uint8List(secretBox.cipherText.length + secretBox.mac.bytes.length);
 +    final ciphertext = Uint8List(
@@ -2816,7 +3128,7 @@
 +    if (_replayWindows[prefix]?.rejects(counter) ?? false) {
        throw StateError('replayed encrypted frame');
      }
- 
+
 -    _seenNonces.add(nonceId);
 -    _nonceOrder.addLast(nonceId);
 -    if (_nonceOrder.length > maxSeenNonces) {
@@ -2829,11 +3141,11 @@
 -      _nonceOrder.remove(nonceId);
        throw ArgumentError('ciphertext is shorter than authentication tag');
      }
- 
+
 @@ -314,13 +316,46 @@
          aad: associatedData ?? Uint8List(0),
        );
- 
+
 +      // Mutate replay state only after authentication. Never evict a sender:
 +      // evicting it would make old captured packets acceptable again.
 +      if (!_replayWindows.containsKey(prefix) &&
@@ -2852,7 +3164,7 @@
      }
    }
  }
- 
+
 +/// Records a bounded window without ever accepting counters older than it.
 +class _ReplayWindow {
 +  int highest = -1;
@@ -2881,7 +3193,7 @@
 +    }
 +  }
 +}
---- /dev/null
+--- a/lib/core/security/spake2.dart
 +++ b/lib/core/security/spake2.dart
 @@ -0,0 +1,152 @@
 +import 'dart:convert';
@@ -3061,13 +3373,13 @@
  import 'device_code.dart';
 @@ -21,6 +27,9 @@
  import 'reconnect_controller.dart';
- 
+
  enum RoomMode { wifiFullDuplex, bluetoothPtt }
 +
 +enum VoiceMode { pushToTalk, automatic }
 +
  enum RoomState { idle, connecting, inRoom, reconnecting, disconnected }
- 
+
  /// Full Feature-Parity Central Room Session Controller.
 @@ -47,17 +56,66 @@
    final String selfNickname;
@@ -3083,7 +3395,7 @@
 +  final _controlsController = StreamController<void>.broadcast();
 +  Stream<void> get controlsStream => _controlsController.stream;
 +  BackgroundCallControls? _backgroundControls;
- 
+
 -  /// 端到端 AES-GCM 安全信封编解码器。
 -  ///
 -  /// **默认为 null，即默认不加密。** 这是刻意的：已发布的 Kotlin 版 alpha.7
@@ -3137,7 +3449,7 @@
 +      },
 +    );
 +  }
- 
+
 +  // Leave room for the largest chat-history header when encryption is enabled.
 +  int get maxChatTextBytes => secureCodec == null ? 480 : 320;
 +
@@ -3145,7 +3457,7 @@
    bool _isHost = false;
    int _selfMemberId = 1;
 @@ -93,8 +151,12 @@
- 
+
    // 纯内存聊天状态
    final List<ChatMessage> _chatMessages = [];
 -  final _chatStreamController = StreamController<ChatMessage>.broadcast(sync: true);
@@ -3165,7 +3477,7 @@
    List<Member> get members => _members.values.toList();
 -  bool get isFullDuplex => mode == RoomMode.wifiFullDuplex;
 +  bool get isFullDuplex => _voiceMode == VoiceMode.automatic;
- 
+
    /// 会话令牌：进房时随机生成，同一台设备跨重连保持不变。
    /// 房主用它判定「老成员重连回来了」——昵称谁都可以填一样的，不能作为身份依据。
 @@ -174,6 +236,7 @@
@@ -3183,9 +3495,9 @@
 +    _admitted = false;
      _selfMemberId = 0;
      _members.clear();
- 
+
      _updateState(RoomState.connecting);
- 
+
 +    if (_admission != null) {
 +      _admission!.startClient();
 +    } else {
@@ -3209,7 +3521,7 @@
 -    _startHeartbeat();
 +    await sendFrame(joinFrame);
    }
- 
+
    /// 打开麦克风与扬声器。可重复调用，只生效一次。
 @@ -229,13 +300,61 @@
    /// 如果压在 560ms 的进房转场里，UI 线程和平台线程互相抢，动画必然掉帧。
@@ -3240,7 +3552,7 @@
 +    }
      await _startAudioPipeline();
    }
- 
+
    /// Process incoming binary frames
 -  Future<void> handleIncomingFrame(Frame frame) async {
 +  Future<void> handleIncomingFrame(Frame frame) {
@@ -3291,7 +3603,7 @@
        }
        return;
      }
- 
+
 +    if (secureCodec != null) {
 +      AppLog.warn('RoomSession', '已启用加密，拒绝未密封的入站帧');
 +      return;
@@ -3337,7 +3649,7 @@
    void _expireSpeakingStates() {
 -    if (!isFullDuplex) return; // PTT 模式由 pttState 帧驱动，不能靠音频超时
 +    // Peers choose their own transmit mode, so every receiver expires silence.
- 
+
      final now = DateTime.now();
      var changed = false;
 @@ -348,7 +507,9 @@
@@ -3353,7 +3665,7 @@
          }
 @@ -384,6 +545,16 @@
      );
- 
+
      _recordMemberIdentity(allocatedId, payload.nickname);
 +    if (roomInvite != null) {
 +      sendFrame(
@@ -3378,14 +3690,14 @@
          transport?.updateSelfMemberId(_selfMemberId);
        }
      }
- 
+
 +    if (roomInvite != null && !_members.containsKey(_selfMemberId)) return;
      if (_state != RoomState.inRoom) {
        _updateState(RoomState.inRoom);
      }
 @@ -487,8 +659,9 @@
    }
- 
+
    bool _isPlanFresh(HostTransferPlan plan) {
 -    final maxOrder =
 -        plan.members.map((m) => m.joinOrder).reduce((a, b) => a > b ? a : b);
@@ -3397,7 +3709,7 @@
      return true;
 @@ -499,9 +672,9 @@
      if (_isHost || _transferInProgress || _state != RoomState.inRoom) return;
- 
+
      final currentHost = _members.values.cast<Member?>().firstWhere(
 -          (m) => m?.isHost == true,
 -          orElse: () => null,
@@ -3405,7 +3717,7 @@
 +      (m) => m?.isHost == true,
 +      orElse: () => null,
 +    );
- 
+
      // 如果刚进房间名单里还没标出房主，先等待名单帧，不误判失联
      if (currentHost == null) return;
 @@ -601,12 +774,14 @@
@@ -3427,7 +3739,7 @@
 +        ),
 +      );
      }
- 
+
      if (candidates.isEmpty) return null;
 @@ -616,14 +791,17 @@
      try {
@@ -3457,7 +3769,7 @@
        AppLog.error('RoomSession', '交接计划校验未通过', e);
 @@ -640,12 +818,14 @@
      if (plan == null) return;
- 
+
      _cachedPlan = plan;
 -    await sendFrame(Frame(
 -      type: FrameType.hostAnnounce,
@@ -3474,12 +3786,12 @@
 +      ),
 +    );
    }
- 
+
    void _broadcastRoster() {
 @@ -654,15 +834,23 @@
      // 名单变了，传输层的 UDP 白名单也要跟着变：端点注册只认在册成员号。
      _syncKnownMembersToTransport();
- 
+
 -    final rosterMembers = _members.values.map((m) {
 -      int flags = 0;
 -      if (m.isHost) flags |= 0x01;
@@ -3499,7 +3811,7 @@
 +            nickname: m.nickname,
 +          );
 +        }).toList();
- 
+
 -    final payload = RosterPayload(hostId: _selfMemberId, members: rosterMembers);
 +    final payload = RosterPayload(
 +      hostId: _selfMemberId,
@@ -3513,7 +3825,7 @@
      await audioIo.stopCapture();
      await audioIo.clearRemoteMembers();
 +    if (!_audioStarted || _closed) return;
- 
+
 -    await audioIo.startCapture(
 -      (opusPacket, level) {
 -        // 全双工：没静音就一直发；PTT：还要按住才发。
@@ -3551,7 +3863,7 @@
 +      await audioIo.stopPlayback();
 +      return;
 +    }
- 
+
 -        if (!_waveController.isClosed) {
 -          final nowMs = DateTime.now().millisecondsSinceEpoch;
 -          if (nowMs - _lastWaveUiEmitMs >= 33) {
@@ -3593,10 +3905,10 @@
 +            .map((m) => m.memberId)
 +            .toList();
      if (stale.isEmpty) return;
- 
+
      for (final id in stale) {
 @@ -770,7 +967,9 @@
- 
+
    /// PTT 按住/松开切换。
    void setPtt(bool isPressed) {
 +    if (isPressed && (isFullDuplex || isMuted || _closed)) return;
@@ -3620,7 +3932,7 @@
 @@ -817,16 +1021,30 @@
    /// Hook for network transmission
    void Function(Frame frame)? onSendFrame;
- 
+
 -  Future<void> sendFrame(Frame frame) async {
 +  Future<void> sendFrame(Frame frame) {
 +    if (_closed || (roomInvite != null && secureCodec == null)) {
@@ -3654,7 +3966,7 @@
      }
      onSendFrame?.call(outFrame);
 @@ -847,19 +1065,18 @@
- 
+
      final plan = _buildTransferPlan(preferredSuccessorId: targetMemberId);
      if (plan == null) {
 -      AppLog.error(
@@ -3664,7 +3976,7 @@
 +      AppLog.error('RoomSession', '还不知道「${target.nickname}」的连接地址，等对方说过话后再试');
        return;
      }
- 
+
 -    await sendFrame(Frame(
 -      type: FrameType.hostHandover,
 -      senderId: _selfMemberId,
@@ -3680,7 +3992,7 @@
 +      ),
 +    );
      AppLog.info('RoomSession', '把房主转移给「${target.nickname}」');
- 
+
      // 留一点时间让交接帧真的发出去，再自己降为普通成员重连过去。
 @@ -895,9 +1112,14 @@
      }
@@ -3691,7 +4003,7 @@
 +        'Chat message text cannot be empty or whitespace-only.',
 +      );
      }
- 
+
 +    if (utf8.encode(trimmed).length > maxChatTextBytes) {
 +      throw ArgumentError('消息最多 $maxChatTextBytes UTF-8 字节。');
 +    }
@@ -3699,14 +4011,14 @@
      final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
      final code = DeviceCode.toNumeric(rawCode);
 @@ -929,7 +1151,8 @@
- 
+
      // 本地立即追加一条 isLocal = true 消息
      _recordMemberIdentity(_selfMemberId, fullNickname);
 -    final cleanNickname = _currentNicknameByCode[code] ?? DeviceCode.split(fullNickname).$1;
 +    final cleanNickname =
 +        _currentNicknameByCode[code] ?? DeviceCode.split(fullNickname).$1;
      final prevNick = _previousNicknamesByCode[code]?.join('、');
- 
+
      final localMsg = ChatMessage(
 @@ -976,16 +1199,19 @@
      // 5. 身份与曾用名关联
@@ -3721,7 +4033,7 @@
 +            : (split.$2 ?? 'M${frame.senderId}');
      final cleanNickname = _currentNicknameByCode[senderCode] ?? split.$1;
      final prevNick = _previousNicknamesByCode[senderCode]?.join('、');
- 
+
 -    final timestamp = payload.timestampMs != 0
 -        ? DateTime.fromMillisecondsSinceEpoch(payload.timestampMs)
 -        : DateTime.now();
@@ -3732,33 +4044,33 @@
 +            : DateTime.now();
 +    final messageId =
 +        '${senderCode}_${timestamp.millisecondsSinceEpoch}_${frame.seq}';
- 
+
      // 6. 组装并追加消息
      final msg = ChatMessage(
 @@ -1041,7 +1267,8 @@
      }
- 
+
      // 仅接收定向发给本机或广播的历史同步帧
 -    if (payload.targetMemberId != 0 && payload.targetMemberId != _selfMemberId) {
 +    if (payload.targetMemberId != 0 &&
 +        payload.targetMemberId != _selfMemberId) {
        return;
      }
- 
+
 @@ -1051,7 +1278,8 @@
      }
- 
+
      _recordMemberIdentity(payload.senderId, payload.nickname);
 -    final cleanNick = _currentNicknameByCode[payload.senderCode] ?? payload.nickname;
 +    final cleanNick =
 +        _currentNicknameByCode[payload.senderCode] ?? payload.nickname;
      final prevNick = _previousNicknamesByCode[payload.senderCode]?.join('、');
- 
+
      final msg = ChatMessage(
 @@ -1086,7 +1314,9 @@
      if (idx == -1) return;
      final target = _chatMessages[idx];
- 
+
 -    final myCode = DeviceCode.toNumeric(DeviceCode.split(selfNickname).$2 ?? DeviceCode.current);
 +    final myCode = DeviceCode.toNumeric(
 +      DeviceCode.split(selfNickname).$2 ?? DeviceCode.current,
@@ -3769,13 +4081,13 @@
 @@ -1116,7 +1346,9 @@
      final payload = ChatDeletePayload.decode(frame.payload);
      if (payload == null) return;
- 
+
 -    final idx = _chatMessages.indexWhere((m) => m.messageId == payload.messageId);
 +    final idx = _chatMessages.indexWhere(
 +      (m) => m.messageId == payload.messageId,
 +    );
      if (idx == -1) return;
- 
+
      final target = _chatMessages[idx];
 @@ -1153,7 +1385,9 @@
      if (_currentNicknameByCode.containsKey(code)) {
@@ -3790,7 +4102,7 @@
          bool changed = false;
 @@ -1209,6 +1443,11 @@
    }
- 
+
    Future<void> leave() async {
 +    _audioStarted = false;
 +    isPttPressed = false;
@@ -3809,7 +4121,7 @@
 +    _admission = null;
 +    secureCodec = null;
 +    roomInvite = null;
- 
+
      _members.clear();
      _lastAudioAt.clear();
 @@ -1281,8 +1525,15 @@
@@ -3834,9 +4146,9 @@
 @@ -1,4 +1,5 @@
  import 'dart:async';
 +import 'dart:io';
- 
+
  import 'package:flutter/services.dart';
- 
+
 @@ -43,12 +44,15 @@
  /// 星型拓扑的帧转发在原生侧完成（房主把一个成员的帧转给其余成员），
  /// 这里只负责收发。
@@ -3856,13 +4168,13 @@
 +  static const EventChannel _scanChannel = EventChannel(
 +    'host.msknet.sunsetripple/ble_l2cap_scan',
 +  );
- 
+
    /// 扫描结果多久没再出现就认为房间已经消失。
    static const Duration _roomTtl = Duration(seconds: 6);
 @@ -79,6 +83,25 @@
    BleRole get role => _role;
    bool get isHost => _role == BleRole.hostPeripheral;
- 
+
 +  Future<bool> _ensurePermissions() async {
 +    if (!Platform.isAndroid) return true;
 +    try {
@@ -3895,11 +4207,11 @@
      _listenIncomingData();
 @@ -137,6 +161,7 @@
    // ---------------------------------------------------------------- 客户端
- 
+
    Future<bool> startScan() async {
 +    if (!await _ensurePermissions()) return false;
      _listenScanResults();
- 
+
      try {
 @@ -164,6 +189,8 @@
      _pruneTimer = null;
@@ -3912,7 +4224,7 @@
      } catch (e) {
 @@ -172,6 +199,7 @@
    }
- 
+
    Future<bool> connectToHost(DiscoveredBleRoom room) async {
 +    if (!await _ensurePermissions()) return false;
      _role = BleRole.clientCentral;
@@ -3921,7 +4233,7 @@
 @@ -209,16 +237,16 @@
        return;
      }
- 
+
 -    _channel.invokeMethod('sendL2capData', {
 -      'data': frame.encode(),
 -    }).catchError((Object e) {
@@ -3943,17 +4255,17 @@
 +      },
 +    );
    }
- 
+
    /// 转发在原生侧按链路地址完成，不需要成员号映射。
 @@ -227,11 +255,20 @@
- 
+
    /// 蓝牙按链路寻址，没有 UDP 那种自报成员号的白名单需求。
    @override
 -  void updateKnownMemberIds(Set<int> ids) {}
 +  void updateKnownMemberIds(Set<int> ids) {
 +    if (isHost) unawaited(updateMemberCount(ids.length));
 +  }
- 
+
    /// BLE 帧经 invokeMethod 同步过桥，没有可刷写的本地缓冲。
    @override
 -  Future<void> flush() async {}
@@ -3965,11 +4277,11 @@
 +      AppLog.debug(_tag, '蓝牙发送队列清理失败：$e');
 +    }
 +  }
- 
+
    /// 蓝牙房不支持房主转移。
    ///
 @@ -285,41 +322,43 @@
- 
+
    void _listenIncomingData() {
      _dataSubscription?.cancel();
 -    _dataSubscription = _dataChannel.receiveBroadcastStream().listen(
@@ -3991,7 +4303,7 @@
 +      final data = event['data'] as Uint8List?;
 +      final peerAddress = event['peerAddress'] as String? ?? 'unknown';
 +      if (data == null) return;
- 
+
 -        // 原生侧已经按帧头补齐成整帧了，这里直接解码即可。
 -        final frame = Frame.decode(data);
 -        if (frame == null) {
@@ -4011,19 +4323,19 @@
 +      if (!_incoming.isClosed) _incoming.add(frame);
 +    }, onError: (Object e) => AppLog.error(_tag, '蓝牙数据通道中断', e));
    }
- 
+
    void _listenScanResults() {
 -    _scanSubscription?.cancel();
 +    if (_scanSubscription != null) return;
      _scanSubscription = _scanChannel.receiveBroadcastStream().listen(
        (dynamic event) {
          if (event is! Map) return;
- 
+
          final address = event['address'] as String?;
          final psm = event['psm'] as int?;
 -        if (address == null || psm == null || psm <= 0) return;
 +        if (address == null || psm == null || psm < 1 || psm > 255) return;
- 
+
          _rooms[address] = DiscoveredBleRoom(
            address: address,
 -          roomName: event['roomName'] as String? ?? '蓝牙房',
@@ -4045,7 +4357,7 @@
 +      },
      );
    }
- 
+
 --- a/lib/core/transport/lan_transport.dart
 +++ b/lib/core/transport/lan_transport.dart
 @@ -34,10 +34,7 @@
@@ -4070,10 +4382,10 @@
 +  LanTransport({this.controlOnly = false});
    static const int controlPort = 8988;
    static const int audioPort = 8989;
- 
+
 @@ -107,16 +108,20 @@
    bool get isHost => _role == TransportRole.host;
- 
+
    @override
 -  int get peerCount => _role == TransportRole.host
 -      ? _clientLabels.length
@@ -4082,7 +4394,7 @@
 +      _role == TransportRole.host
 +          ? _clientLabels.length
 +          : (_hostSocket == null ? 0 : 1);
- 
+
    /// 成员号是房主通过名单帧分配的，拿到后要同步进来，
    /// 否则房主无法把语音端点和成员对应起来。
    @override
@@ -4098,11 +4410,11 @@
            type: FrameType.heartbeat,
 @@ -136,15 +141,15 @@
    }
- 
+
    @override
 -  bool get supportsHostTransfer => true;
 +  bool get supportsHostTransfer => !controlOnly;
- 
+
    /// 已知成员的 IP。来自各自 UDP 语音包的源地址——能发语音就说明这条路通，
    /// 正好是交接后重连要用的端点。
    @override
@@ -4113,19 +4425,19 @@
 +    for (final entry in _audioEndpoints.entries)
 +      entry.key: entry.value.address.address,
 +  };
- 
+
    @override
    Future<bool> becomeHost() async {
 @@ -194,12 +199,17 @@
        onError: (Object e) => AppLog.error(_tag, '监听连接时出错', e),
      );
- 
+
 -    if (!await _bindUdp(audioPort)) {
 +    if (!controlOnly && !await _bindUdp(audioPort)) {
        await stop();
        return false;
      }
- 
+
 -    AppLog.info(_tag, '房间已开启：控制 TCP $controlPort，语音 UDP $audioPort');
 +    AppLog.info(
 +      _tag,
@@ -4135,11 +4447,11 @@
 +    );
      return true;
    }
- 
+
 @@ -213,6 +223,7 @@
        return;
      }
- 
+
 +    socket.setOption(SocketOption.tcpNoDelay, true);
      final accumulator = _FrameAccumulator();
      _clientLabels[socket] = label;
@@ -4172,21 +4484,21 @@
        _role = TransportRole.idle;
        return false;
      }
- 
+
 +    _hostSocket!.setOption(SocketOption.tcpNoDelay, true);
      final accumulator = _FrameAccumulator();
      _hostSocket!.listen(
        (chunk) {
 @@ -291,12 +314,12 @@
      );
- 
+
      // 语音用临时端口，房主从数据包的源地址学习端点。
 -    if (!await _bindUdp(0)) {
 +    if (!controlOnly && !await _bindUdp(0)) {
        await stop();
        return false;
      }
- 
+
 -    _startUdpKeepalive();
 +    if (!controlOnly) _startUdpKeepalive();
      _notifyPeerCount();
@@ -4195,7 +4507,7 @@
 @@ -349,9 +372,15 @@
        return;
      }
- 
+
 +    if (frame.type != FrameType.audio && frame.type != FrameType.heartbeat) {
 +      return;
 +    }
@@ -4212,7 +4524,7 @@
 @@ -374,8 +403,10 @@
          return;
        }
- 
+
 -      _audioEndpoints[frame.senderId] =
 -          _Endpoint(datagram.address, datagram.port);
 +      _audioEndpoints[frame.senderId] = _Endpoint(
@@ -4221,8 +4533,8 @@
 +      );
        // 报到心跳只用来登记端点，控制面已经有一份了。
        if (frame.type == FrameType.heartbeat) return;
- 
---- /dev/null
+
+--- a/lib/core/transport/wifi_direct_credentials.dart
 +++ b/lib/core/transport/wifi_direct_credentials.dart
 @@ -0,0 +1,37 @@
 +import 'dart:convert';
@@ -4269,11 +4581,11 @@
  import 'package:flutter/services.dart';
  import '../diagnostics/app_log.dart';
 +import 'wifi_direct_credentials.dart';
- 
+
  const String _tag = 'WiFiDirect';
- 
+
 @@ -52,17 +53,23 @@
- 
+
  /// Wi-Fi Direct (Wi-Fi P2P) 近场直连管理器。
  class WifiDirectManager {
 -  static const MethodChannel _channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
@@ -4284,22 +4596,22 @@
 +  static const EventChannel _eventChannel = EventChannel(
 +    'host.msknet.sunsetripple/wifi_direct_events',
 +  );
- 
+
    static final WifiDirectManager instance = WifiDirectManager._internal();
- 
+
    StreamSubscription? _eventSubscription;
    final _peersController = StreamController<List<WifiP2pPeer>>.broadcast();
 -  final _connectionController = StreamController<WifiP2pConnectionInfo>.broadcast();
 +  final _connectionController =
 +      StreamController<WifiP2pConnectionInfo>.broadcast();
- 
+
    Stream<List<WifiP2pPeer>> get peersStream => _peersController.stream;
 -  Stream<WifiP2pConnectionInfo> get connectionStream => _connectionController.stream;
 +  Stream<WifiP2pConnectionInfo> get connectionStream =>
 +      _connectionController.stream;
- 
+
    bool _isListening = false;
- 
+
 @@ -99,13 +106,15 @@
            if (event is! Map) return;
            final type = event['type'] as String?;
@@ -4322,7 +4634,7 @@
 @@ -128,11 +137,16 @@
      }
    }
- 
+
 -  Future<bool> createGroup() async {
 +  Future<bool> createGroup(WifiDirectCredentials credentials) async {
      if (!await isSupported()) return false;
@@ -4341,7 +4653,7 @@
 @@ -162,11 +176,19 @@
      }
    }
- 
+
 -  Future<bool> connect(String deviceAddress) async {
 +  Future<bool> connect(
 +    String deviceAddress,
@@ -4373,7 +4685,7 @@
        AppLog.error(_tag, '发起 Wi-Fi Direct 直连请求失败');
        return null;
 @@ -190,7 +213,9 @@
- 
+
      try {
        final info = await connectionStream
 -          .firstWhere((info) => info.isConnected && info.groupOwnerAddress.isNotEmpty)
@@ -4384,7 +4696,7 @@
        AppLog.info(_tag, 'Wi-Fi Direct 直连链路已就绪 (GO=${info.groupOwnerAddress})');
        return info;
 @@ -213,7 +238,9 @@
- 
+
    Future<WifiP2pConnectionInfo> getConnectionInfo() async {
      try {
 -      final res = await _channel.invokeMapMethod<String, dynamic>('getConnectionInfo');
@@ -4407,7 +4719,7 @@
 @@ -83,12 +79,7 @@
      final minor = segments.length > 1 ? (int.tryParse(segments[1]) ?? 0) : 0;
      final patch = segments.length > 2 ? (int.tryParse(segments[2]) ?? 0) : 0;
- 
+
 -    return SemVer(
 -      major: major,
 -      minor: minor,
@@ -4416,12 +4728,12 @@
 -    );
 +    return SemVer(major: major, minor: minor, patch: patch, preRelease: pre);
    }
- 
+
    @override
 @@ -103,9 +94,10 @@
      if (preRelease.isNotEmpty && other.preRelease.isEmpty) return -1;
      if (preRelease.isEmpty && other.preRelease.isEmpty) return 0;
- 
+
 -    final maxLen = preRelease.length > other.preRelease.length
 -        ? preRelease.length
 -        : other.preRelease.length;
@@ -4429,18 +4741,18 @@
 +        preRelease.length > other.preRelease.length
 +            ? preRelease.length
 +            : other.preRelease.length;
- 
+
      for (int i = 0; i < maxLen; i++) {
        if (i >= preRelease.length) return -1; // 标识更短的优先级更低
 @@ -135,45 +127,10 @@
  }
- 
+
  class UpdateService {
 -  static const String currentVersion = '0.1.0-alpha.10';
 -  static const String latestReleaseUrl =
 -      'https://api.github.com/repos/Starlordzz/sunsetripple/releases/latest';
-+  static const String currentVersion = '0.1.0-dev.6';
- 
++  static const String currentVersion = '0.1.0-dev.7';
+
    Future<UpdateState> checkUpdate() async {
 -    final client = HttpClient();
 -    client.connectionTimeout = const Duration(seconds: 10);
@@ -4478,20 +4790,20 @@
 -    }
 +    return const UpdateFailed('DawnMesh 独立开发版，请使用自己编译并签名的 APK 更新。');
    }
- 
+
    /// 真正的语义版本比较：只有 remote 严格大于 current 时才返回 true
 --- a/lib/l10n/app_strings.dart
 +++ b/lib/l10n/app_strings.dart
 @@ -16,29 +16,31 @@
    }
- 
+
    // App & Branding
 -  String get appName => isEn ? 'SunsetRipple' : '落日后残波';
 +  String get appName => isEn ? 'DawnMesh' : '曙光之声';
    String get tagline => isEn ? 'Chat with people nearby' : '和身边的人聊聊';
    String get nicknameLabel => isEn ? 'What should we call you?' : '怎么称呼你';
    String get nicknamePlaceholder => isEn ? 'Your nickname' : '留个称呼';
- 
+
    // Modes & Descriptions
 -  String get wifiRoom => isEn ? 'Wi-Fi Chat' : 'Wi-Fi 畅聊';
 +  String get wifiRoom => isEn ? 'Wi-Fi room' : 'Wi-Fi 房间';
@@ -4514,7 +4826,7 @@
 +          : '用蓝牙连接，可选按住对讲或自动通话，也能发消息';
    String get fullDuplex => isEn ? 'Talk freely' : '自由交谈';
    String get pttMode => isEn ? 'Hold to talk' : '按住说话';
- 
+
    // Actions & Buttons
 -  String get createRoom => isEn ? 'Start a chat' : '开始聊天';
 -  String get createWifiRoom => isEn ? 'Start Wi-Fi Chat' : '开始 Wi-Fi 畅聊';
@@ -4527,7 +4839,49 @@
    String get scanning => isEn ? 'Looking nearby…' : '正在看看附近…';
    String get scanAgain => isEn ? 'Look again' : '再找一次';
    String get checkMicrophone =>
-@@ -67,9 +69,10 @@
+@@ -62,14 +64,52 @@
+   String get qualityFair => isEn ? 'Fair' : '一般';
+   String get qualityPoor => isEn ? 'Poor' : '较差';
+
++  // Debug Logs
++  String get debugLogsTitle => isEn ? 'Debug logs' : '调试日志';
++  String get tooltipDebugLogs => isEn ? 'Open debug logs' : '查看调试日志';
++  String get debugLoggingSwitch => isEn ? 'Capture debug logs' : '记录调试日志';
++  String get debugLoggingEnabled => isEn ? 'On' : '已开启';
++  String get debugLoggingDisabled => isEn ? 'Off' : '已关闭';
++  String get debugLoggingDescription =>
++      isEn
++          ? 'Capture app, audio, Bluetooth and Wi-Fi Direct events on this device'
++          : '在本机记录应用、音频、蓝牙和 Wi-Fi Direct 事件';
++  String get debugLogDisabledHint =>
++      isEn
++          ? 'Turn logging on before reproducing a problem'
++          : '遇到问题前先开启，随后重新操作一次';
++  String get debugLogEmpty => isEn ? 'Waiting for logs' : '正在等待日志';
++  String get debugLogEmptyHint =>
++      isEn ? 'Use the app and new events will appear here' : '继续操作应用，新事件会显示在这里';
++  String get searchDebugLogs => isEn ? 'Search tag or message' : '搜索模块或日志内容';
++  String get clearSearch => isEn ? 'Clear search' : '清除搜索';
++  String get copyDebugLogs => isEn ? 'Copy visible logs' : '复制当前日志';
++  String get clearDebugLogs => isEn ? 'Clear logs' : '清空日志';
++  String get debugLogsCopied =>
++      isEn ? 'Logs copied with private addresses redacted' : '日志已复制，地址和长令牌已隐藏';
++  String get debugLogsCleared => isEn ? 'Logs cleared' : '日志已清空';
++  String get debugLogSaveFailed =>
++      isEn ? 'Could not save the logging setting' : '无法保存调试日志开关';
++  String get debugLogPrivacyNote =>
++      isEn
++          ? 'Logs stay in memory and are cleared when logging is turned off or the app exits. Review them before sharing.'
++          : '日志仅保存在内存中；关闭记录或退出应用后清空。对外发送前请检查内容。';
++  String get debugLogAll => isEn ? 'All' : '全部';
++  String get debugLogDebug => 'DEBUG';
++  String get debugLogInfo => 'INFO';
++  String get debugLogWarning => 'WARN';
++  String get debugLogError => 'ERROR';
++  String debugLogCount(int count) => isEn ? '$count entries' : '$count 条日志';
++
+   // Host Election & Transfer
+   String get transferHost => isEn ? 'Change host' : '更换房主';
    String get selectNewHost => isEn ? 'Who will take over?' : '交给谁来接着聊';
    String get transferHostTip =>
        isEn ? 'Choose someone to take over the chat' : '选一位成员，接手这场聊天';
@@ -4541,9 +4895,9 @@
    String transferTo(String name) => isEn ? 'Make host' : '设为房主';
    String transferHostConfirm(String name) =>
        isEn ? 'Let $name take over as host?' : '把房主交给$name？';
-@@ -86,14 +89,15 @@
+@@ -86,14 +126,15 @@
    String get muted => isEn ? 'Muted' : '已静音';
- 
+
    // About & Updates
 -  String get aboutTitle => isEn ? 'About SunsetRipple' : '关于落日后残波';
 +  String get aboutTitle => isEn ? 'About DawnMesh' : '关于曙光之声';
@@ -4562,21 +4916,22 @@
    String get checkUpdate => isEn ? 'Check for updates' : '看看有没有更新';
    String get updateIdle => isEn ? 'No update check yet' : '还没检查过更新';
    String get updateChecking =>
-@@ -103,21 +107,25 @@
+@@ -103,21 +144,25 @@
        isEn ? 'A new version is here: $ver' : '新版本来了：$ver';
    String updateFailed(String msg) =>
        isEn ? 'Could not check for updates: $msg' : '这次没查到更新：$msg';
 -  String get updateCheckFailed => isEn
 -      ? 'Could not check for updates. Please try again later.'
 -      : '这次没查到更新，稍后再试一次';
+-  String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
+-  String get changelogBody => isEn
+-      ? '0.1.0-alpha.11\nIn-room text messaging added: memory-only, cleared on leave.\nWi-Fi Direct plugin registration fixed; LAN spoofing defenses hardened.\nRoom enter/exit animations are much smoother on low-end devices.\nLauncher name now follows the system language.'
+-      : '0.1.0-alpha.11\n新增房内文字消息：纯内存存储，退房即毁。\n修复 Wi-Fi Direct 插件注册，加固局域网防伪造与越权。\n进出房转场动画在中低端机上明显更流畅。\n桌面应用名随系统语言切换。';
 +  String get updateCheckFailed =>
 +      isEn
 +          ? 'Could not check for updates. Please try again later.'
 +          : '这次没查到更新，稍后再试一次';
-   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
--  String get changelogBody => isEn
--      ? '0.1.0-alpha.11\nIn-room text messaging added: memory-only, cleared on leave.\nWi-Fi Direct plugin registration fixed; LAN spoofing defenses hardened.\nRoom enter/exit animations are much smoother on low-end devices.\nLauncher name now follows the system language.'
--      : '0.1.0-alpha.11\n新增房内文字消息：纯内存存储，退房即毁。\n修复 Wi-Fi Direct 插件注册，加固局域网防伪造与越权。\n进出房转场动画在中低端机上明显更流畅。\n桌面应用名随系统语言切换。';
++  String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
 +  String get changelogBody =>
 +      isEn
 +          ? '0.1.0-alpha.11\nIn-room text messaging added: memory-only, cleared on leave.\nWi-Fi Direct plugin registration fixed; LAN spoofing defenses hardened.\nRoom enter/exit animations are much smoother on low-end devices.\nLauncher name now follows the system language.'
@@ -4597,12 +4952,12 @@
 +      isEn
 +          ? 'Voice and text travel between devices in the chat over local Wi-Fi or Bluetooth.\nMessages are kept only in memory. Leaving clears the chat history on your device; other members may still have messages from this chat.\nChecking for updates connects to GitHub.'
 +          : '声音和文字通过本地 Wi-Fi 或蓝牙，在参与聊天的设备之间传递。\n文字消息只放在内存里。离开后，你这台设备上的聊天记录会清除，其他成员那里仍可能留有本次聊天的消息。\n检查更新时，会连接 GitHub。';
- 
+
    // Theme
    String themeDescription(String current) =>
-@@ -126,38 +134,42 @@
+@@ -126,38 +171,42 @@
    String get themeDark => isEn ? 'Moonlit sea' : '月色入海';
- 
+
    // Home & Stage
 -  String get appSubheading =>
 -      isEn ? 'Never Meant.' : '越过地平线，看海洋辽阔的延绵。';
@@ -4662,7 +5017,7 @@
    String roomHostInfo(String host, int count, int max) =>
        isEn ? 'Host: $host · $count/$max devices' : '房主：$host · $count/$max 台设备';
    String deviceCount(int count, int max) =>
-@@ -203,16 +215,19 @@
+@@ -203,16 +252,19 @@
    String get chatInputPlaceholder => isEn ? 'Say something…' : '说点什么…';
    String get chatSend => isEn ? 'Send' : '发送';
    String get chatEmptyHint => isEn ? 'No one has said hello yet' : '还没人说第一句';
@@ -4693,7 +5048,27 @@
    String get chatButtonLabel => chatTitle;
 --- a/lib/main.dart
 +++ b/lib/main.dart
-@@ -42,7 +42,7 @@
+@@ -1,12 +1,18 @@
+ import 'package:flutter/material.dart';
+ import 'package:flutter/services.dart';
+ import 'package:flutter_localizations/flutter_localizations.dart';
++import 'core/diagnostics/app_log.dart';
+ import 'core/ffi/native_core_ffi.dart';
++import 'core/platform/native_debug_log_channel.dart';
++import 'core/preferences/debug_log_settings_store.dart';
+ import 'ui/pages/session_stage.dart';
+ import 'ui/theme/app_theme.dart';
+
+-void main() {
++Future<void> main() async {
+   WidgetsFlutterBinding.ensureInitialized();
++  final debugLoggingEnabled = await DebugLogSettingsStore().load();
++  AppLog.setEnabled(debugLoggingEnabled);
++  NativeDebugLogChannel.start();
+   NativeCoreFfi.initialize();
+   SystemChrome.setPreferredOrientations([
+     DeviceOrientation.portraitUp,
+@@ -42,15 +48,12 @@
    @override
    Widget build(BuildContext context) {
      return MaterialApp(
@@ -4702,6 +5077,658 @@
        debugShowCheckedModeBanner: false,
        theme: AppTheme.light(),
        darkTheme: AppTheme.dark(),
+       themeMode: _themeMode,
+-      supportedLocales: const [
+-        Locale('zh'),
+-        Locale('en'),
+-      ],
++      supportedLocales: const [Locale('zh'), Locale('en')],
+       localizationsDelegates: const [
+         GlobalMaterialLocalizations.delegate,
+         GlobalWidgetsLocalizations.delegate,
+@@ -58,13 +61,11 @@
+       ],
+       home: Builder(
+         builder: (context) {
+-          final isNight = _themeMode == ThemeMode.dark ||
++          final isNight =
++              _themeMode == ThemeMode.dark ||
+               (_themeMode == ThemeMode.system &&
+                   MediaQuery.of(context).platformBrightness == Brightness.dark);
+-          return SessionStage(
+-            isNight: isNight,
+-            onToggleTheme: _toggleTheme,
+-          );
++          return SessionStage(isNight: isNight, onToggleTheme: _toggleTheme);
+         },
+       ),
+     );
+--- a/lib/ui/pages/debug_log_page.dart
++++ b/lib/ui/pages/debug_log_page.dart
+@@ -0,0 +1,623 @@
++import 'dart:async';
++
++import 'package:flutter/material.dart';
++import 'package:flutter/services.dart';
++
++import '../../core/diagnostics/app_log.dart';
++import '../../core/diagnostics/diagnostic_report.dart';
++import '../../core/preferences/debug_log_settings_store.dart';
++import '../../l10n/app_strings.dart';
++import '../theme/app_theme.dart';
++
++class DebugLogPage extends StatefulWidget {
++  const DebugLogPage({super.key, required this.isNight});
++
++  final bool isNight;
++
++  @override
++  State<DebugLogPage> createState() => _DebugLogPageState();
++}
++
++class _DebugLogPageState extends State<DebugLogPage> {
++  final _settings = DebugLogSettingsStore();
++  final _searchController = TextEditingController();
++  StreamSubscription<LogEntry>? _subscription;
++  late bool _enabled;
++  bool _saving = false;
++  LogLevel? _level;
++  late List<LogEntry> _entries;
++
++  @override
++  void initState() {
++    super.initState();
++    _enabled = AppLog.isEnabled;
++    _entries = AppLog.recent;
++    _subscription = AppLog.stream.listen((entry) {
++      if (!mounted) return;
++      setState(() {
++        _entries.insert(0, entry);
++        if (_entries.length > AppLog.maxRetained) {
++          _entries.removeLast();
++        }
++      });
++    });
++    _searchController.addListener(_refreshSearch);
++  }
++
++  @override
++  void dispose() {
++    _subscription?.cancel();
++    _searchController
++      ..removeListener(_refreshSearch)
++      ..dispose();
++    super.dispose();
++  }
++
++  void _refreshSearch() => setState(() {});
++
++  List<LogEntry> get _visibleEntries {
++    final query = _searchController.text.trim().toLowerCase();
++    return _entries
++        .where((entry) {
++          if (_level != null && entry.level != _level) return false;
++          if (query.isEmpty) return true;
++          return entry.tag.toLowerCase().contains(query) ||
++              entry.message.toLowerCase().contains(query) ||
++              '${entry.error ?? ''}'.toLowerCase().contains(query);
++        })
++        .toList(growable: false);
++  }
++
++  Future<void> _setEnabled(bool enabled) async {
++    if (_saving) return;
++    setState(() => _saving = true);
++    final saved = await _settings.save(enabled);
++    if (!mounted) return;
++    if (!saved) {
++      setState(() => _saving = false);
++      ScaffoldMessenger.of(context).showSnackBar(
++        SnackBar(content: Text(AppStrings.of(context).debugLogSaveFailed)),
++      );
++      return;
++    }
++
++    AppLog.setEnabled(enabled);
++    setState(() {
++      _enabled = enabled;
++      _saving = false;
++      if (!enabled) _entries.clear();
++    });
++    if (enabled) {
++      AppLog.info('调试日志', '应用内调试日志已开启');
++    }
++  }
++
++  void _clear() {
++    AppLog.clear();
++    setState(_entries.clear);
++    ScaffoldMessenger.of(context).showSnackBar(
++      SnackBar(content: Text(AppStrings.of(context).debugLogsCleared)),
++    );
++  }
++
++  Future<void> _copy() async {
++    final s = AppStrings.of(context);
++    final entries = _visibleEntries;
++    if (entries.isEmpty) return;
++    final text = entries.reversed
++        .map((entry) => DiagnosticSanitizer.sanitize(entry.toString()))
++        .join('\n');
++    await Clipboard.setData(ClipboardData(text: text));
++    if (!mounted) return;
++    ScaffoldMessenger.of(
++      context,
++    ).showSnackBar(SnackBar(content: Text(s.debugLogsCopied)));
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final s = AppStrings.of(context);
++    final isNight = widget.isNight;
++    final background = isNight ? AppTheme.darkBg : AppTheme.lightBg;
++    final card = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
++    final primary =
++        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
++    final secondary =
++        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
++    final border =
++        isNight
++            ? Colors.white.withValues(alpha: 0.10)
++            : Colors.black.withValues(alpha: 0.08);
++    final entries = _visibleEntries;
++
++    return Scaffold(
++      backgroundColor: background,
++      body: Container(
++        decoration: BoxDecoration(
++          gradient: LinearGradient(
++            begin: Alignment.topCenter,
++            end: Alignment.bottomCenter,
++            colors:
++                isNight
++                    ? const [AppTheme.nightAbyss, AppTheme.darkBg]
++                    : [
++                      AppTheme.lightBg,
++                      AppTheme.sunsetCoral.withValues(alpha: 0.10),
++                    ],
++          ),
++        ),
++        child: SafeArea(
++          child: Column(
++            children: [
++              _LogHeader(
++                title: s.debugLogsTitle,
++                enabled: _enabled,
++                statusLabel:
++                    _enabled ? s.debugLoggingEnabled : s.debugLoggingDisabled,
++                primary: primary,
++                secondary: secondary,
++                onBack: () => Navigator.pop(context),
++              ),
++              Padding(
++                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
++                child: Container(
++                  padding: const EdgeInsets.all(16),
++                  decoration: BoxDecoration(
++                    color: card.withValues(alpha: isNight ? 0.88 : 0.94),
++                    borderRadius: BorderRadius.circular(22),
++                    border: Border.all(color: border),
++                    boxShadow: [
++                      BoxShadow(
++                        color: Colors.black.withValues(
++                          alpha: isNight ? 0.16 : 0.05,
++                        ),
++                        blurRadius: 20,
++                        offset: const Offset(0, 8),
++                      ),
++                    ],
++                  ),
++                  child: Row(
++                    children: [
++                      Container(
++                        width: 44,
++                        height: 44,
++                        decoration: BoxDecoration(
++                          color: (_enabled
++                                  ? const Color(0xFF4B9A8C)
++                                  : secondary)
++                              .withValues(alpha: 0.14),
++                          borderRadius: BorderRadius.circular(15),
++                        ),
++                        child: Icon(
++                          _enabled
++                              ? Icons.terminal_rounded
++                              : Icons.terminal_outlined,
++                          color: _enabled ? const Color(0xFF4B9A8C) : secondary,
++                        ),
++                      ),
++                      const SizedBox(width: 13),
++                      Expanded(
++                        child: Column(
++                          crossAxisAlignment: CrossAxisAlignment.start,
++                          children: [
++                            Text(
++                              s.debugLoggingSwitch,
++                              style: TextStyle(
++                                color: primary,
++                                fontSize: 16,
++                                fontWeight: FontWeight.w700,
++                              ),
++                            ),
++                            const SizedBox(height: 4),
++                            Text(
++                              s.debugLoggingDescription,
++                              style: TextStyle(
++                                color: secondary,
++                                fontSize: 12,
++                                height: 1.35,
++                              ),
++                            ),
++                          ],
++                        ),
++                      ),
++                      const SizedBox(width: 8),
++                      Switch.adaptive(
++                        value: _enabled,
++                        onChanged: _saving ? null : _setEnabled,
++                        activeColor: const Color(0xFF4B9A8C),
++                      ),
++                    ],
++                  ),
++                ),
++              ),
++              if (_enabled) ...[
++                Padding(
++                  padding: const EdgeInsets.symmetric(horizontal: 20),
++                  child: TextField(
++                    controller: _searchController,
++                    style: TextStyle(color: primary, fontSize: 14),
++                    decoration: InputDecoration(
++                      hintText: s.searchDebugLogs,
++                      hintStyle: TextStyle(color: secondary),
++                      prefixIcon: Icon(Icons.search_rounded, color: secondary),
++                      suffixIcon:
++                          _searchController.text.isEmpty
++                              ? null
++                              : IconButton(
++                                tooltip: s.clearSearch,
++                                onPressed: _searchController.clear,
++                                icon: Icon(
++                                  Icons.close_rounded,
++                                  color: secondary,
++                                ),
++                              ),
++                      filled: true,
++                      fillColor: card.withValues(alpha: 0.78),
++                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
++                      border: OutlineInputBorder(
++                        borderRadius: BorderRadius.circular(18),
++                        borderSide: BorderSide.none,
++                      ),
++                      enabledBorder: OutlineInputBorder(
++                        borderRadius: BorderRadius.circular(18),
++                        borderSide: BorderSide(color: border),
++                      ),
++                    ),
++                  ),
++                ),
++                const SizedBox(height: 10),
++                SizedBox(
++                  height: 38,
++                  child: ListView(
++                    scrollDirection: Axis.horizontal,
++                    padding: const EdgeInsets.symmetric(horizontal: 20),
++                    children: [
++                      _filterChip(s.debugLogAll, null, primary, card),
++                      _filterChip(
++                        s.debugLogDebug,
++                        LogLevel.debug,
++                        primary,
++                        card,
++                      ),
++                      _filterChip(s.debugLogInfo, LogLevel.info, primary, card),
++                      _filterChip(
++                        s.debugLogWarning,
++                        LogLevel.warn,
++                        primary,
++                        card,
++                      ),
++                      _filterChip(
++                        s.debugLogError,
++                        LogLevel.error,
++                        primary,
++                        card,
++                      ),
++                    ],
++                  ),
++                ),
++                Padding(
++                  padding: const EdgeInsets.fromLTRB(20, 10, 12, 5),
++                  child: Row(
++                    children: [
++                      Expanded(
++                        child: Text(
++                          s.debugLogCount(entries.length),
++                          style: TextStyle(color: secondary, fontSize: 12),
++                        ),
++                      ),
++                      IconButton(
++                        tooltip: s.copyDebugLogs,
++                        onPressed: entries.isEmpty ? null : _copy,
++                        icon: const Icon(Icons.copy_all_rounded),
++                        color: primary,
++                      ),
++                      IconButton(
++                        tooltip: s.clearDebugLogs,
++                        onPressed: _entries.isEmpty ? null : _clear,
++                        icon: const Icon(Icons.delete_sweep_outlined),
++                        color: primary,
++                      ),
++                    ],
++                  ),
++                ),
++              ],
++              Expanded(
++                child:
++                    !_enabled
++                        ? _EmptyLogs(
++                          icon: Icons.power_settings_new_rounded,
++                          title: s.debugLoggingDisabled,
++                          detail: s.debugLogDisabledHint,
++                          primary: primary,
++                          secondary: secondary,
++                        )
++                        : entries.isEmpty
++                        ? _EmptyLogs(
++                          icon: Icons.hourglass_empty_rounded,
++                          title: s.debugLogEmpty,
++                          detail: s.debugLogEmptyHint,
++                          primary: primary,
++                          secondary: secondary,
++                        )
++                        : ListView.separated(
++                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
++                          itemCount: entries.length,
++                          separatorBuilder:
++                              (_, __) => const SizedBox(height: 9),
++                          itemBuilder:
++                              (context, index) => _LogEntryCard(
++                                entry: entries[index],
++                                isNight: isNight,
++                                primary: primary,
++                                secondary: secondary,
++                                card: card,
++                                border: border,
++                              ),
++                        ),
++              ),
++              if (_enabled)
++                Padding(
++                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
++                  child: Text(
++                    s.debugLogPrivacyNote,
++                    textAlign: TextAlign.center,
++                    style: TextStyle(color: secondary, fontSize: 11),
++                  ),
++                ),
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++
++  Widget _filterChip(String label, LogLevel? level, Color primary, Color card) {
++    final selected = _level == level;
++    return Padding(
++      padding: const EdgeInsets.only(right: 8),
++      child: ChoiceChip(
++        label: Text(label),
++        selected: selected,
++        onSelected: (_) => setState(() => _level = level),
++        selectedColor:
++            widget.isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetCoral,
++        backgroundColor: card,
++        labelStyle: TextStyle(
++          color: selected ? Colors.white : primary,
++          fontSize: 12,
++          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
++        ),
++        side: BorderSide.none,
++        visualDensity: VisualDensity.compact,
++      ),
++    );
++  }
++}
++
++class _LogHeader extends StatelessWidget {
++  const _LogHeader({
++    required this.title,
++    required this.enabled,
++    required this.statusLabel,
++    required this.primary,
++    required this.secondary,
++    required this.onBack,
++  });
++
++  final String title;
++  final bool enabled;
++  final String statusLabel;
++  final Color primary;
++  final Color secondary;
++  final VoidCallback onBack;
++
++  @override
++  Widget build(BuildContext context) {
++    return Padding(
++      padding: const EdgeInsets.fromLTRB(8, 8, 18, 8),
++      child: Row(
++        children: [
++          IconButton(
++            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
++            onPressed: onBack,
++            icon: Icon(Icons.arrow_back_ios_new_rounded, color: primary),
++          ),
++          const SizedBox(width: 4),
++          Expanded(
++            child: Text(
++              title,
++              style: TextStyle(
++                color: primary,
++                fontSize: 22,
++                fontWeight: FontWeight.w800,
++              ),
++            ),
++          ),
++          Container(
++            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
++            decoration: BoxDecoration(
++              color: (enabled ? const Color(0xFF4B9A8C) : secondary).withValues(
++                alpha: 0.14,
++              ),
++              borderRadius: BorderRadius.circular(14),
++            ),
++            child: Row(
++              mainAxisSize: MainAxisSize.min,
++              children: [
++                Container(
++                  width: 7,
++                  height: 7,
++                  decoration: BoxDecoration(
++                    color: enabled ? const Color(0xFF4B9A8C) : secondary,
++                    shape: BoxShape.circle,
++                  ),
++                ),
++                const SizedBox(width: 6),
++                Text(
++                  statusLabel,
++                  style: TextStyle(
++                    color: enabled ? const Color(0xFF4B9A8C) : secondary,
++                    fontSize: 12,
++                    fontWeight: FontWeight.w700,
++                  ),
++                ),
++              ],
++            ),
++          ),
++        ],
++      ),
++    );
++  }
++}
++
++class _EmptyLogs extends StatelessWidget {
++  const _EmptyLogs({
++    required this.icon,
++    required this.title,
++    required this.detail,
++    required this.primary,
++    required this.secondary,
++  });
++
++  final IconData icon;
++  final String title;
++  final String detail;
++  final Color primary;
++  final Color secondary;
++
++  @override
++  Widget build(BuildContext context) {
++    return Center(
++      child: Padding(
++        padding: const EdgeInsets.all(32),
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            Icon(icon, size: 42, color: secondary.withValues(alpha: 0.65)),
++            const SizedBox(height: 14),
++            Text(
++              title,
++              style: TextStyle(
++                color: primary,
++                fontSize: 16,
++                fontWeight: FontWeight.w700,
++              ),
++            ),
++            const SizedBox(height: 7),
++            Text(
++              detail,
++              textAlign: TextAlign.center,
++              style: TextStyle(color: secondary, fontSize: 13, height: 1.4),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++class _LogEntryCard extends StatelessWidget {
++  const _LogEntryCard({
++    required this.entry,
++    required this.isNight,
++    required this.primary,
++    required this.secondary,
++    required this.card,
++    required this.border,
++  });
++
++  final LogEntry entry;
++  final bool isNight;
++  final Color primary;
++  final Color secondary;
++  final Color card;
++  final Color border;
++
++  @override
++  Widget build(BuildContext context) {
++    final accent = switch (entry.level) {
++      LogLevel.debug => secondary,
++      LogLevel.info => const Color(0xFF4B9A8C),
++      LogLevel.warn => const Color(0xFFD99A68),
++      LogLevel.error => const Color(0xFFD8666F),
++    };
++    final levelLabel = entry.level.name.toUpperCase();
++    final time =
++        '${entry.time.hour.toString().padLeft(2, '0')}:'
++        '${entry.time.minute.toString().padLeft(2, '0')}:'
++        '${entry.time.second.toString().padLeft(2, '0')}.'
++        '${entry.time.millisecond.toString().padLeft(3, '0')}';
++
++    return Container(
++      padding: const EdgeInsets.all(13),
++      decoration: BoxDecoration(
++        color: card.withValues(alpha: isNight ? 0.76 : 0.90),
++        borderRadius: BorderRadius.circular(17),
++        border: Border.all(color: border),
++      ),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          Row(
++            children: [
++              Container(
++                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
++                decoration: BoxDecoration(
++                  color: accent.withValues(alpha: 0.14),
++                  borderRadius: BorderRadius.circular(8),
++                ),
++                child: Text(
++                  levelLabel,
++                  style: TextStyle(
++                    color: accent,
++                    fontSize: 10,
++                    fontWeight: FontWeight.w800,
++                    letterSpacing: 0.5,
++                  ),
++                ),
++              ),
++              const SizedBox(width: 8),
++              Expanded(
++                child: Text(
++                  entry.tag,
++                  maxLines: 1,
++                  overflow: TextOverflow.ellipsis,
++                  style: TextStyle(
++                    color: primary,
++                    fontSize: 12,
++                    fontWeight: FontWeight.w700,
++                  ),
++                ),
++              ),
++              Text(
++                time,
++                style: TextStyle(
++                  color: secondary,
++                  fontFamily: 'monospace',
++                  fontSize: 10,
++                ),
++              ),
++            ],
++          ),
++          const SizedBox(height: 9),
++          SelectableText(
++            entry.message,
++            style: TextStyle(color: primary, fontSize: 13, height: 1.4),
++          ),
++          if (entry.error != null) ...[
++            const SizedBox(height: 6),
++            SelectableText(
++              '${entry.error}',
++              style: TextStyle(
++                color: accent.withValues(alpha: 0.88),
++                fontFamily: 'monospace',
++                fontSize: 11,
++                height: 1.35,
++              ),
++            ),
++          ],
++        ],
++      ),
++    );
++  }
++}
 --- a/lib/ui/pages/home_page.dart
 +++ b/lib/ui/pages/home_page.dart
 @@ -1,13 +1,18 @@
@@ -4758,7 +5785,7 @@
      _startScan();
 +    unawaited(_restoreNickname());
    }
- 
+
    @override
    void didChangeDependencies() {
      super.didChangeDependencies();
@@ -4775,7 +5802,7 @@
 @@ -87,18 +116,148 @@
      }
    }
- 
+
 -  void _startScan() {
 -    setState(() => _isScanning = true);
 -    _lanDiscovery.startListening();
@@ -4872,7 +5899,7 @@
 +      },
 +    );
    }
- 
+
 +  Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
@@ -5045,13 +6072,13 @@
 @@ -267,6 +441,10 @@
                      ),
                    ),
- 
+
 +                  const Padding(
 +                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
 +                    child: Text('语音和聊天默认加密。加入需要房主的邀请码，请仅分享给信任的人。'),
 +                  ),
                    const SizedBox(height: 18),
- 
+
                    // 3. 建房 + 扫描
 @@ -280,14 +458,17 @@
                            Expanded(
@@ -5207,7 +6234,7 @@
 +                            final rooms = snapshot.data ?? [];
 +                            final p2pPeers = _p2pPeers;
 +                            final totalCount = rooms.length + p2pPeers.length;
- 
+
 -                    return ListView.separated(
 -                      shrinkWrap: true,
 -                      physics: const NeverScrollableScrollPhysics(),
@@ -5547,7 +6574,7 @@
 +                        ),
                ),
              ),
- 
+
 @@ -625,7 +850,14 @@
    String get _nickname {
      final s = AppStrings.of(context);
@@ -5562,11 +6589,11 @@
 +    }
 +    return nickname;
    }
- 
+
    /// 走 roster 的身份名，带十六进制短码，房间里好区分同名的人。
 @@ -633,12 +865,17 @@
    String get _identityNickname => DeviceCode.attach(_nickname);
- 
+
    void _onCreateRoom() async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
@@ -5582,13 +6609,13 @@
 +        _selectedMode == RoomMode.wifiFullDuplex
 +            ? s.defaultWifiRoomTitle(nickname)
 +            : s.defaultBleRoomTitle(nickname);
- 
+
      final session = RoomSession(
        audioIo: widget.audioIo,
 @@ -646,18 +883,42 @@
        mode: _selectedMode,
      );
- 
+
 +    final invite = RoomInvite.generate();
 +    await session.protectWithInvite(invite);
 +    if (!mounted) {
@@ -5635,7 +6662,7 @@
 @@ -677,10 +938,23 @@
        );
      }
- 
+
 -    if (mounted) widget.onEnterRoom(session, roomName);
 +    if (!mounted) {
 +      await session.dispose();
@@ -5644,7 +6671,7 @@
 +    setState(() => _busy = false);
 +    widget.onEnterRoom(session, roomName);
    }
- 
+
    void _onJoinRoom(DiscoveredRoom room) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
@@ -5660,7 +6687,7 @@
 @@ -688,38 +962,72 @@
        mode: RoomMode.wifiFullDuplex,
      );
- 
+
 -    final transport = LanTransport();
 -    await transport.startClient(
 +    final transport = LanTransport(controlOnly: true);
@@ -5678,7 +6705,7 @@
      session.transport = transport;
      session.onSendFrame = transport.send;
      transport.incoming.listen(session.handleIncomingFrame);
- 
+
      // 同 _onCreateRoom：开麦推迟到转场跑完。
 +    final joined = session.stateStream
 +        .firstWhere((state) => state == RoomState.inRoom)
@@ -5692,7 +6719,7 @@
 +      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
 +      return;
 +    }
- 
+
 -    if (mounted) widget.onEnterRoom(session, room.roomName);
 +    if (!mounted) {
 +      await session.dispose();
@@ -5701,7 +6728,7 @@
 +    setState(() => _busy = false);
 +    widget.onEnterRoom(session, room.roomName);
    }
- 
+
    void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
 +    if (_busy) return;
 +    setState(() => _busy = true);
@@ -5722,7 +6749,7 @@
          duration: const Duration(seconds: 4),
        ),
      );
- 
+
 -    final connectionInfo =
 -        await WifiDirectManager.instance.connectAndWait(peer.address);
 +    final connectionInfo = await WifiDirectManager.instance.connectAndWait(
@@ -5740,7 +6767,7 @@
 @@ -730,6 +1038,7 @@
        return;
      }
- 
+
 +    if (!mounted) return;
      final hostIp = InternetAddress(connectionInfo.groupOwnerAddress);
      final session = RoomSession(
@@ -5748,7 +6775,7 @@
 @@ -737,18 +1046,37 @@
        mode: RoomMode.wifiFullDuplex,
      );
- 
+
 -    final transport = LanTransport();
 -    await transport.startClient(
 -      hostAddress: hostIp,
@@ -5765,7 +6792,7 @@
      session.transport = transport;
      session.onSendFrame = transport.send;
      transport.incoming.listen(session.handleIncomingFrame);
- 
+
 +    final joined = session.stateStream
 +        .firstWhere((state) => state == RoomState.inRoom)
 +        .timeout(const Duration(seconds: 8));
@@ -5778,7 +6805,7 @@
 +      _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
 +      return;
 +    }
- 
+
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -5843,10 +6870,10 @@
  import '../widgets/ptt_button.dart';
 +import '../widgets/voice_mode_switch.dart';
  import '../../l10n/app_strings.dart';
- 
+
  /// 房间前景：成员轨道、中央对讲盘、底部音频控制条。
 @@ -36,20 +38,37 @@
- 
+
  class _RoomContentState extends State<RoomContent> {
    bool _isSpeakerOn = true;
 +  StreamSubscription<void>? _controls;
@@ -5857,7 +6884,7 @@
 +      if (mounted) setState(() {});
 +    });
 +  }
- 
+
    @override
 +  void dispose() {
 +    _controls?.cancel();
@@ -5876,20 +6903,20 @@
 +      124.0,
 +      212.0,
 +    );
- 
+
      return SafeArea(
        top: false,
        child: Column(
          children: [
 -          const SizedBox(height: 18),
 +          SizedBox(height: compactHeight ? 10 : 18),
- 
+
            // 1. 成员轨道
            StageEnterItem(
 @@ -69,24 +88,34 @@
- 
+
            const Spacer(),
- 
+
 -          // 2. 中央对讲盘：WiFi 房是实时音浪，蓝牙房是按住说话
 +          Padding(
 +            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 8 : 10),
@@ -5932,44 +6959,47 @@
 +                      },
 +                    ),
            ),
- 
+
            const Spacer(),
 @@ -121,7 +150,8 @@
- 
+
    Widget _buildDuplexDisc(bool isNight, double size) {
      final s = AppStrings.of(context);
 -    final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetBurgundy;
 +    final activeColor =
 +        isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetBurgundy;
- 
+
      // 光晕做在外层、参数固定：BoxShadow 的模糊是这里最贵的绘制，若
      // blurRadius/spreadRadius 跟着音量逐帧变，GPU 就得逐帧重做高斯模糊——
 --- a/lib/ui/pages/session_stage.dart
 +++ b/lib/ui/pages/session_stage.dart
-@@ -12,6 +12,7 @@
+@@ -10,8 +10,10 @@
+ import 'room_page.dart';
+ import 'diagnostics_sheet.dart';
  import 'about_page.dart';
++import 'debug_log_page.dart';
  import '../theme/app_theme.dart';
  import '../widgets/room_chat_sheet.dart';
 +import '../widgets/room_invite_row.dart';
  import '../../l10n/app_strings.dart';
- 
+
  /// 首页与房间共用的一张"舞台"。
-@@ -44,7 +45,7 @@
+@@ -44,7 +46,7 @@
  }
- 
+
  class _SessionStageState extends State<SessionStage>
 -    with SingleTickerProviderStateMixin {
 +    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
    // 背景在首页与房间两种形态下的几何参数，转场时在两者之间插值。
    static const double _homeCelestialY = 0.42;
    static const double _roomCelestialY = 0.38;
-@@ -65,11 +66,13 @@
+@@ -65,11 +67,13 @@
    late final AudioIo _audioIo;
- 
+
    RoomSession? _session;
 +  bool _leaving = false;
    String _roomName = "";
- 
+
    @override
    void initState() {
      super.initState();
@@ -5977,8 +7007,8 @@
      // 音频通道挂在舞台上，首页与房间共用一个，进出房间不会重建。
      _audioIo = PlatformAudioChannel();
      _stage = AnimationController(
-@@ -81,10 +84,19 @@
- 
+@@ -81,10 +85,19 @@
+
    @override
    void dispose() {
 +    WidgetsBinding.instance.removeObserver(this);
@@ -5986,7 +7016,7 @@
      _stage.dispose();
      super.dispose();
    }
- 
+
 +  @override
 +  void didChangeAppLifecycleState(AppLifecycleState state) {
 +    if (state != AppLifecycleState.resumed && _session?.isPttPressed == true) {
@@ -5995,9 +7025,9 @@
 +  }
 +
    bool get _inRoom => _session != null;
- 
+
    void _onEnterRoom(RoomSession session, String roomName) {
-@@ -97,22 +109,27 @@
+@@ -97,22 +110,27 @@
      // 的构造和前台服务启动都压在 Android 主线程上，一次上百毫秒，
      // 塞进转场里必然掉帧。等动画落位再开。
      _stage.forward(from: 0.0).whenComplete(() {
@@ -6007,19 +7037,19 @@
 +      }
      });
    }
- 
+
    void _onLeaveRoom() {
      final session = _session;
 -    if (session == null) return;
 +    if (session == null || _leaving) return;
 +    _leaving = true;
- 
+
      // 点了就走：退场动画立刻起，音频与 socket 的收尾在后台并行做。
      // 早先这里是 `await session.leave()` 再反演动画，等于让用户干等一次
      // socket 关闭，手感上像是按钮没反应。
 -    unawaited(session.leave());
 +    final cleanup = session.dispose();
- 
+
 -    _stage.reverse().whenComplete(() {
 +    _stage.reverse().whenComplete(() async {
 +      await cleanup;
@@ -6029,7 +7059,7 @@
          _session = null;
          _roomName = "";
        });
-@@ -125,10 +142,11 @@
+@@ -125,13 +143,21 @@
      showModalBottomSheet(
        context: context,
        backgroundColor: Colors.transparent,
@@ -6044,8 +7074,18 @@
 +          ),
      );
    }
- 
-@@ -139,10 +157,7 @@
+
++  void _showDebugLogs() {
++    Navigator.push(
++      context,
++      MaterialPageRoute(builder: (_) => DebugLogPage(isNight: widget.isNight)),
++    );
++  }
++
+   void _showChatSheet(RoomSession session) {
+     session.markChatRead();
+     showModalBottomSheet<void>(
+@@ -139,10 +165,7 @@
        isScrollControlled: true,
        useSafeArea: true,
        backgroundColor: Colors.transparent,
@@ -6057,7 +7097,7 @@
      ).then((_) {
        session.markChatRead();
      });
-@@ -178,19 +193,20 @@
+@@ -178,19 +201,20 @@
                    audioIo: _audioIo,
                    onEnterRoom: _onEnterRoom,
                  ),
@@ -6089,8 +7129,8 @@
 -                ),
                ),
              ),
- 
-@@ -209,10 +225,11 @@
+
+@@ -209,10 +233,11 @@
                      stage: _stage,
                      onLeave: _onLeaveRoom,
                    ),
@@ -6105,8 +7145,8 @@
 +                      ),
                  ),
                ),
- 
-@@ -224,8 +241,9 @@
+
+@@ -224,8 +249,9 @@
                right: 0,
                child: AnimatedBuilder(
                  animation: _stage,
@@ -6118,9 +7158,9 @@
                ),
              ),
            ],
-@@ -235,7 +253,10 @@
+@@ -235,7 +261,10 @@
    }
- 
+
    Widget _buildHeaderLayer(
 -      RoomSession? session, double homeHeader, double roomHeader) {
 +    RoomSession? session,
@@ -6130,7 +7170,7 @@
      final stage = _stage.value;
      // 背景形变走自己那一段区间，不跟着前景的进出走。
      final bg = StageChoreography.background.transform(stage);
-@@ -249,7 +270,12 @@
+@@ -249,7 +278,12 @@
            Positioned.fill(
              child: RepaintBoundary(
                child: _buildBackground(
@@ -6144,9 +7184,9 @@
              ),
            ),
            ..._buildHomeHeaderOverlay(stage),
-@@ -274,14 +300,13 @@
+@@ -274,14 +308,13 @@
      );
- 
+
      Widget canvasFor(double waveIntensity) => CelestialCanvas(
 -          isNight: widget.isNight,
 -          waveIntensity: waveIntensity,
@@ -6163,10 +7203,10 @@
 +      celestialRadius: radius,
 +      waterLineFactor: lerpDouble(_homeWaterLine, _roomWaterLine, bg),
 +    );
- 
+
      if (session == null) return canvasFor(0.0);
- 
-@@ -297,18 +322,21 @@
+
+@@ -297,18 +330,21 @@
    List<Widget> _buildHomeHeaderOverlay(double stage) {
      final s = AppStrings.of(context);
      // 标题随首页元素顺畅淡出抽走
@@ -6178,7 +7218,7 @@
 +      curve: Curves.easeInCubic,
 +    ).transform(stage.clamp(0.0, 1.0));
      if (t >= 1.0) return const [];
- 
+
      Widget fade(Widget child, {double drift = 16}) => Opacity(
 -          opacity: (1.0 - t).clamp(0.0, 1.0),
 -          child: Transform.translate(
@@ -6194,10 +7234,24 @@
 +        child: RepaintBoundary(child: child),
 +      ),
 +    );
- 
+
      return [
        Positioned(
-@@ -340,7 +368,9 @@
+@@ -318,6 +354,13 @@
+           Row(
+             mainAxisSize: MainAxisSize.min,
+             children: [
++              IconButton(
++                tooltip: s.tooltipDebugLogs,
++                iconSize: 28,
++                padding: const EdgeInsets.all(10),
++                icon: const Icon(Icons.terminal_rounded, color: Colors.white),
++                onPressed: _showDebugLogs,
++              ),
+               IconButton(
+                 tooltip: s.tooltipInfoAndUpdates,
+                 iconSize: 28,
+@@ -340,7 +383,9 @@
                  iconSize: 28,
                  padding: const EdgeInsets.all(10),
                  icon: Icon(
@@ -6208,8 +7262,8 @@
                    color: Colors.white,
                  ),
                  onPressed: widget.onToggleTheme,
-@@ -387,17 +417,20 @@
- 
+@@ -387,17 +432,20 @@
+
    List<Widget> _buildRoomHeaderOverlay(RoomSession session, double stage) {
      final s = AppStrings.of(context);
 -    final t = const Interval(0.32, 0.85, curve: Curves.easeOutCubic)
@@ -6220,7 +7274,7 @@
 +      curve: Curves.easeOutCubic,
 +    ).transform(stage.clamp(0.0, 1.0));
      if (t <= 0.0) return const [];
- 
+
      Widget rise(Widget child, {double from = 14}) => Opacity(
 -          opacity: t.clamp(0.0, 1.0),
 -          child: Transform.translate(
@@ -6234,10 +7288,24 @@
 +        child: RepaintBoundary(child: child),
 +      ),
 +    );
- 
+
      return [
        Positioned(
-@@ -443,9 +476,10 @@
+@@ -421,6 +469,13 @@
+           Row(
+             mainAxisSize: MainAxisSize.min,
+             children: [
++              IconButton(
++                tooltip: s.tooltipDebugLogs,
++                iconSize: 28,
++                padding: const EdgeInsets.all(12),
++                icon: const Icon(Icons.terminal_rounded, color: Colors.white),
++                onPressed: _showDebugLogs,
++              ),
+               StreamBuilder<int>(
+                 stream: session.unreadChatStream,
+                 initialData: session.unreadChatCount,
+@@ -443,9 +498,10 @@
                              fontWeight: FontWeight.bold,
                            ),
                          ),
@@ -6251,7 +7319,7 @@
                          child: const Icon(
                            Icons.chat_bubble_outline_rounded,
                            color: Colors.white,
-@@ -490,7 +524,9 @@
+@@ -490,7 +546,9 @@
                ),
                const SizedBox(height: 6),
                Text(
@@ -6262,7 +7330,7 @@
                  maxLines: 1,
                  overflow: TextOverflow.ellipsis,
                  style: TextStyle(
-@@ -498,6 +534,12 @@
+@@ -498,6 +556,12 @@
                    fontSize: 15,
                  ),
                ),
@@ -6278,7 +7346,7 @@
 --- a/lib/ui/widgets/room_chat_sheet.dart
 +++ b/lib/ui/widgets/room_chat_sheet.dart
 @@ -86,10 +86,10 @@
- 
+
      final s = AppStrings.of(context);
      final byteCount = utf8.encode(text).length;
 -    if (byteCount > 480) {
@@ -6329,7 +7397,7 @@
 -        ],
 -      ),
      );
- 
+
      if (confirmed == true && mounted) {
 @@ -152,9 +153,9 @@
          }
@@ -6387,7 +7455,7 @@
                    ),
                  ],
 @@ -340,13 +344,17 @@
- 
+
      // 未唤起键盘时高度占屏幕约 74%（平板 65%），底部紧贴屏幕边缘彻底盖住底层控制栏；
      // 唤起键盘时，高度自适应键盘上方空间，直接由 viewInsets 驱动，彻底杜绝回落时的时延 Overflow。
 -    final double maxAvailableHeight =
@@ -6408,7 +7476,7 @@
 +        keyboardHeight > 0
 +            ? maxAvailableHeight
 +            : defaultHeight.clamp(280.0, screenHeight - topPadding - 16);
- 
+
      return Material(
        color: Colors.transparent,
 @@ -363,8 +371,9 @@
@@ -6449,7 +7517,7 @@
                              onPressed: () => Navigator.pop(context),
                            ),
 @@ -421,173 +435,201 @@
- 
+
                      // 2. 消息气泡列表
                      Expanded(
 -                      child: messages.isEmpty
@@ -6507,7 +7575,7 @@
 +                                  final isFormer =
 +                                      !isLocal &&
 +                                      !activeMemberIds.contains(msg.senderId);
- 
+
 -                                final (baseName, _) =
 -                                    DeviceCode.split(msg.senderNickname);
 -                                final hasConflict =
@@ -6519,7 +7587,7 @@
 +                                  final hasConflict =
 +                                      (baseNameToCodes[baseName]?.length ?? 0) >
 +                                      1;
- 
+
 -                                return Padding(
 -                                  padding:
 -                                      const EdgeInsets.symmetric(vertical: 6),
@@ -6564,7 +7632,7 @@
 +                                          ),
 +                                          const SizedBox(width: 8),
 +                                        ],
- 
+
 -                                      // 气泡与名字栏
 -                                      Flexible(
 -                                        child: Column(
@@ -6604,7 +7672,7 @@
 +                                                accentColor: accentColor,
 +                                                isNight: isNight,
 +                                              ),
- 
+
 -                                            // 气泡本体（长按支持撤回）
 -                                            GestureDetector(
 -                                              onLongPress: isLocal
@@ -6753,7 +7821,7 @@
 +                                          ),
                                          ),
 -                                      ),
- 
+
 -                                      // 本机消息头像框
 -                                      if (isLocal) ...[
 -                                        const SizedBox(width: 8),
@@ -6786,7 +7854,7 @@
 +                                },
 +                              ),
                      ),
- 
+
                      // 3. 底部输入与发送栏
                      const Divider(height: 1, thickness: 0.8),
                      Padding(
@@ -6862,7 +7930,7 @@
                                tooltip: _isSending ? s.chatSending : s.chatSend,
                                onPressed: _isSending ? null : _handleSend,
                              ),
---- /dev/null
+--- a/lib/ui/widgets/room_invite_dialog.dart
 +++ b/lib/ui/widgets/room_invite_dialog.dart
 @@ -0,0 +1,61 @@
 +import 'package:flutter/material.dart';
@@ -6926,7 +7994,7 @@
 +    ],
 +  );
 +}
---- /dev/null
+--- a/lib/ui/widgets/room_invite_row.dart
 +++ b/lib/ui/widgets/room_invite_row.dart
 @@ -0,0 +1,110 @@
 +import 'dart:async';
@@ -7039,7 +8107,7 @@
 +    ),
 +  );
 +}
---- /dev/null
+--- a/lib/ui/widgets/voice_mode_switch.dart
 +++ b/lib/ui/widgets/voice_mode_switch.dart
 @@ -0,0 +1,260 @@
 +import 'package:flutter/material.dart';
@@ -7313,7 +8381,7 @@
 +    if (payload_len > SUNSET_MAX_PAYLOAD_SIZE || (payload_len > 0 && !payload)) {
 +        return -1;
      }
- 
+
      out_buffer[0] = type;
 --- a/native/src/ring_buffer.cpp
 +++ b/native/src/ring_buffer.cpp
@@ -7322,22 +8390,22 @@
  #include <string.h>
  #include <algorithm>
 +#include <new>
- 
+
  extern "C" {
- 
+
  SunsetRingBuffer* sunset_ring_buffer_create(size_t capacity) {
      if (capacity == 0) capacity = 65536; // default 64KB
 -    SunsetRingBuffer* rb = (SunsetRingBuffer*)malloc(sizeof(SunsetRingBuffer));
 +    SunsetRingBuffer* rb = new (std::nothrow) SunsetRingBuffer{};
      if (!rb) return NULL;
- 
+
      rb->buffer = (uint8_t*)malloc(capacity);
      if (!rb->buffer) {
 -        free(rb);
 +        delete rb;
          return NULL;
      }
- 
+
 @@ -25,7 +26,7 @@
  void sunset_ring_buffer_free(SunsetRingBuffer* rb) {
      if (!rb) return;
@@ -7345,9 +8413,9 @@
 -    free(rb);
 +    delete rb;
  }
- 
+
  size_t sunset_ring_buffer_available_write(const SunsetRingBuffer* rb) {
---- /dev/null
+--- a/native/test/safety_test.cpp
 +++ b/native/test/safety_test.cpp
 @@ -0,0 +1,26 @@
 +#include "protocol_frame.h"
@@ -7943,22 +9011,22 @@
 +++ b/pubspec.yaml
 @@ -3,12 +3,12 @@
  publish_to: 'none'
- 
+
  # versionName 取 `+` 前半段，versionCode 取后半段。
 -# 0.1.0-alpha.11 / versionCode 12
 -version: 0.1.0-alpha.11+12
-+# DawnMesh 0.1.0-dev.6 / versionCode 6
-+version: 0.1.0-dev.6+6
- 
++# DawnMesh 0.1.0-dev.7 / versionCode 7
++version: 0.1.0-dev.7+7
+
  environment:
 -  sdk: '>=3.0.0 <4.0.0'
 -  flutter: ">=3.10.0"
 +  sdk: '>=3.7.0 <4.0.0'
 +  flutter: ">=3.29.0"
- 
+
  dependencies:
    flutter:
---- /dev/null
+--- a/scripts/check.sh
 +++ b/scripts/check.sh
 @@ -0,0 +1,14 @@
 +#!/usr/bin/env bash
@@ -7975,7 +9043,98 @@
 +    -o "$dawnmesh_check_dir/native-test"
 +  "$dawnmesh_check_dir/native-test"
 +fi
---- /dev/null
+--- a/scripts/check_apk_elf_alignment.py
++++ b/scripts/check_apk_elf_alignment.py
+@@ -0,0 +1,88 @@
++#!/usr/bin/env python3
++"""Report APK ELF segment alignment and fail on under-aligned 64-bit libs."""
++
++from __future__ import annotations
++
++import argparse
++import struct
++import sys
++import zipfile
++
++
++PT_LOAD = 1
++PT_GNU_RELRO = 0x6474E552
++MIN_64_BIT_ALIGNMENT = 16 * 1024
++
++
++def inspect_elf(data: bytes) -> tuple[int, list[int], bool]:
++    if len(data) < 64 or data[:4] != b"\x7fELF":
++        raise ValueError("not an ELF file")
++    elf_class = data[4]
++    byte_order = data[5]
++    prefix = "<" if byte_order == 1 else ">" if byte_order == 2 else None
++    if prefix is None:
++        raise ValueError("unsupported ELF byte order")
++
++    if elf_class == 2:
++        header = struct.unpack_from(prefix + "HHIQQQIHHHHHH", data, 16)
++        program_header_format = prefix + "IIQQQQQQ"
++    elif elf_class == 1:
++        header = struct.unpack_from(prefix + "HHIIIIIHHHHHH", data, 16)
++        program_header_format = prefix + "IIIIIIII"
++    else:
++        raise ValueError("unsupported ELF class")
++
++    program_offset = header[4]
++    program_entry_size = header[8]
++    program_count = header[9]
++    expected_size = struct.calcsize(program_header_format)
++    if program_entry_size < expected_size:
++        raise ValueError("invalid program header size")
++
++    alignments: list[int] = []
++    has_relro = False
++    for index in range(program_count):
++        offset = program_offset + index * program_entry_size
++        values = struct.unpack_from(program_header_format, data, offset)
++        segment_type = values[0]
++        if segment_type == PT_LOAD:
++            alignments.append(values[7])
++        elif segment_type == PT_GNU_RELRO:
++            has_relro = True
++    return elf_class, alignments, has_relro
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("apk")
++    args = parser.parse_args()
++
++    failures: list[str] = []
++    with zipfile.ZipFile(args.apk) as apk:
++        libraries = sorted(
++            name
++            for name in apk.namelist()
++            if name.startswith("lib/") and name.endswith(".so")
++        )
++        if not libraries:
++            raise SystemExit("APK contains no native libraries")
++        for name in libraries:
++            elf_class, alignments, has_relro = inspect_elf(apk.read(name))
++            print(f"{name}: PT_LOAD align={alignments}, GNU_RELRO={has_relro}")
++            if elf_class == 2 and (
++                not alignments
++                or any(value < MIN_64_BIT_ALIGNMENT for value in alignments)
++            ):
++                failures.append(name)
++
++    if failures:
++        print(
++            "64-bit libraries below 16 KiB alignment: " + ", ".join(failures),
++            file=sys.stderr,
++        )
++        return 1
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+--- a/scripts/flutter.sh
 +++ b/scripts/flutter.sh
 @@ -0,0 +1,10 @@
 +#!/usr/bin/env bash
@@ -7988,7 +9147,7 @@
 +export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 +export CI=true
 +exec "$dawnmesh_root/.tools/flutter/bin/flutter" "$@"
---- /dev/null
+--- a/scripts/gradle.sh
 +++ b/scripts/gradle.sh
 @@ -0,0 +1,9 @@
 +#!/usr/bin/env bash
@@ -8000,7 +9159,51 @@
 +export GRADLE_USER_HOME="$dawnmesh_root/.tools/gradle-cache"
 +export PATH="$JAVA_HOME/bin:$PATH"
 +exec "$dawnmesh_root/android/gradlew" -p "$dawnmesh_root/android" "$@"
---- /dev/null
+--- a/test/app_log_test.dart
++++ b/test/app_log_test.dart
+@@ -0,0 +1,41 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/diagnostics/app_log.dart';
++
++void main() {
++  setUp(() {
++    AppLog.setEnabled(false);
++    AppLog.clear();
++  });
++
++  tearDown(() {
++    AppLog.setEnabled(false);
++    AppLog.clear();
++  });
++
++  test('logging is opt-in and disabling clears retained entries', () async {
++    AppLog.info('测试', '关闭时不应记录');
++    expect(AppLog.recent, isEmpty);
++
++    final emitted = AppLog.stream.first;
++    AppLog.setEnabled(true);
++    AppLog.warn('蓝牙', '测试链路波动');
++
++    expect((await emitted).message, '测试链路波动');
++    expect(AppLog.recent.single.tag, '蓝牙');
++
++    AppLog.setEnabled(false);
++    AppLog.error('音频', '关闭后也不应记录');
++    expect(AppLog.recent, isEmpty);
++  });
++
++  test('retains only the newest bounded set of entries', () {
++    AppLog.setEnabled(true);
++    for (var index = 0; index < AppLog.maxRetained + 5; index++) {
++      AppLog.debug('容量', '记录 $index');
++    }
++
++    expect(AppLog.recent, hasLength(AppLog.maxRetained));
++    expect(AppLog.recent.first.message, '记录 ${AppLog.maxRetained + 4}');
++    expect(AppLog.recent.last.message, '记录 5');
++  });
++}
+--- a/test/background_call_controls_test.dart
 +++ b/test/background_call_controls_test.dart
 @@ -0,0 +1,105 @@
 +import 'dart:async';
@@ -8108,7 +9311,7 @@
 +    },
 +  );
 +}
---- /dev/null
+--- a/test/ble_home_test.dart
 +++ b/test/ble_home_test.dart
 @@ -0,0 +1,165 @@
 +import 'package:sunset_ripple/core/security/room_invite.dart';
@@ -8276,7 +9479,7 @@
 +    await tester.pump(const Duration(seconds: 4));
 +  });
 +}
---- /dev/null
+--- a/test/dawnmesh_security_test.dart
 +++ b/test/dawnmesh_security_test.dart
 @@ -0,0 +1,62 @@
 +import 'dart:typed_data';
@@ -8341,7 +9544,7 @@
 +    },
 +  );
 +}
---- /dev/null
+--- a/test/dawnmesh_transport_security_test.dart
 +++ b/test/dawnmesh_transport_security_test.dart
 @@ -0,0 +1,68 @@
 +import 'dart:async';
@@ -8412,6 +9615,85 @@
 +    },
 +  );
 +}
+--- a/test/debug_log_page_test.dart
++++ b/test/debug_log_page_test.dart
+@@ -0,0 +1,76 @@
++import 'package:flutter/material.dart';
++import 'package:flutter/services.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/diagnostics/app_log.dart';
++import 'package:sunset_ripple/core/preferences/debug_log_settings_store.dart';
++import 'package:sunset_ripple/ui/pages/debug_log_page.dart';
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++
++  setUp(() {
++    AppLog.setEnabled(false);
++    AppLog.clear();
++  });
++
++  tearDown(() {
++    AppLog.setEnabled(false);
++    AppLog.clear();
++  });
++
++  testWidgets('debug log page enables, displays, filters and clears logs', (
++    tester,
++  ) async {
++    final calls = <MethodCall>[];
++    final messenger =
++        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
++    messenger.setMockMethodCallHandler(DebugLogSettingsStore.channel, (
++      call,
++    ) async {
++      calls.add(call);
++      return null;
++    });
++    addTearDown(
++      () => messenger.setMockMethodCallHandler(
++        DebugLogSettingsStore.channel,
++        null,
++      ),
++    );
++    tester.view.physicalSize = const Size(360, 900);
++    tester.view.devicePixelRatio = 1;
++    addTearDown(tester.view.reset);
++
++    await tester.pumpWidget(
++      const MaterialApp(home: DebugLogPage(isNight: true)),
++    );
++    expect(find.text('Debug logs'), findsOneWidget);
++    expect(find.text('Off'), findsWidgets);
++    expect(AppLog.isEnabled, isFalse);
++
++    await tester.tap(find.byType(Switch));
++    await tester.pumpAndSettle();
++    expect(AppLog.isEnabled, isTrue);
++    expect(calls.single.method, 'setDebugLoggingEnabled');
++
++    AppLog.warn('蓝牙', '链路出现波动');
++    AppLog.info('音频', '缓冲恢复正常');
++    await tester.pumpAndSettle();
++    expect(find.text('缓冲恢复正常'), findsOneWidget);
++    expect(AppLog.recent.any((entry) => entry.message == '链路出现波动'), isTrue);
++
++    await tester.tap(find.widgetWithText(ChoiceChip, 'WARN'));
++    await tester.pump();
++    expect(find.text('链路出现波动'), findsOneWidget);
++    expect(find.text('缓冲恢复正常'), findsNothing);
++
++    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
++    await tester.pump();
++    expect(AppLog.recent, isEmpty);
++
++    await tester.tap(find.byType(Switch));
++    await tester.pumpAndSettle();
++    expect(AppLog.isEnabled, isFalse);
++    expect(calls.last.arguments, {'enabled': false});
++    expect(tester.takeException(), isNull);
++  });
++}
 --- a/test/i18n_test.dart
 +++ b/test/i18n_test.dart
 @@ -5,7 +5,7 @@
@@ -8437,7 +9719,7 @@
        expect(s.pttHoldingToTalk, '正在说话');
        expect(s.pttHoldToTalk, '按住说话');
 @@ -45,7 +45,7 @@
- 
+
      test('English strings return non-empty localized texts', () {
        const s = AppStrings.en;
 -      expect(s.appName, 'SunsetRipple');
@@ -8471,11 +9753,12 @@
        expect(s.chatRecalledTip, 'Recall request submitted');
        expect(s.formerNameLabel('OldName'), 'Previously OldName');
        expect(s.hostRoleBadge, 'Host');
---- /dev/null
+--- a/test/nickname_store_test.dart
 +++ b/test/nickname_store_test.dart
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,51 @@
 +import 'package:flutter/services.dart';
 +import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/preferences/debug_log_settings_store.dart';
 +import 'package:sunset_ripple/core/preferences/nickname_store.dart';
 +
 +void main() {
@@ -8503,8 +9786,28 @@
 +      expect(await store.load(), '红米用户');
 +    },
 +  );
++
++  test('debug logging preference is loaded and saved privately', () async {
++    var enabled = false;
++    final messenger =
++        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
++    messenger.setMockMethodCallHandler(channel, (call) async {
++      if (call.method == 'setDebugLoggingEnabled') {
++        enabled = (call.arguments as Map)['enabled'] as bool;
++        return null;
++      }
++      if (call.method == 'getDebugLoggingEnabled') return enabled;
++      return null;
++    });
++    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
++
++    final store = DebugLogSettingsStore();
++    expect(await store.load(), isFalse);
++    expect(await store.save(true), isTrue);
++    expect(await store.load(), isTrue);
++  });
 +}
---- /dev/null
+--- a/test/room_admission_test.dart
 +++ b/test/room_admission_test.dart
 @@ -0,0 +1,111 @@
 +import 'dart:typed_data';
@@ -8625,7 +9928,7 @@
  import 'package:flutter_test/flutter_test.dart';
  import 'package:sunset_ripple/ui/pages/session_stage.dart';
 +import 'package:sunset_ripple/ui/widgets/room_invite_row.dart';
- 
+
  /// 进房转场的端到端验收：点「创建 WiFi 房」之后，首页那组 UI 要走干净，
  /// 房间那组要到齐，中途每一帧都不许溢出；返回时再原路退回首页。
  void main() {
@@ -8635,12 +9938,12 @@
 +  const audioEventsChannel = MethodChannel(
 +    'host.msknet.sunsetripple/audio_events',
 +  );
- 
+
    setUp(() {
      // 单测里没有平台侧实现，把音频通道打桩掉，否则 MissingPluginException
 @@ -27,25 +29,39 @@
    });
- 
+
    Finder findTitle() => find.byWidgetPredicate(
 -        (w) => w is Text && (w.data == '落日后残波' || w.data == 'SunsetRipple'),
 -      );
@@ -8689,7 +9992,7 @@
 +    }
 +    fail('Room transition did not complete');
 +  }
- 
+
    testWidgets('创建房间：首页 UI 离场、背景留场、房间 UI 入场', (tester) async {
      tester.view.physicalSize = const Size(360, 640);
 @@ -66,6 +82,7 @@
@@ -8698,7 +10001,7 @@
      });
 +    await waitForRoom(tester, true);
      await tester.pump();
- 
+
      // 逐帧走完整段转场，任何一帧溢出都会在这里冒出来。
 @@ -80,6 +97,20 @@
      expect(findInCall(), findsOneWidget);
@@ -8718,7 +10021,7 @@
 +    await tester.tap(find.byIcon(Icons.visibility_outlined));
 +    await tester.pump();
 +    expect(find.text(code), findsOneWidget);
- 
+
      // 离开房间完成清理
      await tester.tap(findLeave());
 @@ -88,7 +119,8 @@
@@ -8729,7 +10032,7 @@
 +      () => Future<void>.delayed(const Duration(milliseconds: 300)),
 +    );
    });
- 
+
    testWidgets('离开房间：原路退回首页', (tester) async {
 @@ -105,6 +137,7 @@
        await tester.tap(findCreateWifi());
@@ -8742,19 +10045,19 @@
 @@ -119,11 +152,13 @@
        expect(tester.takeException(), isNull, reason: '退场第 ${i + 1} 帧溢出');
      }
- 
+
 +    await waitForRoom(tester, false);
      expect(findInCall(), findsNothing);
      expect(findTitle(), findsWidgets);
      expect(findCreateWifi(), findsOneWidget);
- 
+
      await tester.runAsync(
 -        () => Future<void>.delayed(const Duration(milliseconds: 300)));
 +      () => Future<void>.delayed(const Duration(milliseconds: 300)),
 +    );
    });
  }
---- /dev/null
+--- a/test/room_invite_row_test.dart
 +++ b/test/room_invite_row_test.dart
 @@ -0,0 +1,89 @@
 +import 'package:flutter/material.dart';
@@ -8846,7 +10149,7 @@
 +    },
 +  );
 +}
---- /dev/null
+--- a/test/room_invite_test.dart
 +++ b/test/room_invite_test.dart
 @@ -0,0 +1,249 @@
 +import 'dart:async';
@@ -9107,7 +10410,7 @@
 +      expect(find.text('按住对讲'), findsOneWidget);
 +      expect(find.text('自动通话'), findsOneWidget);
      });
- 
+
      testWidgets('${entry.key} 蓝牙房内布局不溢出', (tester) async {
 @@ -85,9 +87,7 @@
      testWidgets('${entry.key} 首页整场（背景+标题+前景）不溢出', (tester) async {
@@ -9139,7 +10442,7 @@
          findsOneWidget,
        );
 @@ -111,20 +111,12 @@
- 
+
      testWidgets('${entry.key} 聊天面板弹出、输入发送、长消息不溢出', (tester) async {
        useSurface(tester, entry.value);
 -      final session = RoomSession(
@@ -9148,7 +10451,7 @@
 -      );
 +      final session = RoomSession(audioIo: MockAudioIo(), selfNickname: '测试者');
        await session.createRoom();
- 
+
        await tester.pumpWidget(
          MaterialApp(
 -          home: Scaffold(
@@ -9161,7 +10464,7 @@
          ),
        );
        await tester.pump();
---- /dev/null
+--- a/test/spake2_test.dart
 +++ b/test/spake2_test.dart
 @@ -0,0 +1,71 @@
 +import 'dart:convert';
@@ -9235,7 +10538,7 @@
 +    );
 +  });
 +}
---- /dev/null
+--- a/test/voice_modes_test.dart
 +++ b/test/voice_modes_test.dart
 @@ -0,0 +1,183 @@
 +import 'dart:typed_data';
@@ -9424,7 +10727,7 @@
 --- a/test/widget_test.dart
 +++ b/test/widget_test.dart
 @@ -6,12 +6,15 @@
- 
+
  void main() {
    const audioChannel = MethodChannel('host.msknet.sunsetripple/audio');
 -  const audioEventsChannel =
@@ -9442,7 +10745,7 @@
 +  const wifiDirectEventsChannel = MethodChannel(
 +    'host.msknet.sunsetripple/wifi_direct_events',
 +  );
- 
+
    setUp(() {
      final messenger =
 @@ -25,7 +28,9 @@
@@ -9454,7 +10757,7 @@
 +      (_) async => null,
 +    );
    });
- 
+
    tearDown(() {
 @@ -48,7 +53,7 @@
      // 能找到标题（SunsetRipple 或 落日后残波）与输入框
@@ -9476,13 +10779,13 @@
      );
 @@ -68,7 +73,7 @@
      await tester.pump(scanSettle);
- 
+
      final bluetoothChip = find.byWidgetPredicate(
 -      (w) => w is Text && (w.data == '蓝牙对讲' || w.data == 'Bluetooth Talk'),
 +      (w) => w is Text && (w.data == '蓝牙房间' || w.data == 'Bluetooth room'),
      );
      expect(bluetoothChip, findsOneWidget);
- 
+
 @@ -81,7 +86,7 @@
        find.byWidgetPredicate(
          (w) =>
@@ -9492,7 +10795,7 @@
        ),
        findsOneWidget,
      );
---- /dev/null
+--- a/test/wifi_direct_credentials_test.dart
 +++ b/test/wifi_direct_credentials_test.dart
 @@ -0,0 +1,24 @@
 +import 'package:flutter_test/flutter_test.dart';
@@ -9527,16 +10830,16 @@
  import 'package:sunset_ripple/core/transport/wifi_direct_manager.dart';
 +import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
 +import 'package:sunset_ripple/core/security/room_invite.dart';
- 
+
  void main() {
    TestWidgetsFlutterBinding.ensureInitialized();
- 
+
    const channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
 +  final credentials = WifiDirectCredentials.fromInvite(
 +    RoomInvite.parse('012345'),
 +  );
 +  final calls = <MethodCall>[];
- 
+
    setUp(() {
      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
          .setMockMethodCallHandler(channel, (MethodCall call) async {
@@ -9594,7 +10897,7 @@
 +          }
 +        });
    });
- 
+
    tearDown(() {
 +    calls.clear();
      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -9602,14 +10905,14 @@
    });
 @@ -98,13 +106,18 @@
      });
- 
+
      test('createGroup and removeGroup succeed', () async {
 -      expect(await manager.createGroup(), isTrue);
 +      expect(await manager.createGroup(credentials), isTrue);
 +      expect(calls.last.arguments, credentials.toMap());
        expect(await manager.removeGroup(), isTrue);
      });
- 
+
      test('discoverPeers, connect and disconnect invoke correctly', () async {
        expect(await manager.discoverPeers(), isTrue);
 -      expect(await manager.connect('46:b2:f7:ca:c4:b3'), isTrue);
@@ -9620,7 +10923,7 @@
 +      });
        expect(await manager.disconnect(), isTrue);
      });
- 
+
 @@ -118,6 +131,7 @@
      test('connectAndWait returns null when connection times out', () async {
        final result = await manager.connectAndWait(

@@ -10,6 +10,7 @@ import 'home_page.dart';
 import 'room_page.dart';
 import 'diagnostics_sheet.dart';
 import 'about_page.dart';
+import 'debug_log_page.dart';
 import '../theme/app_theme.dart';
 import '../widgets/room_chat_sheet.dart';
 import '../widgets/room_invite_row.dart';
@@ -147,6 +148,13 @@ class _SessionStageState extends State<SessionStage>
             isNight: widget.isNight,
             memberCount: session.members.length,
           ),
+    );
+  }
+
+  void _showDebugLogs() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DebugLogPage(isNight: widget.isNight)),
     );
   }
 
@@ -347,6 +355,13 @@ class _SessionStageState extends State<SessionStage>
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
+                tooltip: s.tooltipDebugLogs,
+                iconSize: 28,
+                padding: const EdgeInsets.all(10),
+                icon: const Icon(Icons.terminal_rounded, color: Colors.white),
+                onPressed: _showDebugLogs,
+              ),
+              IconButton(
                 tooltip: s.tooltipInfoAndUpdates,
                 iconSize: 28,
                 padding: const EdgeInsets.all(10),
@@ -454,6 +469,13 @@ class _SessionStageState extends State<SessionStage>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              IconButton(
+                tooltip: s.tooltipDebugLogs,
+                iconSize: 28,
+                padding: const EdgeInsets.all(12),
+                icon: const Icon(Icons.terminal_rounded, color: Colors.white),
+                onPressed: _showDebugLogs,
+              ),
               StreamBuilder<int>(
                 stream: session.unreadChatStream,
                 initialData: session.unreadChatCount,

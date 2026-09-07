@@ -26,7 +26,8 @@ class LogEntry {
 
   @override
   String toString() {
-    final ts = '${time.hour.toString().padLeft(2, '0')}:'
+    final ts =
+        '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:'
         '${time.second.toString().padLeft(2, '0')}';
     final suffix = error == null ? '' : ' <- $error';
@@ -42,11 +43,15 @@ class LogEntry {
 class AppLog {
   AppLog._();
 
-  static const int _maxRetained = 200;
+  static const int maxRetained = 400;
 
   static final Queue<LogEntry> _retained = Queue<LogEntry>();
   static final StreamController<LogEntry> _controller =
       StreamController<LogEntry>.broadcast();
+  static bool _enabled = false;
+
+  /// 调试日志默认关闭；开启状态由 Android 私有设置在启动时恢复。
+  static bool get isEnabled => _enabled;
 
   /// 全量日志流（诊断面板用）。
   static Stream<LogEntry> get stream => _controller.stream;
@@ -57,6 +62,12 @@ class AppLog {
 
   /// 最近的日志，新的在前。
   static List<LogEntry> get recent => _retained.toList().reversed.toList();
+
+  static void setEnabled(bool enabled) {
+    if (_enabled == enabled) return;
+    _enabled = enabled;
+    if (!enabled) clear();
+  }
 
   static void debug(String tag, String message) =>
       _add(LogLevel.debug, tag, message, null);
@@ -70,7 +81,16 @@ class AppLog {
   static void error(String tag, String message, [Object? error]) =>
       _add(LogLevel.error, tag, message, error);
 
+  /// 接收 Android 原生音频、蓝牙和 Wi-Fi Direct 层转发的日志。
+  static void native(
+    LogLevel level,
+    String tag,
+    String message, [
+    Object? error,
+  ]) => _add(level, tag, message, error);
+
   static void _add(LogLevel level, String tag, String message, Object? error) {
+    if (!_enabled) return;
     final entry = LogEntry(
       level: level,
       tag: tag,
@@ -79,7 +99,7 @@ class AppLog {
     );
 
     _retained.addLast(entry);
-    while (_retained.length > _maxRetained) {
+    while (_retained.length > maxRetained) {
       _retained.removeFirst();
     }
 

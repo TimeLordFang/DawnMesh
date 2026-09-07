@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'core/diagnostics/app_log.dart';
 import 'core/ffi/native_core_ffi.dart';
+import 'core/platform/native_debug_log_channel.dart';
+import 'core/preferences/debug_log_settings_store.dart';
 import 'ui/pages/session_stage.dart';
 import 'ui/theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final debugLoggingEnabled = await DebugLogSettingsStore().load();
+  AppLog.setEnabled(debugLoggingEnabled);
+  NativeDebugLogChannel.start();
   NativeCoreFfi.initialize();
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -47,10 +53,7 @@ class _SunsetRippleAppState extends State<SunsetRippleApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _themeMode,
-      supportedLocales: const [
-        Locale('zh'),
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('zh'), Locale('en')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -58,13 +61,11 @@ class _SunsetRippleAppState extends State<SunsetRippleApp> {
       ],
       home: Builder(
         builder: (context) {
-          final isNight = _themeMode == ThemeMode.dark ||
+          final isNight =
+              _themeMode == ThemeMode.dark ||
               (_themeMode == ThemeMode.system &&
                   MediaQuery.of(context).platformBrightness == Brightness.dark);
-          return SessionStage(
-            isNight: isNight,
-            onToggleTheme: _toggleTheme,
-          );
+          return SessionStage(isNight: isNight, onToggleTheme: _toggleTheme);
         },
       ),
     );

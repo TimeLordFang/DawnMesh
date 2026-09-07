@@ -14,7 +14,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import android.util.Log
 
 /** Foreground microphone lifetime owns CPU/network locks, released on stop. */
 class IntercomForegroundService : Service() {

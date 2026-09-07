@@ -20,6 +20,10 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                     val name = preferences.getString("nickname", null)
                     main.post { result.success(name) }
                 }
+                "getDebugLoggingEnabled" -> worker.execute {
+                    val enabled = preferences.getBoolean("debug_logging_enabled", false)
+                    main.post { result.success(enabled) }
+                }
                 "setNickname" -> {
                     val name = call.argument<String>("nickname")
                     if (name == null || name.toByteArray(Charsets.UTF_8).size > 256) {
@@ -29,6 +33,24 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                         main.post {
                             if (saved) result.success(null)
                             else result.error("SAVE_FAILED", "昵称未写入存储", null)
+                        }
+                    }
+                }
+                "setDebugLoggingEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled")
+                    if (enabled == null) {
+                        result.error("BAD_DEBUG_SETTING", "调试日志开关无效", null)
+                    } else worker.execute {
+                        val saved = preferences.edit()
+                            .putBoolean("debug_logging_enabled", enabled)
+                            .commit()
+                        main.post {
+                            if (saved) {
+                                DebugLogBridge.setEnabled(enabled)
+                                result.success(null)
+                            } else {
+                                result.error("SAVE_FAILED", "调试日志开关未写入存储", null)
+                            }
                         }
                     }
                 }
