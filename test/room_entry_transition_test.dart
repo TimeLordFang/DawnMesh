@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sunset_ripple/ui/pages/session_stage.dart';
+import 'package:sunset_ripple/ui/widgets/room_invite_row.dart';
 
 /// 进房转场的端到端验收：点「创建 WiFi 房」之后，首页那组 UI 要走干净，
 /// 房间那组要到齐，中途每一帧都不许溢出；返回时再原路退回首页。
@@ -96,6 +97,20 @@ void main() {
     expect(findInCall(), findsOneWidget);
     expect(findLeave(), findsOneWidget);
     expect(findRoomTitle(), findsOneWidget);
+    final inviteRow = find.byType(RoomInviteRow);
+    expect(inviteRow, findsOneWidget);
+    final code = tester.widget<RoomInviteRow>(inviteRow).code;
+    expect(RegExp(r'^\d{6}$').hasMatch(code), isTrue);
+    expect(find.text(code), findsOneWidget);
+    expect(
+      tester.getTopLeft(inviteRow).dy,
+      greaterThan(tester.getBottomLeft(findRoomTitle()).dy),
+    );
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text(code), findsNothing);
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+    expect(find.text(code), findsOneWidget);
 
     // 离开房间完成清理
     await tester.tap(findLeave());

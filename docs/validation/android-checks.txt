@@ -1,4 +1,3 @@
-Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :gradle:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :gradle:compileKotlin UP-TO-DATE
 > Task :gradle:compileJava NO-SOURCE
@@ -7,8 +6,7 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :gradle:processResources UP-TO-DATE
 > Task :gradle:classes UP-TO-DATE
 > Task :gradle:jar UP-TO-DATE
-Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
-> Task :app:compileFlutterBuildDebug
+> Task :app:compileFlutterBuildDebug UP-TO-DATE
 > Task :app:packJniLibsflutterBuildDebug UP-TO-DATE
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
@@ -20,38 +18,38 @@ Warning: SDK processing. This version only understands SDK XML versions up to 3 
 > Task :app:mergeDebugAssets
 > Task :app:copyFlutterAssetsDebug
 > Task :app:generateDebugResValues UP-TO-DATE
-> Task :app:mapDebugSourceSetPaths
-> Task :app:generateDebugResources
-> Task :app:packageDebugResources
-> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug UP-TO-DATE
-> Task :app:processDebugMainManifest UP-TO-DATE
-> Task :app:processDebugManifest UP-TO-DATE
-> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
 > Task :app:javaPreCompileDebug UP-TO-DATE
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
 > Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
 > Task :app:preDebugAndroidTestBuild SKIPPED
 > Task :app:generateDebugAndroidTestResValues UP-TO-DATE
 > Task :app:extractProguardFiles UP-TO-DATE
-> Task :app:parseDebugLocalResources
-> Task :app:mergeDebugResources
+> Task :app:processDebugManifestForPackage
 > Task :app:processDebugResources
 
 > Task :app:compileDebugKotlin
-w: file:///Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/IntercomForegroundService.kt:64:48 'constructor Builder(Int, CharSequence!, PendingIntent?)' is deprecated. Deprecated in Java
+w: file:///Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/CallPanelGraphics.kt:102:58 'scaledDensity: Float' is deprecated. Deprecated in Java
 
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:processDebugJavaRes UP-TO-DATE
-> Task :app:bundleDebugClassesToCompileJar
 > Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
 > Task :app:generateDebugLintReportModel
-> Task :app:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:compileDebugUnitTestKotlin
 > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
 > Task :app:processDebugUnitTestJavaRes UP-TO-DATE
 > Task :app:testDebugUnitTest
-> Task :app:generateDebugAndroidTestLintModel
-> Task :app:generateDebugUnitTestLintModel
 > Task :app:lintAnalyzeDebugAndroidTest
 > Task :app:lintAnalyzeDebugUnitTest
 > Task :app:lintAnalyzeDebug
@@ -69,5 +67,5 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 17s
-44 actionable tasks: 22 executed, 22 up-to-date
+BUILD SUCCESSFUL in 3s
+44 actionable tasks: 21 executed, 23 up-to-date

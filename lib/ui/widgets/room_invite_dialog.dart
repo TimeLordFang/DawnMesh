@@ -8,40 +8,6 @@ Future<RoomInvite?> requestRoomInvite(BuildContext context) =>
       builder: (_) => const _InviteDialog(),
     );
 
-Future<void> showRoomInvite(BuildContext context, RoomInvite invite) =>
-    showDialog<void>(
-      context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            title: const Text('房间邀请码'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SelectableText(
-                  invite.code,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 32, letterSpacing: 4),
-                ),
-                const SizedBox(height: 16),
-                const Text('把这 6 位数字口述给附近的人即可，无需联网。仅分享给信任的人；重新建房会更换邀请码。'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: invite.code));
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                },
-                child: const Text('复制邀请码'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('关闭'),
-              ),
-            ],
-          ),
-    );
-
 class _InviteDialog extends StatefulWidget {
   const _InviteDialog();
   @override

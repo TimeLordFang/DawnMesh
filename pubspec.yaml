@@ -3,8 +3,8 @@ description: "SunsetRipple - Near-field voice intercom for Android, iOS, Windows
 publish_to: 'none'
 
 # versionName 取 `+` 前半段，versionCode 取后半段。
-# DawnMesh 0.1.0-dev.3 / versionCode 3
-version: 0.1.0-dev.3+3
+# DawnMesh 0.1.0-dev.4 / versionCode 4
+version: 0.1.0-dev.4+4
 
 environment:
   sdk: '>=3.7.0 <4.0.0'

@@ -1,9 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T10:53:54" hostname="homemacmini.local" time="0.122">
-  <properties/>
-  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.01"/>
-  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.111"/>
-  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites><testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T11:33:17" hostname="homemacmini.local" time="0.126">
+  <properties />
+  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.014" />
+  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.111" />
+  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.001" />
+  <system-out />
+  <system-err />
+</testsuite><testsuite name="host.msknet.sunsetripple.HoldToTalkGestureTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-07T11:33:17" hostname="homemacmini.local" time="0.0">
+  <properties />
+  <testcase name="cancellationReleasesOnlyOnceAndAllowsANewHold" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <testcase name="disabledOrOutsidePressCannotStartByMovingInside" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <testcase name="dragOutsideStopsAndReentryDoesNotRestart" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <testcase name="otherFingersCannotReleaseOrTakeOverThePrimaryHold" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <system-out />
+  <system-err />
+</testsuite></testsuites>

@@ -1,4 +1,4 @@
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.3-release.apk
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
 Verifies
 Verified using v1 scheme (JAR signing): false
 Verified using v2 scheme (APK Signature Scheme v2): true
@@ -17,8 +17,8 @@ Signer #1 public key SHA-256 digest: 04652d52898219540693fa649832222c9eabd25d8dd
 Signer #1 public key SHA-1 digest: 81e715e2a199a968a54d63ec3072d56ee4d3f85e
 Signer #1 public key MD5 digest: 35a25d1e029022e490f3ea6d6f71ec05
 
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/aapt dump badging /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.3-release.apk
-package: name='dev.dawnmesh.intercom' versionCode='3' versionName='0.1.0-dev.3' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/aapt dump badging /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
+package: name='dev.dawnmesh.intercom' versionCode='4' versionName='0.1.0-dev.4' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
 sdkVersion:'26'
 targetSdkVersion:'35'
 uses-permission: name='android.permission.WAKE_LOCK'
@@ -160,129 +160,122 @@ locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de
 densities: '160' '240' '320' '480' '640' '65534'
 native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'
 
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/zipalign -c -P 16 -v 4 /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.3-release.apk
-Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.3-release.apk (4)...
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/zipalign -c -P 16 -v 4 /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
+Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk (4)...
       87 META-INF/com/android/build/gradle/app-metadata.properties (OK - compressed)
      208 META-INF/version-control-info.textproto (OK - compressed)
      316 assets/dexopt/baseline.prof (OK)
      568 assets/dexopt/baseline.profm (OK)
      681 classes.dex (OK - compressed)
   376832 lib/arm64-v8a/libapp.so (OK)
- 6881280 lib/arm64-v8a/libflutter.so (OK)
-17940480 lib/arm64-v8a/libsunset_ripple_native.so (OK)
-18202624 lib/armeabi-v7a/libapp.so (OK)
-25542656 lib/armeabi-v7a/libflutter.so (OK)
-33390592 lib/armeabi-v7a/libsunset_ripple_native.so (OK)
-33554432 lib/x86_64/libapp.so (OK)
-40124416 lib/x86_64/libflutter.so (OK)
-52264960 lib/x86_64/libsunset_ripple_native.so (OK)
-52510117 assets/flutter_assets/AssetManifest.bin (OK - compressed)
-52510191 assets/flutter_assets/AssetManifest.json (OK - compressed)
-52510264 assets/flutter_assets/FontManifest.json (OK - compressed)
-52510394 assets/flutter_assets/NOTICES.Z (OK - compressed)
-52592260 assets/flutter_assets/NativeAssetsManifest.json (OK - compressed)
-52592390 assets/flutter_assets/fonts/MaterialIcons-Regular.otf (OK - compressed)
-52595943 assets/flutter_assets/shaders/ink_sparkle.frag (OK - compressed)
-52601145 DebugProbesKt.bin (OK - compressed)
-52602000 META-INF/androidx.activity_activity.version (OK - compressed)
-52602098 META-INF/androidx.annotation_annotation-experimental.version (OK - compressed)
-52602184 META-INF/androidx.arch.core_core-runtime.version (OK - compressed)
-52602314 META-INF/androidx.core_core-ktx.version (OK - compressed)
-52602388 META-INF/androidx.core_core.version (OK - compressed)
-52602474 META-INF/androidx.customview_customview.version (OK - compressed)
-52602555 META-INF/androidx.fragment_fragment.version (OK - compressed)
-52602644 META-INF/androidx.interpolator_interpolator.version (OK - compressed)
-52602745 META-INF/androidx.lifecycle_lifecycle-livedata-core-ktx.version (OK - compressed)
-52602842 META-INF/androidx.lifecycle_lifecycle-livedata-core.version (OK - compressed)
-52602934 META-INF/androidx.lifecycle_lifecycle-livedata.version (OK - compressed)
-52603025 META-INF/androidx.lifecycle_lifecycle-process.version (OK - compressed)
-52603116 META-INF/androidx.lifecycle_lifecycle-runtime.version (OK - compressed)
-52603220 META-INF/androidx.lifecycle_lifecycle-viewmodel-savedstate.version (OK - compressed)
-52603313 META-INF/androidx.lifecycle_lifecycle-viewmodel.version (OK - compressed)
-52603390 META-INF/androidx.loader_loader.version (OK - compressed)
-52603487 META-INF/androidx.profileinstaller_profileinstaller.version (OK - compressed)
-52603572 META-INF/androidx.savedstate_savedstate.version (OK - compressed)
-52603659 META-INF/androidx.startup_startup-runtime.version (OK - compressed)
-52603738 META-INF/androidx.tracing_tracing.version (OK - compressed)
-52603841 META-INF/androidx.versionedparcelable_versionedparcelable.version (OK - compressed)
-52603924 META-INF/androidx.viewpager_viewpager.version (OK - compressed)
-52604015 META-INF/androidx.window.extensions.core_core.version (OK - compressed)
-52604097 META-INF/androidx.window_window-java.version (OK - compressed)
-52604174 META-INF/androidx.window_window.version (OK - compressed)
-52604255 META-INF/kotlinx_coroutines_android.version (OK - compressed)
-52604332 META-INF/kotlinx_coroutines_core.version (OK - compressed)
-52604391 META-INF/services/k0.a (OK - compressed)
-52604450 META-INF/services/k0.b (OK - compressed)
-52604515 kotlin-tooling-metadata.json (OK - compressed)
-52604870 kotlin/annotation/annotation.kotlin_builtins (OK - compressed)
-52605505 kotlin/collections/collections.kotlin_builtins (OK - compressed)
-52607100 kotlin/coroutines/coroutines.kotlin_builtins (OK - compressed)
-52607327 kotlin/internal/internal.kotlin_builtins (OK - compressed)
-52607780 kotlin/kotlin.kotlin_builtins (OK - compressed)
-52612850 kotlin/ranges/ranges.kotlin_builtins (OK - compressed)
-52614182 kotlin/reflect/reflect.kotlin_builtins (OK - compressed)
-52615496 AndroidManifest.xml (OK - compressed)
-52618368 res/0w.xml (OK - compressed)
-52618740 res/2K.9.png (OK)
-52619008 res/5c.png (OK)
-52619186 res/9m.xml (OK - compressed)
-52619400 res/9w.png (OK)
-52619845 res/BW.xml (OK - compressed)
-52620108 res/C_.9.png (OK)
-52620364 res/FS.png (OK)
-52621088 res/Fd.xml (OK - compressed)
-52621496 res/Ma.9.png (OK)
-52621783 res/P8.xml (OK - compressed)
-52622180 res/Qr.xml (OK - compressed)
-52622792 res/RJ.png (OK)
-52623826 res/RV.xml (OK - compressed)
-52624221 res/S8.xml (OK - compressed)
-52624748 res/U-.9.png (OK)
-52625011 res/Ws.xml (OK - compressed)
-52625518 res/Zn.xml (OK - compressed)
-52625743 res/a0.xml (OK - compressed)
-52626318 res/c6.xml (OK - compressed)
-52626542 res/cV.xml (OK - compressed)
-52626842 res/df.xml (OK - compressed)
-52627136 res/gK.9.png (OK)
-52627391 res/iQ.xml (OK - compressed)
-52627849 res/iS.xml (OK - compressed)
-52628464 res/je.9.png (OK)
-52628716 res/lR.xml (OK - compressed)
-52629014 res/nz.xml (OK - compressed)
-52629308 res/o-.png (OK)
-52630756 res/o_.9.png (OK)
-52631048 res/pQ.xml (OK - compressed)
-52631416 res/pY.png (OK)
-52631564 res/pu.png (OK)
-52632516 res/s4.png (OK)
-52632656 res/sA.9.png (OK)
-52632912 res/vL.9.png (OK)
-52633180 res/wN.9.png (OK)
-52633445 res/xN.xml (OK - compressed)
-52634276 res/xa.9.png (OK)
-52634537 res/yP.xml (OK - compressed)
-52634940 res/yn.png (OK)
-52635492 res/z-.9.png (OK)
-52635760 resources.arsc (OK)
+ 6946816 lib/arm64-v8a/libflutter.so (OK)
+18006016 lib/arm64-v8a/libsunset_ripple_native.so (OK)
+18268160 lib/armeabi-v7a/libapp.so (OK)
+25608192 lib/armeabi-v7a/libflutter.so (OK)
+33456128 lib/armeabi-v7a/libsunset_ripple_native.so (OK)
+33619968 lib/x86_64/libapp.so (OK)
+40189952 lib/x86_64/libflutter.so (OK)
+52330496 lib/x86_64/libsunset_ripple_native.so (OK)
+52575653 assets/flutter_assets/AssetManifest.bin (OK - compressed)
+52575727 assets/flutter_assets/AssetManifest.json (OK - compressed)
+52575800 assets/flutter_assets/FontManifest.json (OK - compressed)
+52575930 assets/flutter_assets/NOTICES.Z (OK - compressed)
+52657796 assets/flutter_assets/NativeAssetsManifest.json (OK - compressed)
+52657926 assets/flutter_assets/fonts/MaterialIcons-Regular.otf (OK - compressed)
+52661697 assets/flutter_assets/shaders/ink_sparkle.frag (OK - compressed)
+52666899 DebugProbesKt.bin (OK - compressed)
+52667754 META-INF/androidx.activity_activity.version (OK - compressed)
+52667852 META-INF/androidx.annotation_annotation-experimental.version (OK - compressed)
+52667938 META-INF/androidx.arch.core_core-runtime.version (OK - compressed)
+52668068 META-INF/androidx.core_core-ktx.version (OK - compressed)
+52668142 META-INF/androidx.core_core.version (OK - compressed)
+52668228 META-INF/androidx.customview_customview.version (OK - compressed)
+52668309 META-INF/androidx.fragment_fragment.version (OK - compressed)
+52668398 META-INF/androidx.interpolator_interpolator.version (OK - compressed)
+52668499 META-INF/androidx.lifecycle_lifecycle-livedata-core-ktx.version (OK - compressed)
+52668596 META-INF/androidx.lifecycle_lifecycle-livedata-core.version (OK - compressed)
+52668688 META-INF/androidx.lifecycle_lifecycle-livedata.version (OK - compressed)
+52668779 META-INF/androidx.lifecycle_lifecycle-process.version (OK - compressed)
+52668870 META-INF/androidx.lifecycle_lifecycle-runtime.version (OK - compressed)
+52668974 META-INF/androidx.lifecycle_lifecycle-viewmodel-savedstate.version (OK - compressed)
+52669067 META-INF/androidx.lifecycle_lifecycle-viewmodel.version (OK - compressed)
+52669144 META-INF/androidx.loader_loader.version (OK - compressed)
+52669241 META-INF/androidx.profileinstaller_profileinstaller.version (OK - compressed)
+52669326 META-INF/androidx.savedstate_savedstate.version (OK - compressed)
+52669413 META-INF/androidx.startup_startup-runtime.version (OK - compressed)
+52669492 META-INF/androidx.tracing_tracing.version (OK - compressed)
+52669595 META-INF/androidx.versionedparcelable_versionedparcelable.version (OK - compressed)
+52669678 META-INF/androidx.viewpager_viewpager.version (OK - compressed)
+52669769 META-INF/androidx.window.extensions.core_core.version (OK - compressed)
+52669851 META-INF/androidx.window_window-java.version (OK - compressed)
+52669928 META-INF/androidx.window_window.version (OK - compressed)
+52670009 META-INF/kotlinx_coroutines_android.version (OK - compressed)
+52670086 META-INF/kotlinx_coroutines_core.version (OK - compressed)
+52670145 META-INF/services/k0.a (OK - compressed)
+52670204 META-INF/services/k0.b (OK - compressed)
+52670269 kotlin-tooling-metadata.json (OK - compressed)
+52670624 kotlin/annotation/annotation.kotlin_builtins (OK - compressed)
+52671259 kotlin/collections/collections.kotlin_builtins (OK - compressed)
+52672854 kotlin/coroutines/coroutines.kotlin_builtins (OK - compressed)
+52673081 kotlin/internal/internal.kotlin_builtins (OK - compressed)
+52673534 kotlin/kotlin.kotlin_builtins (OK - compressed)
+52678604 kotlin/ranges/ranges.kotlin_builtins (OK - compressed)
+52679936 kotlin/reflect/reflect.kotlin_builtins (OK - compressed)
+52681250 AndroidManifest.xml (OK - compressed)
+52684122 res/0w.xml (OK - compressed)
+52684492 res/2K.9.png (OK)
+52684760 res/5c.png (OK)
+52684938 res/9m.xml (OK - compressed)
+52685152 res/9w.png (OK)
+52685597 res/BW.xml (OK - compressed)
+52685860 res/C_.9.png (OK)
+52686116 res/FS.png (OK)
+52686840 res/Fd.xml (OK - compressed)
+52687248 res/Ma.9.png (OK)
+52687535 res/P8.xml (OK - compressed)
+52687932 res/Qr.xml (OK - compressed)
+52688544 res/RJ.png (OK)
+52689578 res/RV.xml (OK - compressed)
+52689973 res/S8.xml (OK - compressed)
+52690500 res/U-.9.png (OK)
+52690763 res/Ws.xml (OK - compressed)
+52691270 res/Zn.xml (OK - compressed)
+52691495 res/a0.xml (OK - compressed)
+52692070 res/c6.xml (OK - compressed)
+52692294 res/cV.xml (OK - compressed)
+52692594 res/df.xml (OK - compressed)
+52692888 res/gK.9.png (OK)
+52693143 res/iQ.xml (OK - compressed)
+52693601 res/iS.xml (OK - compressed)
+52694216 res/je.9.png (OK)
+52694468 res/lR.xml (OK - compressed)
+52694766 res/nz.xml (OK - compressed)
+52695060 res/o-.png (OK)
+52696508 res/o_.9.png (OK)
+52696800 res/pQ.xml (OK - compressed)
+52697168 res/pY.png (OK)
+52697316 res/pu.png (OK)
+52698268 res/s4.png (OK)
+52698408 res/sA.9.png (OK)
+52698664 res/vL.9.png (OK)
+52698932 res/wN.9.png (OK)
+52699197 res/xN.xml (OK - compressed)
+52700028 res/xa.9.png (OK)
+52700289 res/yP.xml (OK - compressed)
+52700692 res/yn.png (OK)
+52701244 res/z-.9.png (OK)
+52701512 resources.arsc (OK)
 Verification succesful
 
-ELF PT_LOAD: lib/arm64-v8a/libapp.so: [65536, 65536, 65536]: PASS 64-bit >= 16384; GNU_RELRO=False
-
-ELF PT_LOAD: lib/arm64-v8a/libflutter.so: [65536, 65536, 65536, 65536]: PASS 64-bit >= 16384; GNU_RELRO=True
-
-ELF PT_LOAD: lib/arm64-v8a/libsunset_ripple_native.so: [16384, 16384, 16384]: PASS 64-bit >= 16384; GNU_RELRO=True
-
-ELF PT_LOAD: lib/armeabi-v7a/libapp.so: [16384, 16384, 16384]: 32-bit ABI (4 KB permitted); GNU_RELRO=False
-
-ELF PT_LOAD: lib/armeabi-v7a/libflutter.so: [65536, 65536, 65536, 65536]: 32-bit ABI (4 KB permitted); GNU_RELRO=True
-
-ELF PT_LOAD: lib/armeabi-v7a/libsunset_ripple_native.so: [4096, 4096, 4096]: 32-bit ABI (4 KB permitted); GNU_RELRO=True
-
-ELF PT_LOAD: lib/x86_64/libapp.so: [65536, 65536, 65536]: PASS 64-bit >= 16384; GNU_RELRO=False
-
-ELF PT_LOAD: lib/x86_64/libflutter.so: [65536, 65536, 65536, 65536]: PASS 64-bit >= 16384; GNU_RELRO=True
-
-ELF PT_LOAD: lib/x86_64/libsunset_ripple_native.so: [16384, 16384, 16384]: PASS 64-bit >= 16384; GNU_RELRO=True
-
-SHA256 4eb20e7308861f237556d45bca145841490067fde1c1a87e904e4df6fde8d52d
+SHA-256: ab988749b323793315d4510a7e0b10484c987e32f40dcac6df173e14ed825444
+Bytes: 52771424
+ELF program headers:
+lib/arm64-v8a/libapp.so: PT_LOAD align=[65536, 65536, 65536], GNU_RELRO=False
+lib/arm64-v8a/libflutter.so: PT_LOAD align=[65536, 65536, 65536, 65536], GNU_RELRO=True
+lib/arm64-v8a/libsunset_ripple_native.so: PT_LOAD align=[16384, 16384, 16384], GNU_RELRO=True
+lib/armeabi-v7a/libapp.so: PT_LOAD align=[16384, 16384, 16384], GNU_RELRO=False
+lib/armeabi-v7a/libflutter.so: PT_LOAD align=[65536, 65536, 65536, 65536], GNU_RELRO=True
+lib/armeabi-v7a/libsunset_ripple_native.so: PT_LOAD align=[4096, 4096, 4096], GNU_RELRO=True
+lib/x86_64/libapp.so: PT_LOAD align=[65536, 65536, 65536], GNU_RELRO=False
+lib/x86_64/libflutter.so: PT_LOAD align=[65536, 65536, 65536, 65536], GNU_RELRO=True
+lib/x86_64/libsunset_ripple_native.so: PT_LOAD align=[16384, 16384, 16384], GNU_RELRO=True

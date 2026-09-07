@@ -97,21 +97,4 @@
    application iconwill not show if your monochrome attribute is not also
    specified in android:roundIcon.
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/LockScreenTalkActivity.kt:33: Warning: Do not concatenate text displayed with setText. Use resource string with placeholders. [SetTextI18n]
-            text = getString(R.string.app_name) + " · 房间通话"
-                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-   Explanation for issues of type "SetTextI18n":
-   When calling TextView#setText
-   * Never call Number#toString() to format numbers; it will not handle
-   fraction separators and locale-specific digits properly. Consider using
-   String#format with proper format specifications (%d or %f) instead.
-   * Do not pass a string literal (e.g. "Hello") to display text. Hardcoded
-   text can not be properly translated to other languages. Consider using
-   Android resource strings instead.
-   * Do not build messages by concatenating text chunks. Such messages can not
-   be properly translated.
-
-   https://developer.android.com/guide/topics/resources/localization.html
-
-0 errors, 11 warnings
+0 errors, 10 warnings

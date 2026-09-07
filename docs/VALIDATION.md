@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.3-release.apk`，**52,705,672 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.3` / versionCode **3**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`4eb20e7308861f237556d45bca145841490067fde1c1a87e904e4df6fde8d52d`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.4-release.apk`，**52,771,424 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.4` / versionCode **4**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`ab988749b323793315d4510a7e0b10484c987e32f40dcac6df173e14ed825444`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
@@ -17,10 +17,10 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **147 项通过，0 失败** |
+| Flutter 全量测试（串行） | **151 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
-| `:app:testDebugUnitTest` | Kotlin **3 项通过，0 失败** |
-| `:app:lintDebug` | 成功；**0 errors、11 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
+| `:app:testDebugUnitTest` | Kotlin **7 项通过，0 失败** |
+| `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
 | Flutter debug / release APK | 两种构建均成功；release 使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
 | `zipalign -c -P 16 -v 4` | Verification successful |
@@ -32,7 +32,14 @@
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
-## dev.3 功能完成情况
+## dev.4 本轮完成情况
+
+- 邀请码直接显示在聊天室信息下方，创建后默认显示 10 秒；眼睛按钮切换，每次显示重新计时。加入者默认隐藏，切后台立即隐藏；隐藏数字从文字与无障碍节点移除。
+- 锁屏面板采用深色渐变、分段模式选择、中央圆形对讲区和静音卡片；加入按压缩放、发言光环、轻震反馈。短屏可滚动，宽屏限制面板宽度，适配系统栏。
+- 圆环外按下不发送；按住后滑出停止，滑回不恢复；多指不会接管对讲，切模式、收起、失焦和暂停均取消按住状态。待机不运行持续动画。
+- 与 dev.3 使用相同协议和签名，支持覆盖升级。本轮没有执行 Android 原生界面截图或两品牌真机验证，界面观感和厂商锁屏表现需安装后确认。
+
+## dev.3 已保留功能
 
 - 中文名改为 **曙光之声**，英文名 DawnMesh；覆盖启动器、主标题、关于、麦克风权限提示、通知与锁屏通话面板。包 ID 和独立签名保留，可覆盖升级。
 - 邀请码改为 6 位数字，支持前导零；PAKE 入房验证后下发随机房间密钥，不直接将低熵短码作为 AES 密钥。新旧邀请码协议不互通，两台都需更新 dev.3。
@@ -52,6 +59,9 @@
 8. C++ 编码拒绝空指针与超长载荷；截断帧拒绝解码；环形缓冲满/读写回绕。
 9. RFC 9382 附录 B SPAKE2 标准向量、错误码/非曲线点拒绝、确认前不发组密钥、相同短码的不同房间密钥不同、在线猜码限速。
 10. 语音门限与首尾音、模式切换不重启采集、静音/退房停止发送、小屏切换布局、锁屏控制平台通道同步、音频初始化过程中退房不再开麦。
+
+11. 邀请码首次及重复显示超时、主动隐藏、后台隐藏、房间切换、销毁取消计时器、紧凑屏大字体，以及实际建房后的邀请码位置与显示切换。
+12. Kotlin 对讲手势：滑出后不复活、多指隔离、重复取消只释放一次、禁用状态和圆环外按下不发送。
 
 ## 按约定由你执行
 
