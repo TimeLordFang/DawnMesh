@@ -70,6 +70,35 @@ void main() {
     },
   );
 
+  test('Wi-Fi room can switch between automatic and push-to-talk', () async {
+    final audio = MockAudioIo();
+    final room = RoomSession(
+      audioIo: audio,
+      selfNickname: 'Host',
+      mode: RoomMode.wifiFullDuplex,
+    );
+    addTearDown(room.dispose);
+    final sent = <Frame>[];
+    room.onSendFrame = sent.add;
+    await room.createRoom();
+    expect(room.voiceMode, VoiceMode.automatic);
+    room.setVoiceMode(VoiceMode.pushToTalk);
+    audio.emitEncodedFrame(Uint8List.fromList([1]), level: .2);
+    expect(sent.where((frame) => frame.type == FrameType.audio), isEmpty);
+    room.setPtt(true);
+    audio.emitEncodedFrame(Uint8List.fromList([2]), level: .2);
+    expect(
+      sent.where((frame) => frame.type == FrameType.audio).single.payload,
+      [2],
+    );
+    room.setVoiceMode(VoiceMode.automatic);
+    expect(room.isPttPressed, isFalse);
+    audio.emitEncodedFrame(Uint8List.fromList([3]), level: .2);
+    expect(sent.where((frame) => frame.type == FrameType.audio).last.payload, [
+      3,
+    ]);
+  });
+
   testWidgets(
     'compact Bluetooth room switches both voice modes without overflow',
     (tester) async {

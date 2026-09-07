@@ -1,56 +1,65 @@
 package host.msknet.sunsetripple.audio
 
-/** 从抖动缓冲取一帧的结果。 */
 sealed class PollResult {
-    /** 预缓冲未满或已欠载：这一拍不出声，不要用 PLC 硬补。 */
     object NotReady : PollResult()
-
-    /** 该序号的包确实丢了：调用方应当用 Opus PLC 补一帧。 */
     object Lost : PollResult()
-
-    /** 正常取到一个包。 */
     class Packet(val data: ByteArray) : PollResult()
 }
 
-/**
- * 每路远端音频流一个实例。按 16 位回绕序号缓存 Opus 包：
- * 乱序重排、丢包位置报 [PollResult.Lost]、攒满 [prebufferFrames] 帧才开始出帧以吸收网络抖动。
- *
- * 线程安全：[put] 由网络线程调用，[poll] 由播放线程调用。
- *
- * 移植自已发布的 Kotlin 版（alpha.7）。与原版唯一的差别是把「没准备好」和
- * 「丢包」这两种情况拆成了不同的返回值——原版都返回 null，调用方要靠
- * `hasStarted()` 才能分辨，很容易在欠载时错误地触发 PLC。
- */
+/** Bounded playout with re-priming after starvation and a short-utterance deadline. */
 class JitterBuffer(
     private val prebufferFrames: Int = 3,
-    private val maxBuffer: Int = 10,
+    private val maxBuffer: Int = 24,
+    private val ordered: Boolean = false,
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
+    init { require(prebufferFrames in 1..maxBuffer) }
     private val buf = sortedMapOf<Long, ByteArray>()
-    private var highestSeen = -1L // 展开后的最大序号，用于 16 位回绕展开
-    private var next = -1L        // 下一个应吐出的序号
+    private var highestSeen = -1L
+    private var next = -1L
+    private var arrivalSeq = 0L
     private var started = false
+    private var target = prebufferFrames
+    private var firstBufferedAt = 0L
+    private var lastArrivalAt = Long.MIN_VALUE
+    private var underruns = 0
+    private var dropped = 0
 
     @Synchronized
     fun put(seq16: Int, payload: ByteArray) {
-        val seq = unwrap(seq16)
-        if (started && seq < next) return // 迟到帧：该位置已播过
+        val now = clockMs()
+        // Silence is intentional in both PTT and voice-activated modes.
+        if (lastArrivalAt != Long.MIN_VALUE && now - lastArrivalAt > 500) target = prebufferFrames
+        lastArrivalAt = now
+        // TCP and BLE L2CAP deliver ordered, reliable audio. The wire sequence is
+        // shared with chat/heartbeat/control frames; its gaps are NOT lost audio.
+        val seq = if (ordered) arrivalSeq++ else unwrap(seq16)
+        if (next >= 0 && seq < next) { dropped++; return }
+        if (buf.isEmpty()) firstBufferedAt = now
         buf[seq] = payload
-        while (buf.size > maxBuffer) buf.remove(buf.firstKey()) // 防积压，丢最旧
+        while (buf.size > maxBuffer) { buf.remove(buf.firstKey()); dropped++ }
+        if (started && next < buf.firstKey() && buf.size == maxBuffer) next = buf.firstKey()
     }
 
     @Synchronized
     fun poll(): PollResult {
+        if (buf.isEmpty()) {
+            if (started) {
+                started = false
+                underruns++
+                target = (target + 2).coerceAtMost(minOf(maxBuffer, 12))
+            }
+            return PollResult.NotReady
+        }
         if (!started) {
-            if (buf.size < prebufferFrames) return PollResult.NotReady
+            // Do not strand a very short utterance that never fills the target.
+            if (buf.size < target && clockMs() - firstBufferedAt < target * 20L) {
+                return PollResult.NotReady
+            }
             started = true
             next = buf.firstKey()
         }
-        if (buf.isEmpty()) return PollResult.NotReady // 欠载：等新包，不推进
-
-        // 断流后重新对齐，避免 next 永远追不上
         if (buf.firstKey() - next > maxBuffer) next = buf.firstKey()
-
         val head = buf.remove(next)
         next++
         return if (head == null) PollResult.Lost else PollResult.Packet(head)
@@ -58,27 +67,19 @@ class JitterBuffer(
 
     @Synchronized
     fun reset() {
-        buf.clear()
-        highestSeen = -1L
-        next = -1L
-        started = false
+        buf.clear(); highestSeen = -1L; next = -1L; arrivalSeq = 0L
+        started = false; target = prebufferFrames; lastArrivalAt = Long.MIN_VALUE
+        underruns = 0; dropped = 0
     }
+    @Synchronized fun hasStarted(): Boolean = started
+    @Synchronized fun pendingCount(): Int = buf.size
+    @Synchronized fun diagnostics(): String = "queued=${buf.size}, target=$target, rebuffer=$underruns, dropped=$dropped"
 
-    @Synchronized
-    fun hasStarted(): Boolean = started
-
-    @Synchronized
-    fun pendingCount(): Int = buf.size
-
-    /** 把 16 位回绕序号展开为单调递增的 Long。 */
     private fun unwrap(seq16: Int): Long {
-        if (highestSeen < 0) {
-            highestSeen = seq16.toLong()
-            return highestSeen
-        }
-        val delta = ((seq16 - (highestSeen and 0xFFFF).toInt() + 0x8000) and 0xFFFF) - 0x8000
-        val v = highestSeen + delta
-        if (v > highestSeen) highestSeen = v
-        return v
+        if (highestSeen < 0) { highestSeen = seq16.toLong(); return highestSeen }
+        val delta = ((seq16 - (highestSeen and 0xffff).toInt() + 0x8000) and 0xffff) - 0x8000
+        val value = highestSeen + delta
+        if (value > highestSeen) highestSeen = value
+        return value
     }
 }

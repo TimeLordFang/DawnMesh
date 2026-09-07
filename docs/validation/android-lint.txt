@@ -45,10 +45,10 @@
 /Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:306: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:418: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:429: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:702: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:720: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /Users/judoon/workspace/DawnMesh/android/app/src/main/res/drawable-v21: Warning: This folder configuration (v21) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into drawable. [ObsoleteSdkInt]

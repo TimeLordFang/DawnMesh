@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import '../diagnostics/app_log.dart';
+import 'wifi_direct_credentials.dart';
 
 const String _tag = 'WiFiDirect';
 
@@ -52,17 +53,23 @@ class WifiP2pConnectionInfo {
 
 /// Wi-Fi Direct (Wi-Fi P2P) 近场直连管理器。
 class WifiDirectManager {
-  static const MethodChannel _channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
-  static const EventChannel _eventChannel = EventChannel('host.msknet.sunsetripple/wifi_direct_events');
+  static const MethodChannel _channel = MethodChannel(
+    'host.msknet.sunsetripple/wifi_direct',
+  );
+  static const EventChannel _eventChannel = EventChannel(
+    'host.msknet.sunsetripple/wifi_direct_events',
+  );
 
   static final WifiDirectManager instance = WifiDirectManager._internal();
 
   StreamSubscription? _eventSubscription;
   final _peersController = StreamController<List<WifiP2pPeer>>.broadcast();
-  final _connectionController = StreamController<WifiP2pConnectionInfo>.broadcast();
+  final _connectionController =
+      StreamController<WifiP2pConnectionInfo>.broadcast();
 
   Stream<List<WifiP2pPeer>> get peersStream => _peersController.stream;
-  Stream<WifiP2pConnectionInfo> get connectionStream => _connectionController.stream;
+  Stream<WifiP2pConnectionInfo> get connectionStream =>
+      _connectionController.stream;
 
   bool _isListening = false;
 
@@ -99,13 +106,15 @@ class WifiDirectManager {
           if (event is! Map) return;
           final type = event['type'] as String?;
           if (type == 'peers') {
-            final peerList = (event['peers'] as List?)
+            final peerList =
+                (event['peers'] as List?)
                     ?.map((p) => WifiP2pPeer.fromMap(p as Map))
                     .toList() ??
                 [];
             if (!_peersController.isClosed) {
-              final signature =
-                  peerList.map((p) => '${p.address}|${p.name}').join(';');
+              final signature = peerList
+                  .map((p) => '${p.address}|${p.name}')
+                  .join(';');
               if (signature != _lastPeersSignature) {
                 _lastPeersSignature = signature;
                 _peersController.add(peerList);
@@ -128,11 +137,16 @@ class WifiDirectManager {
     }
   }
 
-  Future<bool> createGroup() async {
+  Future<bool> createGroup(WifiDirectCredentials credentials) async {
     if (!await isSupported()) return false;
     await startListeningEvents();
     try {
-      final success = await _channel.invokeMethod<bool>('createGroup') ?? false;
+      final success =
+          await _channel.invokeMethod<bool>(
+            'createGroup',
+            credentials.toMap(),
+          ) ??
+          false;
       if (success) AppLog.info(_tag, '已成功建立 Wi-Fi Direct 群组 (Group Owner)');
       return success;
     } catch (e) {
@@ -162,11 +176,19 @@ class WifiDirectManager {
     }
   }
 
-  Future<bool> connect(String deviceAddress) async {
+  Future<bool> connect(
+    String deviceAddress,
+    WifiDirectCredentials credentials,
+  ) async {
     if (!await isSupported()) return false;
     await startListeningEvents();
     try {
-      final success = await _channel.invokeMethod<bool>('connect', {'deviceAddress': deviceAddress}) ?? false;
+      final success =
+          await _channel.invokeMethod<bool>('connect', {
+            'deviceAddress': deviceAddress,
+            ...credentials.toMap(),
+          }) ??
+          false;
       if (success) {
         AppLog.info(_tag, '已向 $deviceAddress 发起 Wi-Fi Direct 连接请求');
       }
@@ -180,9 +202,10 @@ class WifiDirectManager {
   /// 发起到指定设备的 Wi-Fi Direct 直连请求并等待系统配对连接就绪。
   Future<WifiP2pConnectionInfo?> connectAndWait(
     String deviceAddress, {
+    required WifiDirectCredentials credentials,
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    final initiated = await connect(deviceAddress);
+    final initiated = await connect(deviceAddress, credentials);
     if (!initiated) {
       AppLog.error(_tag, '发起 Wi-Fi Direct 直连请求失败');
       return null;
@@ -190,7 +213,9 @@ class WifiDirectManager {
 
     try {
       final info = await connectionStream
-          .firstWhere((info) => info.isConnected && info.groupOwnerAddress.isNotEmpty)
+          .firstWhere(
+            (info) => info.isConnected && info.groupOwnerAddress.isNotEmpty,
+          )
           .timeout(timeout);
       AppLog.info(_tag, 'Wi-Fi Direct 直连链路已就绪 (GO=${info.groupOwnerAddress})');
       return info;
@@ -213,7 +238,9 @@ class WifiDirectManager {
 
   Future<WifiP2pConnectionInfo> getConnectionInfo() async {
     try {
-      final res = await _channel.invokeMapMethod<String, dynamic>('getConnectionInfo');
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'getConnectionInfo',
+      );
       return WifiP2pConnectionInfo.fromMap(res ?? {});
     } catch (_) {
       return const WifiP2pConnectionInfo(

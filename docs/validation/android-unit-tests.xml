@@ -1,17 +1,36 @@
 <?xml version='1.0' encoding='utf-8'?>
-<testsuites><testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T11:33:17" hostname="homemacmini.local" time="0.126">
+<testsuites><testsuite name="host.msknet.sunsetripple.BleRoomAdvertisementTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-07T13:15:09" hostname="homemacmini.local" time="0.014">
   <properties />
-  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.014" />
-  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.111" />
-  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.001" />
+  <testcase name="supportsAdvertisementOnlyAndOldSingleResponse" classname="host.msknet.sunsetripple.BleRoomAdvertisementTest" time="0.01" />
+  <testcase name="parsesDuplicateManufacturerStructuresWithoutMetadataInName" classname="host.msknet.sunsetripple.BleRoomAdvertisementTest" time="0.0" />
+  <testcase name="truncatesAtUnicodeCodePointWithoutSplittingEmojiOrChinese" classname="host.msknet.sunsetripple.BleRoomAdvertisementTest" time="0.001" />
+  <testcase name="keepsFullNameIfMetadataRecordArrivesLast" classname="host.msknet.sunsetripple.BleRoomAdvertisementTest" time="0.0" />
+  <testcase name="rejectsMalformedUtf8ControlBytesAndInvalidMetadata" classname="host.msknet.sunsetripple.BleRoomAdvertisementTest" time="0.003" />
   <system-out />
   <system-err />
-</testsuite><testsuite name="host.msknet.sunsetripple.HoldToTalkGestureTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-07T11:33:17" hostname="homemacmini.local" time="0.0">
+</testsuite><testsuite name="host.msknet.sunsetripple.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-07T13:15:09" hostname="homemacmini.local" time="0.115">
+  <properties />
+  <testcase name="preservesOrderAndFlushes" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.007" />
+  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.106" />
+  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="host.msknet.sunsetripple.BoundedFrameWriterTest" time="0.002" />
+  <system-out />
+  <system-err />
+</testsuite><testsuite name="host.msknet.sunsetripple.HoldToTalkGestureTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-07T13:15:09" hostname="homemacmini.local" time="0.001">
   <properties />
   <testcase name="cancellationReleasesOnlyOnceAndAllowsANewHold" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
-  <testcase name="disabledOrOutsidePressCannotStartByMovingInside" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <testcase name="disabledOrOutsidePressCannotStartByMovingInside" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.001" />
   <testcase name="dragOutsideStopsAndReentryDoesNotRestart" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
   <testcase name="otherFingersCannotReleaseOrTakeOverThePrimaryHold" classname="host.msknet.sunsetripple.HoldToTalkGestureTest" time="0.0" />
+  <system-out />
+  <system-err />
+</testsuite><testsuite name="host.msknet.sunsetripple.audio.JitterBufferTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-07T13:15:09" hostname="homemacmini.local" time="0.004">
+  <properties />
+  <testcase name="reliableTransportDoesNotInventLossForControlSequenceGaps" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.001" />
+  <testcase name="shortUtterancePlaysAtDeadlineAndNeverWaitsForever" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.001" />
+  <testcase name="starvationReprimesInsteadOfPlayingEachIsolatedArrival" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.001" />
+  <testcase name="unorderedPathReordersWraparoundAndReportsActualMissingPacket" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.0" />
+  <testcase name="overflowDropsOldestWithoutConcealingAlreadyDiscardedFrames" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.0" />
+  <testcase name="orderedBurstsStayContinuousWithBluetoothPrebuffer" classname="host.msknet.sunsetripple.audio.JitterBufferTest" time="0.001" />
   <system-out />
   <system-err />
 </testsuite></testsuites>

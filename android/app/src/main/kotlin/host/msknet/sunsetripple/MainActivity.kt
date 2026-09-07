@@ -21,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private var permissionChannel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     private var permissionsInFlight = false
+    private var nicknamePreferences: NicknamePreferencesPlugin? = null
     private var audioPlugin: PlatformAudioPlugin? = null
     private var blePlugin: BleL2capPlugin? = null
     private var wifiDirectPlugin: WifiDirectPlugin? = null
@@ -29,6 +30,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        nicknamePreferences = NicknamePreferencesPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
             "dev.dawnmesh.intercom/permissions").apply {
             setMethodCallHandler { call, result ->
@@ -87,6 +89,8 @@ class MainActivity : FlutterActivity() {
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         CallControlBridge.detach()
+        nicknamePreferences?.dispose()
+        nicknamePreferences = null
         permissionResult?.error("CANCELLED", "权限请求已取消", null)
         permissionResult = null
         permissionChannel?.setMethodCallHandler(null)

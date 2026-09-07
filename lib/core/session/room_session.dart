@@ -68,7 +68,7 @@ class RoomSession {
   BackgroundCallControls? _backgroundControls;
 
   void setVoiceMode(VoiceMode value) {
-    if (!isBluetooth || _voiceMode == value) return;
+    if (_closed || _voiceMode == value) return;
     setPtt(false);
     _voiceMode = value;
     _voiceGate.reset();
@@ -300,7 +300,11 @@ class RoomSession {
   /// 如果压在 560ms 的进房转场里，UI 线程和平台线程互相抢，动画必然掉帧。
   /// 所以进房时先只建房、跑完动画再开麦。
   Future<void> startAudio() async {
-    if (_audioStarted || _closed || (roomInvite != null && _state != RoomState.inRoom)) return;
+    if (_audioStarted ||
+        _closed ||
+        (roomInvite != null && _state != RoomState.inRoom)) {
+      return;
+    }
     _audioStarted = true;
     if (audioIo is PlatformAudioChannel) {
       _backgroundControls = BackgroundCallControls(this);

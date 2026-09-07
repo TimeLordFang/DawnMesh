@@ -294,7 +294,7 @@
          }
      }
  
-@@ -337,6 +374,12 @@
+@@ -337,10 +374,16 @@
              .setIncludeDeviceName(false) // 设备名会挤爆 31 字节预算
              .setIncludeTxPowerLevel(false)
              .addServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -307,7 +307,30 @@
              .build()
  
      private fun buildScanResponse(): AdvertiseData {
-@@ -400,6 +443,7 @@
+-        val nameBytes = truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
++        val nameBytes = BleRoomAdvertisement.truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
+         val payload = ByteArray(3 + nameBytes.size)
+         payload[0] = (advertisedPsm ushr 8).toByte()
+         payload[1] = advertisedPsm.toByte()
+@@ -351,17 +394,6 @@
+             .setIncludeDeviceName(false)
+             .addManufacturerData(MANUFACTURER_ID, payload)
+             .build()
+-    }
+-
+-    /** 按 UTF-8 字节数截断，且不切断多字节字符（中文房名会踩到）。 */
+-    private fun truncateUtf8(text: String, maxBytes: Int): ByteArray {
+-        var candidate = text
+-        while (candidate.isNotEmpty()) {
+-            val bytes = candidate.toByteArray(Charsets.UTF_8)
+-            if (bytes.size <= maxBytes) return bytes
+-            candidate = candidate.substring(0, candidate.length - 1)
+-        }
+-        return ByteArray(0)
+     }
+ 
+     private fun acceptLoop(server: BluetoothServerSocket) {
+@@ -400,6 +432,7 @@
              .build()
          val settings = ScanSettings.Builder()
              .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -315,18 +338,36 @@
              .build()
  
          return try {
-@@ -432,8 +476,9 @@
-             if (payload.size < 3) return
- 
-             val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
+@@ -428,24 +461,14 @@
+     private val scanCallback = object : ScanCallback() {
+         override fun onScanResult(callbackType: Int, result: ScanResult?) {
+             val record = result?.scanRecord ?: return
+-            val payload = record.getManufacturerSpecificData(MANUFACTURER_ID) ?: return
+-            if (payload.size < 3) return
+-
+-            val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
 -            if (psm <= 0) return
-+            if (psm !in 1..255) return
-             val memberCount = payload[2].toInt() and 0xFF
-+            if (memberCount !in 1..6) return
-             val roomName = if (payload.size > 3) {
-                 String(payload, 3, payload.size - 3, Charsets.UTF_8)
-             } else {
-@@ -454,13 +499,17 @@
+-            val memberCount = payload[2].toInt() and 0xFF
+-            val roomName = if (payload.size > 3) {
+-                String(payload, 3, payload.size - 3, Charsets.UTF_8)
+-            } else {
+-                "蓝牙房"
+-            }
++            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
+ 
+             val device = result.device ?: return
+             val info = mapOf(
+                 "address" to device.address,
+-                "roomName" to roomName,
+-                "psm" to psm,
+-                "memberCount" to memberCount,
++                "roomName" to room.name,
++                "psm" to room.psm,
++                "memberCount" to room.members,
+                 "rssi" to result.rssi,
+             )
+             mainHandler.post { scanSink?.success(info) }
+@@ -454,13 +477,17 @@
          override fun onScanFailed(errorCode: Int) {
              Log.e(TAG, "BLE 扫描失败，errorCode=$errorCode")
              mainHandler.post {
@@ -347,7 +388,7 @@
          val a = adapter ?: run {
              result.error("UNSUPPORTED", "没有蓝牙适配器", null)
              return
-@@ -468,51 +517,68 @@
+@@ -468,58 +495,75 @@
          isHost = false
          stopScan()
  
@@ -452,7 +493,15 @@
      }
  
      private fun registerPeer(socket: BluetoothSocket): PeerLink {
-@@ -558,6 +624,11 @@
+         val address = socket.remoteDevice?.address ?: "unknown"
+         val link = PeerLink(socket, address)
+         peers[address] = link
+-        Log.i(TAG, "蓝牙链路建立：$address")
++        Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
+ 
+         Thread({ readLoop(link) }, "sunset-ble-read-$address").start()
+         return link
+@@ -558,6 +602,11 @@
                  payload.copyInto(full, FRAME_HEADER_SIZE)
              }
  
@@ -464,7 +513,7 @@
              // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
              if (isHost) sendData(full, excludeAddress = link.address)
  
-@@ -594,8 +665,7 @@
+@@ -594,8 +643,7 @@
              if (address == excludeAddress) continue
              if (!link.alive.get()) continue
              try {
@@ -474,7 +523,7 @@
              } catch (e: IOException) {
                  Log.w(TAG, "向 $address 发送失败，断开该链路", e)
                  removePeer(link)
-@@ -605,7 +675,7 @@
+@@ -605,7 +653,7 @@
      }
  
      private fun removePeer(link: PeerLink) {
@@ -483,7 +532,7 @@
          link.close()
          if (hostLink === link) hostLink = null
      }
-@@ -613,6 +683,11 @@
+@@ -613,6 +661,11 @@
      // ---------------------------------------------------------------- 收尾
  
      private fun stopEverything() {
@@ -496,8 +545,76 @@
  
          accepting.set(false)
 --- /dev/null
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BleRoomAdvertisement.kt
+@@ -0,0 +1,65 @@
++package host.msknet.sunsetripple
++
++import java.nio.ByteBuffer
++import java.nio.charset.CodingErrorAction
++
++/** Parse individual AD structures, before Android merges equal company IDs. */
++internal object BleRoomAdvertisement {
++    data class Room(val psm: Int, val members: Int, val name: String)
++
++    fun parse(record: ByteArray, manufacturerId: Int = 0xffff): Room? {
++        var offset = 0
++        var selected: Room? = null
++        while (offset < record.size) {
++            val length = record[offset].toInt() and 0xff
++            if (length == 0) break
++            val end = offset + 1 + length
++            if (end > record.size) break
++            val type = record[offset + 1].toInt() and 0xff
++            if (type == 0xff && length >= 6) {
++                val company = (record[offset + 2].toInt() and 0xff) or
++                    ((record[offset + 3].toInt() and 0xff) shl 8)
++                if (company == manufacturerId) {
++                    val start = offset + 4
++                    val psm = ((record[start].toInt() and 0xff) shl 8) or
++                        (record[start + 1].toInt() and 0xff)
++                    val members = record[start + 2].toInt() and 0xff
++                    if (psm in 1..255 && members in 1..6) {
++                        val name = decodeName(record, start + 3, end)
++                        if (selected == null || !name.isNullOrEmpty()) {
++                            selected = Room(psm, members, name ?: "蓝牙房")
++                        }
++                    }
++                }
++            }
++            offset = end
++        }
++        return selected
++    }
++
++    private fun decodeName(bytes: ByteArray, start: Int, end: Int): String? {
++        if (start == end) return null
++        return try {
++            val value = Charsets.UTF_8.newDecoder()
++                .onMalformedInput(CodingErrorAction.REPORT)
++                .onUnmappableCharacter(CodingErrorAction.REPORT)
++                .decode(ByteBuffer.wrap(bytes, start, end - start)).toString()
++            // Metadata/control bytes must never be rendered as a room name.
++            value.takeIf { it.isNotBlank() && it.none { c -> c.isISOControl() } }
++        } catch (_: java.nio.charset.CharacterCodingException) { null }
++    }
++
++    fun truncateUtf8(text: String, budget: Int): ByteArray {
++        var end = 0
++        var bytes = 0
++        while (end < text.length) {
++            val codePoint = text.codePointAt(end)
++            val chars = Character.charCount(codePoint)
++            val count = String(Character.toChars(codePoint)).toByteArray(Charsets.UTF_8).size
++            if (bytes + count > budget) break
++            bytes += count
++            end += chars
++        }
++        return text.substring(0, end).toByteArray(Charsets.UTF_8)
++    }
++}
+--- /dev/null
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/BoundedFrameWriter.kt
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,102 @@
 +package host.msknet.sunsetripple
 +
 +import java.io.IOException
@@ -530,6 +647,7 @@
 +    private val jobs = ArrayBlockingQueue<Job>(capacity)
 +    private val worker = Thread({ run() }, "dawnmesh-peer-writer").apply {
 +        isDaemon = true
++        priority = Thread.MAX_PRIORITY
 +        start()
 +    }
 +
@@ -1361,7 +1479,7 @@
 +            else -> "按住圆环发言 · 松开恢复收听"
 +        }
 +        roomType.text = if (CallControlBridge.bluetooth) "蓝牙房间" else "Wi-Fi 房间"
-+        modes.visibility = if (CallControlBridge.bluetooth) View.VISIBLE else View.GONE
++        modes.visibility = View.VISIBLE
 +        for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
 +            button.isSelected = selected
 +            button.setTextColor(if (selected) CallPanelColors.ink else CallPanelColors.secondary)
@@ -1399,21 +1517,23 @@
  
  class MainActivity : FlutterActivity() {
  
-@@ -17,6 +18,9 @@
+@@ -17,6 +18,10 @@
          private const val REQUEST_CODE_RUNTIME_PERMISSIONS = 4801
      }
  
 +    private var permissionChannel: MethodChannel? = null
 +    private var permissionResult: MethodChannel.Result? = null
 +    private var permissionsInFlight = false
++    private var nicknamePreferences: NicknamePreferencesPlugin? = null
      private var audioPlugin: PlatformAudioPlugin? = null
      private var blePlugin: BleL2capPlugin? = null
      private var wifiDirectPlugin: WifiDirectPlugin? = null
-@@ -24,6 +28,27 @@
+@@ -24,6 +29,28 @@
  
      override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
          super.configureFlutterEngine(flutterEngine)
 +        CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
++        nicknamePreferences = NicknamePreferencesPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 +        permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
 +            "dev.dawnmesh.intercom/permissions").apply {
 +            setMethodCallHandler { call, result ->
@@ -1437,11 +1557,13 @@
          audioPlugin = PlatformAudioPlugin(
              applicationContext,
              flutterEngine.dartExecutor.binaryMessenger,
-@@ -61,6 +86,11 @@
+@@ -61,6 +88,13 @@
      }
  
      override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
 +        CallControlBridge.detach()
++        nicknamePreferences?.dispose()
++        nicknamePreferences = null
 +        permissionResult?.error("CANCELLED", "权限请求已取消", null)
 +        permissionResult = null
 +        permissionChannel?.setMethodCallHandler(null)
@@ -1449,7 +1571,7 @@
          audioPlugin?.dispose()
          audioPlugin = null
          blePlugin?.dispose()
-@@ -98,6 +128,7 @@
+@@ -98,6 +132,7 @@
          } else {
              // Android 12 及以下，扫描 WiFi/蓝牙设备必须有精确位置权限。
              wanted += Manifest.permission.ACCESS_FINE_LOCATION
@@ -1457,7 +1579,7 @@
          }
  
          val missing = wanted.filter {
-@@ -107,6 +138,7 @@
+@@ -107,6 +142,7 @@
          if (missing.isEmpty()) return
  
          Log.i(TAG, "申请运行时权限：${missing.joinToString()}")
@@ -1465,7 +1587,7 @@
          requestPermissions(missing.toTypedArray(), REQUEST_CODE_RUNTIME_PERMISSIONS)
      }
  
-@@ -117,6 +149,9 @@
+@@ -117,6 +153,9 @@
      ) {
          super.onRequestPermissionsResult(requestCode, permissions, grantResults)
          if (requestCode != REQUEST_CODE_RUNTIME_PERMISSIONS) return
@@ -1475,8 +1597,65 @@
  
          permissions.forEachIndexed { index, permission ->
              val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
+--- /dev/null
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/NicknamePreferencesPlugin.kt
+@@ -0,0 +1,43 @@
++package host.msknet.sunsetripple
++
++import android.content.Context
++import android.os.Handler
++import android.os.Looper
++import io.flutter.plugin.common.BinaryMessenger
++import io.flutter.plugin.common.MethodChannel
++import java.util.concurrent.Executors
++
++/** Only the display name is persisted, never room PINs, keys or conversations. */
++internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMessenger) {
++    private val preferences = context.getSharedPreferences("dawnmesh_profile", Context.MODE_PRIVATE)
++    private val worker = Executors.newSingleThreadExecutor()
++    private val main = Handler(Looper.getMainLooper())
++    private val channel = MethodChannel(messenger, "dev.dawnmesh.intercom/preferences")
++    init {
++        channel.setMethodCallHandler { call, result ->
++            when (call.method) {
++                "getNickname" -> worker.execute {
++                    val name = preferences.getString("nickname", null)
++                    main.post { result.success(name) }
++                }
++                "setNickname" -> {
++                    val name = call.argument<String>("nickname")
++                    if (name == null || name.toByteArray(Charsets.UTF_8).size > 256) {
++                        result.error("BAD_NICKNAME", "昵称过长", null)
++                    } else worker.execute {
++                        val saved = preferences.edit().putString("nickname", name).commit()
++                        main.post {
++                            if (saved) result.success(null)
++                            else result.error("SAVE_FAILED", "昵称未写入存储", null)
++                        }
++                    }
++                }
++                else -> result.notImplemented()
++            }
++        }
++    }
++    fun dispose() {
++        channel.setMethodCallHandler(null)
++        worker.shutdown() // Finish queued writes, including the last edit.
++    }
++}
 --- a/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt
 +++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt
+@@ -65,8 +65,8 @@
+     }
+ 
+     /** 一路远端音频流：抖动缓冲 + 它专属的解码器（Opus 解码器有状态，不能共用）。 */
+-    private class RemoteStream {
+-        val jitter = JitterBuffer()
++    private class RemoteStream(bluetooth: Boolean) {
++        val jitter = JitterBuffer(prebufferFrames = if (bluetooth) 6 else 3, ordered = true)
+         val codec = OpusCodec()
+     }
+ 
 @@ -146,6 +146,10 @@
                      )
                      return
@@ -1496,7 +1675,16 @@
  
                      mainHandler.post {
                          when {
-@@ -323,7 +328,6 @@
+@@ -256,7 +261,7 @@
+         }
+ 
+         val packet = data.copyOfRange(FRAME_HEADER_SIZE, FRAME_HEADER_SIZE + payloadLength)
+-        remotes.getOrPut(senderId) { RemoteStream() }.jitter.put(seq, packet)
++        remotes.getOrPut(senderId) { RemoteStream(currentBitrate <= OpusCodec.BLUETOOTH_BITRATE) }.jitter.put(seq, packet)
+     }
+ 
+     // ------------------------------------------------------------------ 采集
+@@ -323,12 +328,15 @@
              start()
          }
  
@@ -1504,6 +1692,365 @@
          Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${currentBitrate}bps）")
          return true
      }
+ 
+     private fun captureLoop(record: AudioRecord) {
++        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
++        var slowEncodes = 0
++        var lastReport = System.nanoTime()
++
+         val pcm = ShortArray(SAMPLES_PER_FRAME)
+         var consecutiveErrors = 0
+         var offset = 0
+@@ -371,6 +379,7 @@
+ 
+             if (muted.get()) continue
+ 
++            val encodeStart = System.nanoTime()
+             val level = rms(pcm)
+             val packet = try {
+                 uplinkCodec?.encode(pcm) ?: continue
+@@ -379,6 +388,12 @@
+                 continue
+             }
+ 
++            if (System.nanoTime() - encodeStart > 20_000_000) slowEncodes++
++            if (System.nanoTime() - lastReport > 10_000_000_000L) {
++                if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
++                slowEncodes = 0
++                lastReport = System.nanoTime()
++            }
+             val event = mapOf<String, Any>("data" to packet, "level" to level)
+             mainHandler.post { eventSink?.success(event) }
+         }
+@@ -518,11 +533,18 @@
+      * 没人说话时写静音帧，保持时钟连续，避免下次出声时的爆音与欠载。
+      */
+     private fun playbackLoop(track: AudioTrack) {
++        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
++        var lastReport = System.nanoTime()
++
+         val mix = IntArray(SAMPLES_PER_FRAME)
+         val out = ShortArray(SAMPLES_PER_FRAME)
+         var consecutiveErrors = 0
+ 
+         while (playing.get()) {
++            if (System.nanoTime() - lastReport > 10_000_000_000L) {
++                for ((id, stream) in remotes) Log.d(TAG, "音频缓冲 #$id: ${stream.jitter.diagnostics()}; trackUnderruns=${track.underrunCount}")
++                lastReport = System.nanoTime()
++            }
+             java.util.Arrays.fill(mix, 0)
+             var contributors = 0
+ 
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/WifiDirectPlugin.kt
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/WifiDirectPlugin.kt
+@@ -170,8 +170,32 @@
+         eventSink?.success(data)
+     }
+ 
+-    private fun createGroupInternal(result: MethodChannel.Result) {
+-        manager?.createGroup(channel, object : WifiP2pManager.ActionListener {
++    private fun configuredGroup(
++        networkName: String?,
++        passphrase: String?,
++    ): WifiP2pConfig? {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
++            networkName.isNullOrBlank() || passphrase.isNullOrBlank()) return null
++        return try {
++            WifiP2pConfig.Builder()
++                .setNetworkName(networkName)
++                .setPassphrase(passphrase)
++                .enablePersistentMode(false)
++                .build()
++        } catch (e: IllegalArgumentException) {
++            Log.w(TAG, "Wi-Fi Direct 房间凭据非法", e)
++            null
++        }
++    }
++
++    private fun createGroupInternal(config: WifiP2pConfig?, result: MethodChannel.Result) {
++        val p2pManager = manager
++        val p2pChannel = channel
++        if (p2pManager == null || p2pChannel == null) {
++            result.success(false)
++            return
++        }
++        val listener = object : WifiP2pManager.ActionListener {
+             override fun onSuccess() {
+                 Log.i(TAG, "创建 Wi-Fi Direct 群组成功 (Group Owner)")
+                 manager?.discoverPeers(channel, null)
+@@ -182,20 +206,30 @@
+                 Log.w(TAG, "创建 Wi-Fi Direct 群组失败: $reason")
+                 if (reason == WifiP2pManager.BUSY) {
+                     android.os.Handler(Looper.getMainLooper()).postDelayed({
+-                        manager?.createGroup(channel, object : WifiP2pManager.ActionListener {
++                        val retry = object : WifiP2pManager.ActionListener {
+                             override fun onSuccess() {
+                                 Log.i(TAG, "重试创建 Wi-Fi Direct 群组成功")
+-                                manager?.discoverPeers(channel, null)
++                                p2pManager.discoverPeers(p2pChannel, null)
+                             }
+                             override fun onFailure(r: Int) {
+                                 Log.w(TAG, "重试创建群组失败: $r")
+                             }
+-                        })
++                        }
++                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config != null) {
++                            p2pManager.createGroup(p2pChannel, config, retry)
++                        } else {
++                            p2pManager.createGroup(p2pChannel, retry)
++                        }
+                     }, 300)
+                 }
+                 result.success(false)
+             }
+-        }) ?: result.success(false)
++        }
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config != null) {
++            p2pManager.createGroup(p2pChannel, config, listener)
++        } else {
++            p2pManager.createGroup(p2pChannel, listener)
++        }
+     }
+ 
+     // MARK: - MethodChannel
+@@ -212,15 +246,23 @@
+ 
+             "createGroup" -> {
+                 Log.i(TAG, "收到 Flutter createGroup 请求, manager=$manager, channel=$channel")
++                val config = configuredGroup(
++                    call.argument("networkName"),
++                    call.argument("passphrase"),
++                )
++                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config == null) {
++                    result.error("BAD_CREDENTIALS", "缺少有效的房间邀请码凭据", null)
++                    return
++                }
+                 manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                     override fun onSuccess() {
+-                        createGroupInternal(result)
++                        createGroupInternal(config, result)
+                     }
+ 
+                     override fun onFailure(reason: Int) {
+-                        createGroupInternal(result)
+-                    }
+-                }) ?: createGroupInternal(result)
++                        createGroupInternal(config, result)
++                    }
++                }) ?: createGroupInternal(config, result)
+             }
+ 
+             "removeGroup" -> {
+@@ -266,14 +308,35 @@
+ 
+             "connect" -> {
+                 val address = call.argument<String>("deviceAddress")
++                val networkName = call.argument<String>("networkName")
++                val passphrase = call.argument<String>("passphrase")
+                 if (address == null) {
+                     result.error("INVALID_ARGS", "缺少 deviceAddress 参数", null)
+                     return
+                 }
+ 
+-                val config = WifiP2pConfig().apply {
+-                    deviceAddress = address
+-                    groupOwnerIntent = 0
++                val config = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++                    if (networkName.isNullOrBlank() || passphrase.isNullOrBlank()) {
++                        result.error("BAD_CREDENTIALS", "缺少有效的房间邀请码凭据", null)
++                        return
++                    }
++                    try {
++                        // Known group credentials authorize the selected group
++                        // without starting the legacy WPS invitation flow.
++                        WifiP2pConfig.Builder()
++                            .setNetworkName(networkName)
++                            .setPassphrase(passphrase)
++                            .enablePersistentMode(false)
++                            .build()
++                    } catch (e: IllegalArgumentException) {
++                        result.error("BAD_CREDENTIALS", "房间邀请码凭据非法", null)
++                        return
++                    }
++                } else {
++                    WifiP2pConfig().apply {
++                        deviceAddress = address
++                        groupOwnerIntent = 0
++                    }
+                 }
+ 
+                 manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/JitterBuffer.kt
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/JitterBuffer.kt
+@@ -1,56 +1,65 @@
+ package host.msknet.sunsetripple.audio
+ 
+-/** 从抖动缓冲取一帧的结果。 */
+ sealed class PollResult {
+-    /** 预缓冲未满或已欠载：这一拍不出声，不要用 PLC 硬补。 */
+     object NotReady : PollResult()
+-
+-    /** 该序号的包确实丢了：调用方应当用 Opus PLC 补一帧。 */
+     object Lost : PollResult()
+-
+-    /** 正常取到一个包。 */
+     class Packet(val data: ByteArray) : PollResult()
+ }
+ 
+-/**
+- * 每路远端音频流一个实例。按 16 位回绕序号缓存 Opus 包：
+- * 乱序重排、丢包位置报 [PollResult.Lost]、攒满 [prebufferFrames] 帧才开始出帧以吸收网络抖动。
+- *
+- * 线程安全：[put] 由网络线程调用，[poll] 由播放线程调用。
+- *
+- * 移植自已发布的 Kotlin 版（alpha.7）。与原版唯一的差别是把「没准备好」和
+- * 「丢包」这两种情况拆成了不同的返回值——原版都返回 null，调用方要靠
+- * `hasStarted()` 才能分辨，很容易在欠载时错误地触发 PLC。
+- */
++/** Bounded playout with re-priming after starvation and a short-utterance deadline. */
+ class JitterBuffer(
+     private val prebufferFrames: Int = 3,
+-    private val maxBuffer: Int = 10,
++    private val maxBuffer: Int = 24,
++    private val ordered: Boolean = false,
++    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
+ ) {
++    init { require(prebufferFrames in 1..maxBuffer) }
+     private val buf = sortedMapOf<Long, ByteArray>()
+-    private var highestSeen = -1L // 展开后的最大序号，用于 16 位回绕展开
+-    private var next = -1L        // 下一个应吐出的序号
++    private var highestSeen = -1L
++    private var next = -1L
++    private var arrivalSeq = 0L
+     private var started = false
++    private var target = prebufferFrames
++    private var firstBufferedAt = 0L
++    private var lastArrivalAt = Long.MIN_VALUE
++    private var underruns = 0
++    private var dropped = 0
+ 
+     @Synchronized
+     fun put(seq16: Int, payload: ByteArray) {
+-        val seq = unwrap(seq16)
+-        if (started && seq < next) return // 迟到帧：该位置已播过
++        val now = clockMs()
++        // Silence is intentional in both PTT and voice-activated modes.
++        if (lastArrivalAt != Long.MIN_VALUE && now - lastArrivalAt > 500) target = prebufferFrames
++        lastArrivalAt = now
++        // TCP and BLE L2CAP deliver ordered, reliable audio. The wire sequence is
++        // shared with chat/heartbeat/control frames; its gaps are NOT lost audio.
++        val seq = if (ordered) arrivalSeq++ else unwrap(seq16)
++        if (next >= 0 && seq < next) { dropped++; return }
++        if (buf.isEmpty()) firstBufferedAt = now
+         buf[seq] = payload
+-        while (buf.size > maxBuffer) buf.remove(buf.firstKey()) // 防积压，丢最旧
++        while (buf.size > maxBuffer) { buf.remove(buf.firstKey()); dropped++ }
++        if (started && next < buf.firstKey() && buf.size == maxBuffer) next = buf.firstKey()
+     }
+ 
+     @Synchronized
+     fun poll(): PollResult {
++        if (buf.isEmpty()) {
++            if (started) {
++                started = false
++                underruns++
++                target = (target + 2).coerceAtMost(minOf(maxBuffer, 12))
++            }
++            return PollResult.NotReady
++        }
+         if (!started) {
+-            if (buf.size < prebufferFrames) return PollResult.NotReady
++            // Do not strand a very short utterance that never fills the target.
++            if (buf.size < target && clockMs() - firstBufferedAt < target * 20L) {
++                return PollResult.NotReady
++            }
+             started = true
+             next = buf.firstKey()
+         }
+-        if (buf.isEmpty()) return PollResult.NotReady // 欠载：等新包，不推进
+-
+-        // 断流后重新对齐，避免 next 永远追不上
+         if (buf.firstKey() - next > maxBuffer) next = buf.firstKey()
+-
+         val head = buf.remove(next)
+         next++
+         return if (head == null) PollResult.Lost else PollResult.Packet(head)
+@@ -58,27 +67,19 @@
+ 
+     @Synchronized
+     fun reset() {
+-        buf.clear()
+-        highestSeen = -1L
+-        next = -1L
+-        started = false
++        buf.clear(); highestSeen = -1L; next = -1L; arrivalSeq = 0L
++        started = false; target = prebufferFrames; lastArrivalAt = Long.MIN_VALUE
++        underruns = 0; dropped = 0
+     }
++    @Synchronized fun hasStarted(): Boolean = started
++    @Synchronized fun pendingCount(): Int = buf.size
++    @Synchronized fun diagnostics(): String = "queued=${buf.size}, target=$target, rebuffer=$underruns, dropped=$dropped"
+ 
+-    @Synchronized
+-    fun hasStarted(): Boolean = started
+-
+-    @Synchronized
+-    fun pendingCount(): Int = buf.size
+-
+-    /** 把 16 位回绕序号展开为单调递增的 Long。 */
+     private fun unwrap(seq16: Int): Long {
+-        if (highestSeen < 0) {
+-            highestSeen = seq16.toLong()
+-            return highestSeen
+-        }
+-        val delta = ((seq16 - (highestSeen and 0xFFFF).toInt() + 0x8000) and 0xFFFF) - 0x8000
+-        val v = highestSeen + delta
+-        if (v > highestSeen) highestSeen = v
+-        return v
++        if (highestSeen < 0) { highestSeen = seq16.toLong(); return highestSeen }
++        val delta = ((seq16 - (highestSeen and 0xffff).toInt() + 0x8000) and 0xffff) - 0x8000
++        val value = highestSeen + delta
++        if (value > highestSeen) highestSeen = value
++        return value
+     }
+ }
+--- a/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/OpusCodec.kt
++++ b/android/app/src/main/kotlin/host/msknet/sunsetripple/audio/OpusCodec.kt
+@@ -30,17 +30,24 @@
+ 
+     private val encoder = OpusEncoder(
+         SAMPLE_RATE, 1, OpusApplication.OPUS_APPLICATION_VOIP
+-    ).also { it.bitrate = bitrateBps }
++    ).also {
++        it.bitrate = bitrateBps
++        // Concentus is JVM code: moderate complexity leaves headroom on older CPUs.
++        it.complexity = 5
++    }
+ 
+     private val decoder = OpusDecoder(SAMPLE_RATE, 1)
+     private val encodeBuffer = ByteArray(MAX_PACKET_BYTES)
++    private val decodeBuffer = ShortArray(FRAME_SAMPLES)
+ 
++    @Synchronized
+     fun setBitrate(bitrateBps: Int) {
+         require(bitrateBps in 6_000..64_000) { "码率超出 Opus 允许范围: $bitrateBps" }
+         encoder.bitrate = bitrateBps
+     }
+ 
+     /** 编码一帧（320 样本）PCM，返回 Opus 包。 */
++    @Synchronized
+     fun encode(pcm: ShortArray): ByteArray {
+         val n = encoder.encode(pcm, 0, FRAME_SAMPLES, encodeBuffer, 0, encodeBuffer.size)
+         return encodeBuffer.copyOf(n)
+@@ -48,7 +55,7 @@
+ 
+     /** 解码一个 Opus 包为一帧 PCM；传 null 触发丢包隐藏（PLC）补帧。 */
+     fun decode(packet: ByteArray?): ShortArray {
+-        val out = ShortArray(FRAME_SAMPLES)
++        val out = decodeBuffer
+         if (packet == null) {
+             decoder.decode(null, 0, 0, out, 0, FRAME_SAMPLES, false)
+         } else {
 --- a/android/app/src/main/res/values-zh/strings.xml
 +++ b/android/app/src/main/res/values-zh/strings.xml
 @@ -1,4 +1,4 @@
@@ -1521,6 +2068,47 @@
 -    <string name="app_name">SunsetRipple</string>
 +    <string name="app_name">DawnMesh</string>
  </resources>
+--- /dev/null
++++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/BleRoomAdvertisementTest.kt
+@@ -0,0 +1,38 @@
++package host.msknet.sunsetripple
++
++import org.junit.Assert.*
++import org.junit.Test
++
++class BleRoomAdvertisementTest {
++    private fun ad(psm: Int = 129, members: Int = 2, name: String = "") : ByteArray {
++        val data = byteArrayOf(0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0, psm.toByte(), members.toByte()) + name.toByteArray(Charsets.UTF_8)
++        return byteArrayOf(data.size.toByte()) + data
++    }
++    @Test fun parsesDuplicateManufacturerStructuresWithoutMetadataInName() {
++        val raw = byteArrayOf(2, 1, 6) + ad() + ad(name = "曙光的聊天室")
++        val room = BleRoomAdvertisement.parse(raw)!!
++        assertEquals(129, room.psm); assertEquals(2, room.members)
++        assertEquals("曙光的聊天室", room.name)
++    }
++    @Test fun keepsFullNameIfMetadataRecordArrivesLast() {
++        assertEquals("红米", BleRoomAdvertisement.parse(ad(name = "红米") + ad())!!.name)
++    }
++    @Test fun supportsAdvertisementOnlyAndOldSingleResponse() {
++        assertEquals("蓝牙房", BleRoomAdvertisement.parse(ad())!!.name)
++        assertEquals("oneplus", BleRoomAdvertisement.parse(ad(name = "oneplus"))!!.name)
++    }
++    @Test fun rejectsMalformedUtf8ControlBytesAndInvalidMetadata() {
++        assertNull(BleRoomAdvertisement.parse(ad(psm = 0)))
++        assertNull(BleRoomAdvertisement.parse(ad(members = 7)))
++        assertEquals("蓝牙房", BleRoomAdvertisement.parse(ad(name = "\u0000坏数据"))!!.name)
++        val invalid = ad(name = "x"); invalid[invalid.lastIndex] = 0xff.toByte()
++        assertEquals("蓝牙房", BleRoomAdvertisement.parse(invalid)!!.name)
++        assertNull(BleRoomAdvertisement.parse(byteArrayOf(31, -1, -1)))
++    }
++    @Test fun truncatesAtUnicodeCodePointWithoutSplittingEmojiOrChinese() {
++        val text = "房😀间"
++        assertEquals("房", String(BleRoomAdvertisement.truncateUtf8(text, 6), Charsets.UTF_8))
++        assertEquals("房😀", String(BleRoomAdvertisement.truncateUtf8(text, 7), Charsets.UTF_8))
++        assertEquals(text, String(BleRoomAdvertisement.truncateUtf8(text, 10), Charsets.UTF_8))
++    }
++}
 --- /dev/null
 +++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/BoundedFrameWriterTest.kt
 @@ -0,0 +1,53 @@
@@ -1631,6 +2219,66 @@
 +        gesture.up(0)
 +        gesture.cancel()
 +        assertEquals(emptyList<Boolean>(), states)
++    }
++}
+--- /dev/null
++++ b/android/app/src/test/kotlin/host/msknet/sunsetripple/audio/JitterBufferTest.kt
+@@ -0,0 +1,57 @@
++package host.msknet.sunsetripple.audio
++
++import org.junit.Assert.*
++import org.junit.Test
++
++class JitterBufferTest {
++    private fun packet(value: Int) = byteArrayOf(value.toByte())
++    private fun take(buffer: JitterBuffer) = (buffer.poll() as PollResult.Packet).data[0].toInt()
++
++    @Test fun reliableTransportDoesNotInventLossForControlSequenceGaps() {
++        val b = JitterBuffer(ordered = true)
++        b.put(2, packet(1)); b.put(7, packet(2)); b.put(10, packet(3))
++        assertEquals(1, take(b)); assertEquals(2, take(b)); assertEquals(3, take(b))
++    }
++    @Test fun starvationReprimesInsteadOfPlayingEachIsolatedArrival() {
++        var now = 0L
++        val b = JitterBuffer(prebufferFrames = 3, ordered = true, clockMs = { now })
++        repeat(3) { b.put(it, packet(it)) }
++        repeat(3) { take(b) }
++        assertSame(PollResult.NotReady, b.poll())
++        assertFalse(b.hasStarted())
++        now = 80; b.put(3, packet(3))
++        assertSame(PollResult.NotReady, b.poll())
++        repeat(4) { b.put(4 + it, packet(4 + it)) }
++        assertEquals(3, take(b))
++    }
++    @Test fun shortUtterancePlaysAtDeadlineAndNeverWaitsForever() {
++        var now = 0L
++        val b = JitterBuffer(prebufferFrames = 6, ordered = true, clockMs = { now })
++        b.put(8, packet(1))
++        now = 119; assertSame(PollResult.NotReady, b.poll())
++        now = 120; assertEquals(1, take(b))
++    }
++    @Test fun orderedBurstsStayContinuousWithBluetoothPrebuffer() {
++        var now = 0L
++        val b = JitterBuffer(prebufferFrames = 6, ordered = true, clockMs = { now })
++        repeat(8) { b.put(it, packet(it)) }
++        repeat(40) { i ->
++            if (i > 0 && i % 4 == 0) repeat(4) { b.put(8 + i + it, packet(8 + i - 4 + it)) }
++            assertEquals(i, take(b))
++            now += 20
++        }
++    }
++    @Test fun overflowDropsOldestWithoutConcealingAlreadyDiscardedFrames() {
++        val b = JitterBuffer(prebufferFrames = 2, maxBuffer = 4)
++        b.put(0, packet(0)); b.put(1, packet(1)); assertEquals(0, take(b))
++        for (i in 2..10) b.put(i, packet(i))
++        assertEquals(4, b.pendingCount()); assertEquals(7, take(b))
++    }
++    @Test fun unorderedPathReordersWraparoundAndReportsActualMissingPacket() {
++        val b = JitterBuffer()
++        b.put(65534, packet(1)); b.put(1, packet(4)); b.put(65535, packet(2))
++        assertEquals(1, take(b)); assertEquals(2, take(b))
++        assertSame(PollResult.Lost, b.poll()); assertEquals(4, take(b))
++        b.put(65535, packet(9)); assertEquals(0, b.pendingCount())
 +    }
 +}
 --- a/android/build.gradle.kts
@@ -1775,6 +2423,36 @@
        case 'CAPTURE_FAILED':
          return '麦克风被其他应用占用，$what 失败';
        case 'PLAYBACK_FAILED':
+--- /dev/null
++++ b/lib/core/preferences/nickname_store.dart
+@@ -0,0 +1,27 @@
++import 'package:flutter/services.dart';
++import '../diagnostics/app_log.dart';
++
++class NicknameStore {
++  static const channel = MethodChannel('dev.dawnmesh.intercom/preferences');
++
++  Future<String?> load() async {
++    try {
++      return await channel.invokeMethod<String>('getNickname');
++    } on MissingPluginException {
++      return null;
++    } on PlatformException {
++      AppLog.warn('设置', '无法读取已保存的昵称');
++      return null;
++    }
++  }
++
++  Future<void> save(String value) async {
++    try {
++      await channel.invokeMethod<void>('setNickname', {'nickname': value});
++    } on MissingPluginException {
++      // Android owns the private preference file; widget tests mock this channel.
++    } on PlatformException {
++      AppLog.warn('设置', '昵称保存失败，请检查设备存储空间');
++    }
++  }
++}
 --- a/lib/core/protocol/frame_type.dart
 +++ b/lib/core/protocol/frame_type.dart
 @@ -13,7 +13,8 @@
@@ -2390,7 +3068,7 @@
 +  BackgroundCallControls? _backgroundControls;
 +
 +  void setVoiceMode(VoiceMode value) {
-+    if (!isBluetooth || _voiceMode == value) return;
++    if (_closed || _voiceMode == value) return;
 +    setPtt(false);
 +    _voiceMode = value;
 +    _voiceGate.reset();
@@ -2507,12 +3185,16 @@
    }
  
    /// 打开麦克风与扬声器。可重复调用，只生效一次。
-@@ -229,13 +300,57 @@
+@@ -229,13 +300,61 @@
    /// 如果压在 560ms 的进房转场里，UI 线程和平台线程互相抢，动画必然掉帧。
    /// 所以进房时先只建房、跑完动画再开麦。
    Future<void> startAudio() async {
 -    if (_audioStarted) return;
-+    if (_audioStarted || _closed || (roomInvite != null && _state != RoomState.inRoom)) return;
++    if (_audioStarted ||
++        _closed ||
++        (roomInvite != null && _state != RoomState.inRoom)) {
++      return;
++    }
      _audioStarted = true;
 +    if (audioIo is PlatformAudioChannel) {
 +      _backgroundControls = BackgroundCallControls(this);
@@ -2567,7 +3249,7 @@
      if (frame.type == FrameType.sealed) {
        if (secureCodec == null) {
          AppLog.warn('RoomSession', '收到加密帧但未配置安全编解码器，已丢弃');
-@@ -243,14 +358,54 @@
+@@ -243,14 +362,54 @@
        }
        try {
          final opened = await secureCodec!.open(frame);
@@ -2623,7 +3305,7 @@
        case FrameType.audio:
          _handleAudioFrame(frame);
          break;
-@@ -315,7 +470,7 @@
+@@ -315,7 +474,7 @@
    /// 缺了这一步，WiFi 房里的说话指示灯一旦亮起就永远不会灭——
    /// 只有 PTT 帧会复位它，而全双工模式根本不发 PTT 帧。
    void _expireSpeakingStates() {
@@ -2632,7 +3314,7 @@
  
      final now = DateTime.now();
      var changed = false;
-@@ -348,7 +503,9 @@
+@@ -348,7 +507,9 @@
      if (!_isZeroToken(joinToken)) {
        for (final entry in _members.entries) {
          final existing = entry.value.sessionToken;
@@ -2643,7 +3325,7 @@
            allocatedId = entry.key;
            break;
          }
-@@ -384,6 +541,16 @@
+@@ -384,6 +545,16 @@
      );
  
      _recordMemberIdentity(allocatedId, payload.nickname);
@@ -2660,7 +3342,7 @@
      _broadcastRoster();
      _notifyMembers();
      _syncChatHistoryTo(allocatedId);
-@@ -403,12 +570,13 @@
+@@ -403,12 +574,13 @@
          isMuted: rm.isMuted,
          isSpeaking: rm.isSpeaking,
        );
@@ -2675,7 +3357,7 @@
      if (_state != RoomState.inRoom) {
        _updateState(RoomState.inRoom);
      }
-@@ -487,8 +655,9 @@
+@@ -487,8 +659,9 @@
    }
  
    bool _isPlanFresh(HostTransferPlan plan) {
@@ -2687,7 +3369,7 @@
      if (maxOrder < _highestSeenJoinOrder) return false;
      _highestSeenJoinOrder = maxOrder;
      return true;
-@@ -499,9 +668,9 @@
+@@ -499,9 +672,9 @@
      if (_isHost || _transferInProgress || _state != RoomState.inRoom) return;
  
      final currentHost = _members.values.cast<Member?>().firstWhere(
@@ -2700,7 +3382,7 @@
  
      // 如果刚进房间名单里还没标出房主，先等待名单帧，不误判失联
      if (currentHost == null) return;
-@@ -601,12 +770,14 @@
+@@ -601,12 +774,14 @@
        final endpoint = known[m.memberId] ?? m.endpoint;
        if (endpoint.trim().isEmpty) continue;
        m.endpoint = endpoint;
@@ -2721,7 +3403,7 @@
      }
  
      if (candidates.isEmpty) return null;
-@@ -616,14 +787,17 @@
+@@ -616,14 +791,17 @@
      try {
        return HostTransferPlan(
          successorId: preferredSuccessorId,
@@ -2747,7 +3429,7 @@
        );
      } catch (e) {
        AppLog.error('RoomSession', '交接计划校验未通过', e);
-@@ -640,12 +814,14 @@
+@@ -640,12 +818,14 @@
      if (plan == null) return;
  
      _cachedPlan = plan;
@@ -2768,7 +3450,7 @@
    }
  
    void _broadcastRoster() {
-@@ -654,15 +830,23 @@
+@@ -654,15 +834,23 @@
      // 名单变了，传输层的 UDP 白名单也要跟着变：端点注册只认在册成员号。
      _syncKnownMembersToTransport();
  
@@ -2801,7 +3483,7 @@
      final frame = Frame(
        type: FrameType.roster,
        senderId: _selfMemberId,
-@@ -684,32 +868,38 @@
+@@ -684,32 +872,38 @@
      // 每帧音频都会被发送两遍。
      await audioIo.stopCapture();
      await audioIo.clearRemoteMembers();
@@ -2866,7 +3548,7 @@
  
      // 播放不再需要 Dart 定时器：抖动缓冲、解码、混音、送扬声器全在原生侧，
      // 由 AudioTrack 的写阻塞天然定速（原来的 Timer.periodic(20ms) 有调度漂移）。
-@@ -750,12 +940,15 @@
+@@ -750,12 +944,15 @@
    /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
    void pruneStaleMembers() {
      final now = DateTime.now();
@@ -2888,7 +3570,7 @@
      if (stale.isEmpty) return;
  
      for (final id in stale) {
-@@ -770,7 +963,9 @@
+@@ -770,7 +967,9 @@
  
    /// PTT 按住/松开切换。
    void setPtt(bool isPressed) {
@@ -2898,7 +3580,7 @@
      final self = _members[_selfMemberId];
      if (self != null) {
        self.isSpeaking = isPressed;
-@@ -790,6 +985,11 @@
+@@ -790,6 +989,11 @@
    void toggleMute() {
      final nextMuted = !audioIo.isMuted;
      audioIo.setMuted(nextMuted);
@@ -2910,7 +3592,7 @@
      final self = _members[_selfMemberId];
      if (self != null) {
        self.isMuted = nextMuted;
-@@ -817,16 +1017,30 @@
+@@ -817,16 +1021,30 @@
    /// Hook for network transmission
    void Function(Frame frame)? onSendFrame;
  
@@ -2946,7 +3628,7 @@
        }
      }
      onSendFrame?.call(outFrame);
-@@ -847,19 +1061,18 @@
+@@ -847,19 +1065,18 @@
  
      final plan = _buildTransferPlan(preferredSuccessorId: targetMemberId);
      if (plan == null) {
@@ -2978,7 +3660,7 @@
      AppLog.info('RoomSession', '把房主转移给「${target.nickname}」');
  
      // 留一点时间让交接帧真的发出去，再自己降为普通成员重连过去。
-@@ -895,9 +1108,14 @@
+@@ -895,9 +1112,14 @@
      }
      final trimmed = text.trim();
      if (trimmed.isEmpty) {
@@ -2996,7 +3678,7 @@
      final fullNickname = _members[_selfMemberId]?.nickname ?? selfNickname;
      final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
      final code = DeviceCode.toNumeric(rawCode);
-@@ -929,7 +1147,8 @@
+@@ -929,7 +1151,8 @@
  
      // 本地立即追加一条 isLocal = true 消息
      _recordMemberIdentity(_selfMemberId, fullNickname);
@@ -3006,7 +3688,7 @@
      final prevNick = _previousNicknamesByCode[code]?.join('、');
  
      final localMsg = ChatMessage(
-@@ -976,16 +1195,19 @@
+@@ -976,16 +1199,19 @@
      // 5. 身份与曾用名关联
      _recordMemberIdentity(frame.senderId, sender.nickname);
      final split = DeviceCode.split(sender.nickname);
@@ -3033,7 +3715,7 @@
  
      // 6. 组装并追加消息
      final msg = ChatMessage(
-@@ -1041,7 +1263,8 @@
+@@ -1041,7 +1267,8 @@
      }
  
      // 仅接收定向发给本机或广播的历史同步帧
@@ -3043,7 +3725,7 @@
        return;
      }
  
-@@ -1051,7 +1274,8 @@
+@@ -1051,7 +1278,8 @@
      }
  
      _recordMemberIdentity(payload.senderId, payload.nickname);
@@ -3053,7 +3735,7 @@
      final prevNick = _previousNicknamesByCode[payload.senderCode]?.join('、');
  
      final msg = ChatMessage(
-@@ -1086,7 +1310,9 @@
+@@ -1086,7 +1314,9 @@
      if (idx == -1) return;
      final target = _chatMessages[idx];
  
@@ -3064,7 +3746,7 @@
      // 权限校验：只能删除自己发送的消息
      if (!target.isLocal && DeviceCode.toNumeric(target.senderCode) != myCode) {
        throw StateError('Cannot delete messages sent by other members.');
-@@ -1116,7 +1342,9 @@
+@@ -1116,7 +1346,9 @@
      final payload = ChatDeletePayload.decode(frame.payload);
      if (payload == null) return;
  
@@ -3075,7 +3757,7 @@
      if (idx == -1) return;
  
      final target = _chatMessages[idx];
-@@ -1153,7 +1381,9 @@
+@@ -1153,7 +1385,9 @@
      if (_currentNicknameByCode.containsKey(code)) {
        final oldNick = _currentNicknameByCode[code]!;
        if (oldNick != cleanNick) {
@@ -3086,7 +3768,7 @@
          _currentNicknameByCode[code] = cleanNick;
          // 同步更新之前该成员发出的历史消息
          bool changed = false;
-@@ -1209,6 +1439,11 @@
+@@ -1209,6 +1443,11 @@
    }
  
    Future<void> leave() async {
@@ -3098,7 +3780,7 @@
      final leavePayload = LeavePayload();
      final frame = Frame(
        type: FrameType.leave,
-@@ -1234,6 +1469,11 @@
+@@ -1234,6 +1473,11 @@
      await audioIo.stopPlayback();
      await audioIo.clearRemoteMembers();
      await transport?.stop();
@@ -3110,7 +3792,7 @@
  
      _members.clear();
      _lastAudioAt.clear();
-@@ -1281,8 +1521,15 @@
+@@ -1281,8 +1525,15 @@
    /// 原来是同步调用 `leave()` 之后立刻 close 三个 controller：`leave()` 跑到
    /// 第一个 await（stopCapture）就挂起了，等它恢复执行时再去 `_updateState`
    /// 和 `_notifyMembers`，写的已经是关掉的 controller，直接抛 StateError。
@@ -3521,6 +4203,178 @@
        // 报到心跳只用来登记端点，控制面已经有一份了。
        if (frame.type == FrameType.heartbeat) return;
  
+--- /dev/null
++++ b/lib/core/transport/wifi_direct_credentials.dart
+@@ -0,0 +1,37 @@
++import 'dart:convert';
++import 'package:crypto/crypto.dart';
++import '../security/room_invite.dart';
++
++/// Stable Wi-Fi Direct credentials derived from the room invite.
++///
++/// Android 10+ can join a known P2P group with its SSID and passphrase. This
++/// avoids the legacy WPS-style approval prompt on the group owner's phone.
++class WifiDirectCredentials {
++  final String networkName;
++  final String passphrase;
++
++  const WifiDirectCredentials({
++    required this.networkName,
++    required this.passphrase,
++  });
++
++  factory WifiDirectCredentials.fromInvite(RoomInvite invite) {
++    final digest = sha256.convert(
++      utf8.encode('DawnMesh-WiFi-Direct-v1:${invite.code}'),
++    );
++    final hex =
++        digest.bytes
++            .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
++            .join();
++    return WifiDirectCredentials(
++      networkName:
++          'DIRECT-${hex.substring(0, 2)}-DawnMesh-${hex.substring(2, 10)}',
++      passphrase: 'DM${hex.substring(10, 32)}',
++    );
++  }
++
++  Map<String, String> toMap() => {
++    'networkName': networkName,
++    'passphrase': passphrase,
++  };
++}
+--- a/lib/core/transport/wifi_direct_manager.dart
++++ b/lib/core/transport/wifi_direct_manager.dart
+@@ -1,6 +1,7 @@
+ import 'dart:async';
+ import 'package:flutter/services.dart';
+ import '../diagnostics/app_log.dart';
++import 'wifi_direct_credentials.dart';
+ 
+ const String _tag = 'WiFiDirect';
+ 
+@@ -52,17 +53,23 @@
+ 
+ /// Wi-Fi Direct (Wi-Fi P2P) 近场直连管理器。
+ class WifiDirectManager {
+-  static const MethodChannel _channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
+-  static const EventChannel _eventChannel = EventChannel('host.msknet.sunsetripple/wifi_direct_events');
++  static const MethodChannel _channel = MethodChannel(
++    'host.msknet.sunsetripple/wifi_direct',
++  );
++  static const EventChannel _eventChannel = EventChannel(
++    'host.msknet.sunsetripple/wifi_direct_events',
++  );
+ 
+   static final WifiDirectManager instance = WifiDirectManager._internal();
+ 
+   StreamSubscription? _eventSubscription;
+   final _peersController = StreamController<List<WifiP2pPeer>>.broadcast();
+-  final _connectionController = StreamController<WifiP2pConnectionInfo>.broadcast();
++  final _connectionController =
++      StreamController<WifiP2pConnectionInfo>.broadcast();
+ 
+   Stream<List<WifiP2pPeer>> get peersStream => _peersController.stream;
+-  Stream<WifiP2pConnectionInfo> get connectionStream => _connectionController.stream;
++  Stream<WifiP2pConnectionInfo> get connectionStream =>
++      _connectionController.stream;
+ 
+   bool _isListening = false;
+ 
+@@ -99,13 +106,15 @@
+           if (event is! Map) return;
+           final type = event['type'] as String?;
+           if (type == 'peers') {
+-            final peerList = (event['peers'] as List?)
++            final peerList =
++                (event['peers'] as List?)
+                     ?.map((p) => WifiP2pPeer.fromMap(p as Map))
+                     .toList() ??
+                 [];
+             if (!_peersController.isClosed) {
+-              final signature =
+-                  peerList.map((p) => '${p.address}|${p.name}').join(';');
++              final signature = peerList
++                  .map((p) => '${p.address}|${p.name}')
++                  .join(';');
+               if (signature != _lastPeersSignature) {
+                 _lastPeersSignature = signature;
+                 _peersController.add(peerList);
+@@ -128,11 +137,16 @@
+     }
+   }
+ 
+-  Future<bool> createGroup() async {
++  Future<bool> createGroup(WifiDirectCredentials credentials) async {
+     if (!await isSupported()) return false;
+     await startListeningEvents();
+     try {
+-      final success = await _channel.invokeMethod<bool>('createGroup') ?? false;
++      final success =
++          await _channel.invokeMethod<bool>(
++            'createGroup',
++            credentials.toMap(),
++          ) ??
++          false;
+       if (success) AppLog.info(_tag, '已成功建立 Wi-Fi Direct 群组 (Group Owner)');
+       return success;
+     } catch (e) {
+@@ -162,11 +176,19 @@
+     }
+   }
+ 
+-  Future<bool> connect(String deviceAddress) async {
++  Future<bool> connect(
++    String deviceAddress,
++    WifiDirectCredentials credentials,
++  ) async {
+     if (!await isSupported()) return false;
+     await startListeningEvents();
+     try {
+-      final success = await _channel.invokeMethod<bool>('connect', {'deviceAddress': deviceAddress}) ?? false;
++      final success =
++          await _channel.invokeMethod<bool>('connect', {
++            'deviceAddress': deviceAddress,
++            ...credentials.toMap(),
++          }) ??
++          false;
+       if (success) {
+         AppLog.info(_tag, '已向 $deviceAddress 发起 Wi-Fi Direct 连接请求');
+       }
+@@ -180,9 +202,10 @@
+   /// 发起到指定设备的 Wi-Fi Direct 直连请求并等待系统配对连接就绪。
+   Future<WifiP2pConnectionInfo?> connectAndWait(
+     String deviceAddress, {
++    required WifiDirectCredentials credentials,
+     Duration timeout = const Duration(seconds: 15),
+   }) async {
+-    final initiated = await connect(deviceAddress);
++    final initiated = await connect(deviceAddress, credentials);
+     if (!initiated) {
+       AppLog.error(_tag, '发起 Wi-Fi Direct 直连请求失败');
+       return null;
+@@ -190,7 +213,9 @@
+ 
+     try {
+       final info = await connectionStream
+-          .firstWhere((info) => info.isConnected && info.groupOwnerAddress.isNotEmpty)
++          .firstWhere(
++            (info) => info.isConnected && info.groupOwnerAddress.isNotEmpty,
++          )
+           .timeout(timeout);
+       AppLog.info(_tag, 'Wi-Fi Direct 直连链路已就绪 (GO=${info.groupOwnerAddress})');
+       return info;
+@@ -213,7 +238,9 @@
+ 
+   Future<WifiP2pConnectionInfo> getConnectionInfo() async {
+     try {
+-      final res = await _channel.invokeMapMethod<String, dynamic>('getConnectionInfo');
++      final res = await _channel.invokeMapMethod<String, dynamic>(
++        'getConnectionInfo',
++      );
+       return WifiP2pConnectionInfo.fromMap(res ?? {});
+     } catch (_) {
+       return const WifiP2pConnectionInfo(
 --- a/lib/core/update/update_service.dart
 +++ b/lib/core/update/update_service.dart
 @@ -1,7 +1,3 @@
@@ -3566,7 +4420,7 @@
 -  static const String currentVersion = '0.1.0-alpha.10';
 -  static const String latestReleaseUrl =
 -      'https://api.github.com/repos/Starlordzz/sunsetripple/releases/latest';
-+  static const String currentVersion = '0.1.0-dev.4';
++  static const String currentVersion = '0.1.0-dev.5';
  
    Future<UpdateState> checkUpdate() async {
 -    final client = HttpClient();
@@ -3831,20 +4685,46 @@
        darkTheme: AppTheme.dark(),
 --- a/lib/ui/pages/home_page.dart
 +++ b/lib/ui/pages/home_page.dart
-@@ -1,7 +1,10 @@
+@@ -1,13 +1,18 @@
  import 'dart:async';
 +import 'dart:convert';
  import 'dart:io';
  import 'package:flutter/material.dart';
  import '../../core/audio/audio_io.dart';
++import '../../core/preferences/nickname_store.dart';
 +import '../../core/security/room_invite.dart';
 +import '../widgets/room_invite_dialog.dart';
  import '../../core/session/device_code.dart';
  import '../../core/session/room_session.dart';
  import '../../core/transport/ble_l2cap_transport.dart';
-@@ -44,6 +47,10 @@
+ import '../../core/transport/lan_discovery.dart';
+ import '../../core/transport/lan_transport.dart';
+ import '../../core/transport/wifi_direct_manager.dart';
++import '../../core/transport/wifi_direct_credentials.dart';
+ import '../theme/app_theme.dart';
+ import '../transitions/stage_choreography.dart';
+ import '../../core/update/update_service.dart';
+@@ -43,7 +48,28 @@
+ class _HomeContentState extends State<HomeContent> {
    final _nicknameController = TextEditingController();
    String? _defaultNickname;
++  final _nicknameStore = NicknameStore();
++  bool _nicknameEdited = false;
++  bool _hasSavedNickname = false;
++
++  Future<void> _restoreNickname() async {
++    final saved = await _nicknameStore.load();
++    if (!mounted || _nicknameEdited || saved == null) return;
++    _hasSavedNickname = true;
++    _nicknameController.text = saved;
++  }
++
++  void _saveNickname(String value) {
++    _nicknameEdited = true;
++    _hasSavedNickname = true;
++    unawaited(_nicknameStore.save(value));
++  }
++
    final _lanDiscovery = LanRoomDiscovery();
 +  final _bleDiscovery = BleL2capTransport();
 +  bool _busy = false;
@@ -3853,7 +4733,27 @@
    RoomMode _selectedMode = RoomMode.wifiFullDuplex;
    bool _isScanning = false;
    List<WifiP2pPeer> _p2pPeers = [];
-@@ -87,16 +94,146 @@
+@@ -65,14 +91,17 @@
+       }
+     });
+     _startScan();
++    unawaited(_restoreNickname());
+   }
+ 
+   @override
+   void didChangeDependencies() {
+     super.didChangeDependencies();
+     final nickname = AppStrings.of(context).defaultNickname;
+-    if (_defaultNickname == null ||
+-        _nicknameController.text == _defaultNickname) {
++    if (!_hasSavedNickname &&
++        !_nicknameEdited &&
++        (_defaultNickname == null ||
++            _nicknameController.text == _defaultNickname)) {
+       _nicknameController.text = nickname;
+     }
+     _defaultNickname = nickname;
+@@ -87,16 +116,146 @@
      }
    }
  
@@ -4007,7 +4907,7 @@
    }
  
    void _startPeriodicScan() {
-@@ -120,6 +257,8 @@
+@@ -120,6 +279,8 @@
      _periodicScanTimer?.cancel();
      _p2pSubscription?.cancel();
      _nicknameController.dispose();
@@ -4016,7 +4916,7 @@
      _lanDiscovery.dispose();
      super.dispose();
    }
-@@ -142,7 +281,8 @@
+@@ -142,7 +303,8 @@
          onTap: () => FocusScope.of(context).unfocus(),
          child: CustomScrollView(
            physics: const AlwaysScrollableScrollPhysics(
@@ -4026,7 +4926,7 @@
            slivers: [
              SliverToBoxAdapter(
                child: Column(
-@@ -162,29 +302,38 @@
+@@ -162,29 +324,39 @@
                            color: cardBg,
                            borderRadius: BorderRadius.circular(18),
                            border: Border.all(
@@ -4055,6 +4955,7 @@
                                  controller: _nicknameController,
 -                                style:
 -                                    TextStyle(color: textPrimary, fontSize: 17),
++                                onChanged: _saveNickname,
 +                                style: TextStyle(
 +                                  color: textPrimary,
 +                                  fontSize: 17,
@@ -4075,7 +4976,7 @@
                                  ),
                                ),
                              ),
-@@ -194,7 +343,9 @@
+@@ -194,7 +366,9 @@
                                    '${s.deviceCodeTooltip} (#${DeviceCode.current})',
                                child: Container(
                                  padding: const EdgeInsets.symmetric(
@@ -4086,7 +4987,7 @@
                                  decoration: BoxDecoration(
                                    color: (isNight
                                            ? AppTheme.nightSkyBlue
-@@ -209,9 +360,10 @@
+@@ -209,9 +383,10 @@
                                      fontFamily: 'monospace',
                                      fontWeight: FontWeight.w700,
                                      letterSpacing: 0.8,
@@ -4100,7 +5001,7 @@
                                    ),
                                  ),
                                ),
-@@ -244,8 +396,8 @@
+@@ -244,8 +419,8 @@
                                  isSelected:
                                      _selectedMode == RoomMode.wifiFullDuplex,
                                  isNight: isNight,
@@ -4111,7 +5012,7 @@
                                ),
                              ),
                              const SizedBox(width: 12),
-@@ -257,8 +409,7 @@
+@@ -257,8 +432,7 @@
                                  isSelected:
                                      _selectedMode == RoomMode.bluetoothPtt,
                                  isNight: isNight,
@@ -4121,7 +5022,7 @@
                                ),
                              ),
                            ],
-@@ -267,6 +418,10 @@
+@@ -267,6 +441,10 @@
                      ),
                    ),
  
@@ -4132,7 +5033,7 @@
                    const SizedBox(height: 18),
  
                    // 3. 建房 + 扫描
-@@ -280,14 +435,17 @@
+@@ -280,14 +458,17 @@
                            Expanded(
                              flex: 6,
                              child: ElevatedButton(
@@ -4155,7 +5056,7 @@
                                  shape: RoundedRectangleBorder(
                                    borderRadius: BorderRadius.circular(28),
                                  ),
-@@ -300,8 +458,9 @@
+@@ -300,8 +481,9 @@
                                        ? s.createWifiRoom
                                        : s.createBleRoom,
                                    style: const TextStyle(
@@ -4167,7 +5068,7 @@
                                  ),
                                ),
                              ),
-@@ -310,16 +469,20 @@
+@@ -310,16 +492,20 @@
                            Expanded(
                              flex: 5,
                              child: OutlinedButton(
@@ -4193,7 +5094,7 @@
                                  shape: RoundedRectangleBorder(
                                    borderRadius: BorderRadius.circular(28),
                                  ),
-@@ -335,18 +498,20 @@
+@@ -335,18 +521,20 @@
                                          height: 18,
                                          child: CircularProgressIndicator(
                                            strokeWidth: 2.2,
@@ -4220,7 +5121,7 @@
                                        ),
                                      const SizedBox(width: 6),
                                      Text(
-@@ -354,9 +519,10 @@
+@@ -354,9 +542,10 @@
                                        style: TextStyle(
                                          fontSize: 16,
                                          fontWeight: FontWeight.bold,
@@ -4234,7 +5135,7 @@
                                        ),
                                      ),
                                    ],
-@@ -397,9 +563,10 @@
+@@ -397,9 +586,10 @@
                              Text(
                                s.detectingRooms,
                                style: TextStyle(
@@ -4248,7 +5149,7 @@
                                  fontSize: 14,
                                ),
                              ),
-@@ -419,178 +586,213 @@
+@@ -419,178 +609,213 @@
                child: StageExitItem(
                  stage: stage,
                  index: 4,
@@ -4633,7 +5534,7 @@
                ),
              ),
  
-@@ -625,7 +827,14 @@
+@@ -625,7 +850,14 @@
    String get _nickname {
      final s = AppStrings.of(context);
      final text = _nicknameController.text.trim();
@@ -4649,7 +5550,7 @@
    }
  
    /// 走 roster 的身份名，带十六进制短码，房间里好区分同名的人。
-@@ -633,12 +842,17 @@
+@@ -633,12 +865,17 @@
    String get _identityNickname => DeviceCode.attach(_nickname);
  
    void _onCreateRoom() async {
@@ -4670,11 +5571,12 @@
  
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -646,18 +860,37 @@
+@@ -646,18 +883,42 @@
        mode: _selectedMode,
      );
  
-+    await session.protectWithInvite(RoomInvite.generate());
++    final invite = RoomInvite.generate();
++    await session.protectWithInvite(invite);
 +    if (!mounted) {
 +      await session.dispose();
 +      return;
@@ -4682,7 +5584,12 @@
 +
      if (_selectedMode == RoomMode.wifiFullDuplex) {
        _isHostingWifiDirect = true;
-       unawaited(WifiDirectManager.instance.createGroup());
+-      unawaited(WifiDirectManager.instance.createGroup());
++      unawaited(
++        WifiDirectManager.instance.createGroup(
++          WifiDirectCredentials.fromInvite(invite),
++        ),
++      );
        _startPeriodicScan();
 -      final transport = LanTransport();
 -      await transport.startHost();
@@ -4711,7 +5618,7 @@
        session.transport = transport;
        session.onSendFrame = transport.send;
        transport.incoming.listen(session.handleIncomingFrame);
-@@ -677,10 +910,23 @@
+@@ -677,10 +938,23 @@
        );
      }
  
@@ -4736,7 +5643,7 @@
      FocusScope.of(context).unfocus();
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -688,38 +934,71 @@
+@@ -688,38 +962,72 @@
        mode: RoomMode.wifiFullDuplex,
      );
  
@@ -4807,6 +5714,7 @@
 -        await WifiDirectManager.instance.connectAndWait(peer.address);
 +    final connectionInfo = await WifiDirectManager.instance.connectAndWait(
 +      peer.address,
++      credentials: WifiDirectCredentials.fromInvite(invite),
 +    );
      if (connectionInfo == null ||
          !connectionInfo.isConnected ||
@@ -4816,7 +5724,7 @@
          ScaffoldMessenger.of(context).showSnackBar(
            SnackBar(
              content: Text(s.directConnectPermissionFailed),
-@@ -730,6 +1009,7 @@
+@@ -730,6 +1038,7 @@
        return;
      }
  
@@ -4824,7 +5732,7 @@
      final hostIp = InternetAddress(connectionInfo.groupOwnerAddress);
      final session = RoomSession(
        audioIo: widget.audioIo,
-@@ -737,18 +1017,37 @@
+@@ -737,18 +1046,37 @@
        mode: RoomMode.wifiFullDuplex,
      );
  
@@ -4868,7 +5776,7 @@
        final displayName =
            peer.name.isNotEmpty ? s.defaultWifiRoomTitle(peer.name) : s.wifiRoom;
        widget.onEnterRoom(session, displayName);
-@@ -792,9 +1091,12 @@
+@@ -792,9 +1120,12 @@
            color: isSelected ? activeColor.withValues(alpha: 0.12) : cardBg,
            borderRadius: BorderRadius.circular(18),
            border: Border.all(
@@ -4884,7 +5792,7 @@
              width: isSelected ? 2.0 : 1.0,
            ),
          ),
-@@ -803,8 +1105,11 @@
+@@ -803,8 +1134,11 @@
            children: [
              Row(
                children: [
@@ -4898,7 +5806,7 @@
                  const SizedBox(width: 7),
                  Flexible(
                    child: Text(
-@@ -822,10 +1127,7 @@
+@@ -822,10 +1156,7 @@
              const SizedBox(height: 6),
              Text(
                subtitle,
@@ -4917,7 +5825,7 @@
  import 'package:flutter/material.dart';
  import '../../core/session/member.dart';
  import '../../core/session/room_session.dart';
-@@ -36,14 +37,29 @@
+@@ -36,14 +37,30 @@
  
  class _RoomContentState extends State<RoomContent> {
    bool _isSpeakerOn = true;
@@ -4943,42 +5851,36 @@
      // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
 -    final discSize =
 -        (MediaQuery.of(context).size.height * 0.24).clamp(148.0, 212.0);
-+    final discSize = (MediaQuery.of(context).size.height *
-+            (widget.session.isBluetooth ? 0.20 : 0.24))
-+        .clamp(124.0, 212.0);
++    final discSize = (MediaQuery.of(context).size.height * 0.20).clamp(
++      124.0,
++      212.0,
++    );
  
      return SafeArea(
        top: false,
-@@ -69,24 +85,50 @@
+@@ -69,24 +86,43 @@
  
            const Spacer(),
  
 -          // 2. 中央对讲盘：WiFi 房是实时音浪，蓝牙房是按住说话
-+          if (widget.session.isBluetooth)
-+            Padding(
-+              padding: const EdgeInsets.only(bottom: 8),
-+              child: SegmentedButton<VoiceMode>(
-+                style: SegmentedButton.styleFrom(
-+                  visualDensity: VisualDensity.compact,
-+                  foregroundColor: Colors.white,
-+                  selectedForegroundColor: Colors.black,
-+                  selectedBackgroundColor: Colors.white70,
-+                ),
-+                segments: const [
-+                  ButtonSegment(
-+                    value: VoiceMode.pushToTalk,
-+                    label: Text('按住对讲'),
-+                  ),
-+                  ButtonSegment(
-+                    value: VoiceMode.automatic,
-+                    label: Text('自动通话'),
-+                  ),
-+                ],
-+                selected: {widget.session.voiceMode},
-+                onSelectionChanged:
-+                    (modes) => widget.session.setVoiceMode(modes.single),
++          Padding(
++            padding: const EdgeInsets.only(bottom: 8),
++            child: SegmentedButton<VoiceMode>(
++              style: SegmentedButton.styleFrom(
++                visualDensity: VisualDensity.compact,
++                foregroundColor: Colors.white,
++                selectedForegroundColor: Colors.black,
++                selectedBackgroundColor: Colors.white70,
 +              ),
++              segments: const [
++                ButtonSegment(value: VoiceMode.pushToTalk, label: Text('按住对讲')),
++                ButtonSegment(value: VoiceMode.automatic, label: Text('自动通话')),
++              ],
++              selected: {widget.session.voiceMode},
++              onSelectionChanged:
++                  (modes) => widget.session.setVoiceMode(modes.single),
 +            ),
++          ),
 +          // Each device selects its own transmit mode; receiving stays enabled.
            StageEnterItem(
              stage: stage,
@@ -5013,7 +5915,7 @@
            ),
  
            const Spacer(),
-@@ -121,7 +163,8 @@
+@@ -121,7 +157,8 @@
  
    Widget _buildDuplexDisc(bool isNight, double size) {
      final s = AppStrings.of(context);
@@ -6767,8 +7669,8 @@
  # versionName 取 `+` 前半段，versionCode 取后半段。
 -# 0.1.0-alpha.11 / versionCode 12
 -version: 0.1.0-alpha.11+12
-+# DawnMesh 0.1.0-dev.4 / versionCode 4
-+version: 0.1.0-dev.4+4
++# DawnMesh 0.1.0-dev.5 / versionCode 5
++version: 0.1.0-dev.5+5
  
  environment:
 -  sdk: '>=3.0.0 <4.0.0'
@@ -7291,6 +8193,39 @@
        expect(s.chatRecalledTip, 'Recall request submitted');
        expect(s.formerNameLabel('OldName'), 'Previously OldName');
        expect(s.hostRoleBadge, 'Host');
+--- /dev/null
++++ b/test/nickname_store_test.dart
+@@ -0,0 +1,30 @@
++import 'package:flutter/services.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/preferences/nickname_store.dart';
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++  const channel = MethodChannel('dev.dawnmesh.intercom/preferences');
++
++  test(
++    'nickname is saved and restored through private app preferences',
++    () async {
++      String? saved;
++      final messenger =
++          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
++      messenger.setMockMethodCallHandler(channel, (call) async {
++        if (call.method == 'setNickname') {
++          saved = (call.arguments as Map)['nickname'] as String;
++          return null;
++        }
++        if (call.method == 'getNickname') return saved;
++        return null;
++      });
++      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
++
++      final store = NicknameStore();
++      await store.save('红米用户');
++      expect(await store.load(), '红米用户');
++    },
++  );
++}
 --- /dev/null
 +++ b/test/room_admission_test.dart
 @@ -0,0 +1,111 @@
@@ -7891,7 +8826,16 @@
 +}
 --- a/test/room_layout_test.dart
 +++ b/test/room_layout_test.dart
-@@ -85,9 +85,7 @@
+@@ -64,6 +64,8 @@
+         ),
+         findsOneWidget,
+       );
++      expect(find.text('按住对讲'), findsOneWidget);
++      expect(find.text('自动通话'), findsOneWidget);
+     });
+ 
+     testWidgets('${entry.key} 蓝牙房内布局不溢出', (tester) async {
+@@ -85,9 +87,7 @@
      testWidgets('${entry.key} 首页整场（背景+标题+前景）不溢出', (tester) async {
        useSurface(tester, entry.value);
        await tester.pumpWidget(
@@ -7902,7 +8846,7 @@
        );
        // 首页 initState 会发起扫描，里面有 2 秒的 Future.delayed。
        await tester.pump(const Duration(seconds: 3));
-@@ -95,7 +93,7 @@
+@@ -95,7 +95,7 @@
        expect(tester.takeException(), isNull);
        expect(
          find.byWidgetPredicate(
@@ -7911,7 +8855,7 @@
          ),
          findsWidgets,
        );
-@@ -103,7 +101,7 @@
+@@ -103,7 +103,7 @@
          find.byWidgetPredicate(
            (w) =>
                w is Text &&
@@ -7920,7 +8864,7 @@
          ),
          findsOneWidget,
        );
-@@ -111,20 +109,12 @@
+@@ -111,20 +111,12 @@
  
      testWidgets('${entry.key} 聊天面板弹出、输入发送、长消息不溢出', (tester) async {
        useSurface(tester, entry.value);
@@ -8019,7 +8963,7 @@
 +}
 --- /dev/null
 +++ b/test/voice_modes_test.dart
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,143 @@
 +import 'dart:typed_data';
 +import 'package:flutter/material.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -8091,6 +9035,35 @@
 +      expect(audio.isRecording, isFalse);
 +    },
 +  );
++
++  test('Wi-Fi room can switch between automatic and push-to-talk', () async {
++    final audio = MockAudioIo();
++    final room = RoomSession(
++      audioIo: audio,
++      selfNickname: 'Host',
++      mode: RoomMode.wifiFullDuplex,
++    );
++    addTearDown(room.dispose);
++    final sent = <Frame>[];
++    room.onSendFrame = sent.add;
++    await room.createRoom();
++    expect(room.voiceMode, VoiceMode.automatic);
++    room.setVoiceMode(VoiceMode.pushToTalk);
++    audio.emitEncodedFrame(Uint8List.fromList([1]), level: .2);
++    expect(sent.where((frame) => frame.type == FrameType.audio), isEmpty);
++    room.setPtt(true);
++    audio.emitEncodedFrame(Uint8List.fromList([2]), level: .2);
++    expect(
++      sent.where((frame) => frame.type == FrameType.audio).single.payload,
++      [2],
++    );
++    room.setVoiceMode(VoiceMode.automatic);
++    expect(room.isPttPressed, isFalse);
++    audio.emitEncodedFrame(Uint8List.fromList([3]), level: .2);
++    expect(sent.where((frame) => frame.type == FrameType.audio).last.payload, [
++      3,
++    ]);
++  });
 +
 +  testWidgets(
 +    'compact Bluetooth room switches both voice modes without overflow',
@@ -8205,3 +9178,140 @@
        ),
        findsOneWidget,
      );
+--- /dev/null
++++ b/test/wifi_direct_credentials_test.dart
+@@ -0,0 +1,24 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sunset_ripple/core/security/room_invite.dart';
++import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
++
++void main() {
++  test('same invite derives valid stable Wi-Fi Direct credentials', () {
++    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
++    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
++    expect(first.toMap(), second.toMap());
++    expect(
++      first.networkName,
++      matches(RegExp(r'^DIRECT-[0-9a-f]{2}-DawnMesh-[0-9a-f]{8}$')),
++    );
++    expect(first.passphrase, matches(RegExp(r'^DM[0-9a-f]{22}$')));
++  });
++
++  test('different invites do not share transport credentials', () {
++    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
++    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('012346'));
++    expect(first.networkName, isNot(second.networkName));
++    expect(first.passphrase, isNot(second.passphrase));
++    expect(first.passphrase, isNot(contains('012345')));
++  });
++}
+--- a/test/wifi_direct_manager_test.dart
++++ b/test/wifi_direct_manager_test.dart
+@@ -1,44 +1,52 @@
+ import 'package:flutter/services.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:sunset_ripple/core/transport/wifi_direct_manager.dart';
++import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
++import 'package:sunset_ripple/core/security/room_invite.dart';
+ 
+ void main() {
+   TestWidgetsFlutterBinding.ensureInitialized();
+ 
+   const channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
++  final credentials = WifiDirectCredentials.fromInvite(
++    RoomInvite.parse('012345'),
++  );
++  final calls = <MethodCall>[];
+ 
+   setUp(() {
+     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+         .setMockMethodCallHandler(channel, (MethodCall call) async {
+-      switch (call.method) {
+-        case 'isSupported':
+-          return true;
+-        case 'isEnabled':
+-          return true;
+-        case 'createGroup':
+-          return true;
+-        case 'removeGroup':
+-          return true;
+-        case 'discoverPeers':
+-          return true;
+-        case 'connect':
+-          return true;
+-        case 'disconnect':
+-          return true;
+-        case 'getConnectionInfo':
+-          return {
+-            'isConnected': true,
+-            'isGroupOwner': true,
+-            'groupFormed': true,
+-            'groupOwnerAddress': '192.168.49.1',
+-          };
+-        default:
+-          return null;
+-      }
+-    });
++          calls.add(call);
++          switch (call.method) {
++            case 'isSupported':
++              return true;
++            case 'isEnabled':
++              return true;
++            case 'createGroup':
++              return true;
++            case 'removeGroup':
++              return true;
++            case 'discoverPeers':
++              return true;
++            case 'connect':
++              return true;
++            case 'disconnect':
++              return true;
++            case 'getConnectionInfo':
++              return {
++                'isConnected': true,
++                'isGroupOwner': true,
++                'groupFormed': true,
++                'groupOwnerAddress': '192.168.49.1',
++              };
++            default:
++              return null;
++          }
++        });
+   });
+ 
+   tearDown(() {
++    calls.clear();
+     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+         .setMockMethodCallHandler(channel, null);
+   });
+@@ -98,13 +106,18 @@
+     });
+ 
+     test('createGroup and removeGroup succeed', () async {
+-      expect(await manager.createGroup(), isTrue);
++      expect(await manager.createGroup(credentials), isTrue);
++      expect(calls.last.arguments, credentials.toMap());
+       expect(await manager.removeGroup(), isTrue);
+     });
+ 
+     test('discoverPeers, connect and disconnect invoke correctly', () async {
+       expect(await manager.discoverPeers(), isTrue);
+-      expect(await manager.connect('46:b2:f7:ca:c4:b3'), isTrue);
++      expect(await manager.connect('46:b2:f7:ca:c4:b3', credentials), isTrue);
++      expect(calls.last.arguments, {
++        'deviceAddress': '46:b2:f7:ca:c4:b3',
++        ...credentials.toMap(),
++      });
+       expect(await manager.disconnect(), isTrue);
+     });
+ 
+@@ -118,6 +131,7 @@
+     test('connectAndWait returns null when connection times out', () async {
+       final result = await manager.connectAndWait(
+         '46:b2:f7:ca:c4:b3',
++        credentials: credentials,
+         timeout: const Duration(milliseconds: 50),
+       );
+       expect(result, isNull);

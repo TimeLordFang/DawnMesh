@@ -170,8 +170,32 @@ class WifiDirectPlugin(
         eventSink?.success(data)
     }
 
-    private fun createGroupInternal(result: MethodChannel.Result) {
-        manager?.createGroup(channel, object : WifiP2pManager.ActionListener {
+    private fun configuredGroup(
+        networkName: String?,
+        passphrase: String?,
+    ): WifiP2pConfig? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            networkName.isNullOrBlank() || passphrase.isNullOrBlank()) return null
+        return try {
+            WifiP2pConfig.Builder()
+                .setNetworkName(networkName)
+                .setPassphrase(passphrase)
+                .enablePersistentMode(false)
+                .build()
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Wi-Fi Direct 房间凭据非法", e)
+            null
+        }
+    }
+
+    private fun createGroupInternal(config: WifiP2pConfig?, result: MethodChannel.Result) {
+        val p2pManager = manager
+        val p2pChannel = channel
+        if (p2pManager == null || p2pChannel == null) {
+            result.success(false)
+            return
+        }
+        val listener = object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.i(TAG, "创建 Wi-Fi Direct 群组成功 (Group Owner)")
                 manager?.discoverPeers(channel, null)
@@ -182,20 +206,30 @@ class WifiDirectPlugin(
                 Log.w(TAG, "创建 Wi-Fi Direct 群组失败: $reason")
                 if (reason == WifiP2pManager.BUSY) {
                     android.os.Handler(Looper.getMainLooper()).postDelayed({
-                        manager?.createGroup(channel, object : WifiP2pManager.ActionListener {
+                        val retry = object : WifiP2pManager.ActionListener {
                             override fun onSuccess() {
                                 Log.i(TAG, "重试创建 Wi-Fi Direct 群组成功")
-                                manager?.discoverPeers(channel, null)
+                                p2pManager.discoverPeers(p2pChannel, null)
                             }
                             override fun onFailure(r: Int) {
                                 Log.w(TAG, "重试创建群组失败: $r")
                             }
-                        })
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config != null) {
+                            p2pManager.createGroup(p2pChannel, config, retry)
+                        } else {
+                            p2pManager.createGroup(p2pChannel, retry)
+                        }
                     }, 300)
                 }
                 result.success(false)
             }
-        }) ?: result.success(false)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config != null) {
+            p2pManager.createGroup(p2pChannel, config, listener)
+        } else {
+            p2pManager.createGroup(p2pChannel, listener)
+        }
     }
 
     // MARK: - MethodChannel
@@ -212,15 +246,23 @@ class WifiDirectPlugin(
 
             "createGroup" -> {
                 Log.i(TAG, "收到 Flutter createGroup 请求, manager=$manager, channel=$channel")
+                val config = configuredGroup(
+                    call.argument("networkName"),
+                    call.argument("passphrase"),
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config == null) {
+                    result.error("BAD_CREDENTIALS", "缺少有效的房间邀请码凭据", null)
+                    return
+                }
                 manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
-                        createGroupInternal(result)
+                        createGroupInternal(config, result)
                     }
 
                     override fun onFailure(reason: Int) {
-                        createGroupInternal(result)
+                        createGroupInternal(config, result)
                     }
-                }) ?: createGroupInternal(result)
+                }) ?: createGroupInternal(config, result)
             }
 
             "removeGroup" -> {
@@ -266,14 +308,35 @@ class WifiDirectPlugin(
 
             "connect" -> {
                 val address = call.argument<String>("deviceAddress")
+                val networkName = call.argument<String>("networkName")
+                val passphrase = call.argument<String>("passphrase")
                 if (address == null) {
                     result.error("INVALID_ARGS", "缺少 deviceAddress 参数", null)
                     return
                 }
 
-                val config = WifiP2pConfig().apply {
-                    deviceAddress = address
-                    groupOwnerIntent = 0
+                val config = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (networkName.isNullOrBlank() || passphrase.isNullOrBlank()) {
+                        result.error("BAD_CREDENTIALS", "缺少有效的房间邀请码凭据", null)
+                        return
+                    }
+                    try {
+                        // Known group credentials authorize the selected group
+                        // without starting the legacy WPS invitation flow.
+                        WifiP2pConfig.Builder()
+                            .setNetworkName(networkName)
+                            .setPassphrase(passphrase)
+                            .enablePersistentMode(false)
+                            .build()
+                    } catch (e: IllegalArgumentException) {
+                        result.error("BAD_CREDENTIALS", "房间邀请码凭据非法", null)
+                        return
+                    }
+                } else {
+                    WifiP2pConfig().apply {
+                        deviceAddress = address
+                        groupOwnerIntent = 0
+                    }
                 }
 
                 manager?.connect(channel, config, object : WifiP2pManager.ActionListener {

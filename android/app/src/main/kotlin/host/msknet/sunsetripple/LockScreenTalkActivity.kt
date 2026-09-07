@@ -248,7 +248,7 @@ class LockScreenTalkActivity : Activity() {
             else -> "按住圆环发言 · 松开恢复收听"
         }
         roomType.text = if (CallControlBridge.bluetooth) "蓝牙房间" else "Wi-Fi 房间"
-        modes.visibility = if (CallControlBridge.bluetooth) View.VISIBLE else View.GONE
+        modes.visibility = View.VISIBLE
         for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
             button.isSelected = selected
             button.setTextColor(if (selected) CallPanelColors.ink else CallPanelColors.secondary)

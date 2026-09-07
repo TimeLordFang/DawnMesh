@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.4-release.apk`，**52,771,424 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.4` / versionCode **4**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`ab988749b323793315d4510a7e0b10484c987e32f40dcac6df173e14ed825444`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.5-release.apk`，**52,771,424 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.5` / versionCode **5**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`2bfdd626fead07a41ef07dd0629f34eb0cc288d525ca2e8937785d39fdf65ce1`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
@@ -17,9 +17,9 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **151 项通过，0 失败** |
+| Flutter 全量测试（串行） | **155 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
-| `:app:testDebugUnitTest` | Kotlin **7 项通过，0 失败** |
+| `:app:testDebugUnitTest` | Kotlin **18 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
 | Flutter debug / release APK | 两种构建均成功；release 使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -32,7 +32,16 @@
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
-## dev.4 本轮完成情况
+## dev.5 本轮完成情况
+
+- 昵称通过 Android 私有 `SharedPreferences` 持久化，进程或活动重建后恢复；邀请码、密钥和聊天不写入该设置文件。
+- Wi-Fi 房与蓝牙房都可在自动通话和按住对讲之间切换，主界面和锁屏面板行为一致，每台设备独立选择发言方式。
+- Android 10+ Wi-Fi Direct 房由邀请码派生已知 SSID/口令，创建和加入均使用 `WifiP2pConfig.Builder`，不再触发旧式 WPS 房主批准流程；Android 8/9 受系统 API 限制仍使用旧流程。厂商系统仍可能实施额外确认。
+- 蓝牙广播按原始 AD 结构逐条解析，避免 Android 15/16 合并相同厂商 ID 后把第二份 PSM/人数元数据渲染成房名前乱码；严格验证 UTF-8，并按 Unicode 码点截断。
+- 音频播放把 TCP/L2CAP 视为有序可靠流，不再把共享协议序号中的心跳/聊天空档误判为丢失音频。蓝牙预缓冲提高到 120 ms，欠载后自适应重新缓冲，最多缓存 480 ms；采集/播放/发送线程提高优先级，Opus 复杂度降为 5，并增加欠载与编码超时诊断。
+- 与 dev.4 使用相同签名，支持覆盖升级。K50 Ultra 的实际改善、Wi-Fi Direct 厂商确认行为与三机语音仍由用户真机验收。
+
+## dev.4 已保留功能
 
 - 邀请码直接显示在聊天室信息下方，创建后默认显示 10 秒；眼睛按钮切换，每次显示重新计时。加入者默认隐藏，切后台立即隐藏；隐藏数字从文字与无障碍节点移除。
 - 锁屏面板采用深色渐变、分段模式选择、中央圆形对讲区和静音卡片；加入按压缩放、发言光环、轻震反馈。短屏可滚动，宽屏限制面板宽度，适配系统栏。
@@ -62,9 +71,12 @@
 
 11. 邀请码首次及重复显示超时、主动隐藏、后台隐藏、房间切换、销毁取消计时器、紧凑屏大字体，以及实际建房后的邀请码位置与显示切换。
 12. Kotlin 对讲手势：滑出后不复活、多指隔离、重复取消只释放一次、禁用状态和圆环外按下不发送。
+13. 昵称存取平台通道与 Wi-Fi Direct 凭据确定性/格式/差异性，Wi-Fi 模式切换与紧凑屏布局。
+14. 原始 BLE 广播多厂商段解析、段顺序变化、仅主包、非法 UTF-8/元数据与 Unicode 截断。
+15. 音频缓冲覆盖可靠流非音频序号间隔、欠载重缓冲、短句截止时间、蓝牙突发、上限丢旧及非可靠序号回绕。
 
 ## 按约定由你执行
 
-你已明确真机验证自行完成，本次不等待 USB 设备。未执行 Xiaomi / OnePlus Android 16 的射频发现、实际语音/麦克风路由、后台冻结、6 人容量、重复进退房压力和 16 KB 设备运行验收。操作表见 [ANDROID16_BLUETOOTH.md](ANDROID16_BLUETOOTH.md)。
+你已明确真机验证自行完成，本次不等待 USB 设备。未执行 Xiaomi 15 / OnePlus Android 16 与 Redmi K50 Ultra Android 15 的射频发现、Wi-Fi Direct 系统确认、实际语音/麦克风路由、后台冻结、6 人容量、重复进退房压力和 16 KB 设备运行验收。操作表见 [ANDROID16_BLUETOOTH.md](ANDROID16_BLUETOOTH.md)。
 
 源码审查未发现明确恶意后门证据，不等于证明所有依赖无漏洞或手机原 APK 与源码完全一致。仍存在组密钥成员互信、未认证物理连接占位、TCP 背压与缺少前向保密等边界，见 [安全审查](SECURITY_REVIEW.md)。

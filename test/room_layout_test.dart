@@ -64,6 +64,8 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(find.text('按住对讲'), findsOneWidget);
+      expect(find.text('自动通话'), findsOneWidget);
     });
 
     testWidgets('${entry.key} 蓝牙房内布局不溢出', (tester) async {

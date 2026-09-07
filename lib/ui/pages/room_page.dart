@@ -57,9 +57,10 @@ class _RoomContentState extends State<RoomContent> {
     final isNight = widget.isNight;
     final stage = widget.stage;
     // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
-    final discSize = (MediaQuery.of(context).size.height *
-            (widget.session.isBluetooth ? 0.20 : 0.24))
-        .clamp(124.0, 212.0);
+    final discSize = (MediaQuery.of(context).size.height * 0.20).clamp(
+      124.0,
+      212.0,
+    );
 
     return SafeArea(
       top: false,
@@ -85,31 +86,24 @@ class _RoomContentState extends State<RoomContent> {
 
           const Spacer(),
 
-          if (widget.session.isBluetooth)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SegmentedButton<VoiceMode>(
-                style: SegmentedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  foregroundColor: Colors.white,
-                  selectedForegroundColor: Colors.black,
-                  selectedBackgroundColor: Colors.white70,
-                ),
-                segments: const [
-                  ButtonSegment(
-                    value: VoiceMode.pushToTalk,
-                    label: Text('按住对讲'),
-                  ),
-                  ButtonSegment(
-                    value: VoiceMode.automatic,
-                    label: Text('自动通话'),
-                  ),
-                ],
-                selected: {widget.session.voiceMode},
-                onSelectionChanged:
-                    (modes) => widget.session.setVoiceMode(modes.single),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SegmentedButton<VoiceMode>(
+              style: SegmentedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: Colors.white,
+                selectedForegroundColor: Colors.black,
+                selectedBackgroundColor: Colors.white70,
               ),
+              segments: const [
+                ButtonSegment(value: VoiceMode.pushToTalk, label: Text('按住对讲')),
+                ButtonSegment(value: VoiceMode.automatic, label: Text('自动通话')),
+              ],
+              selected: {widget.session.voiceMode},
+              onSelectionChanged:
+                  (modes) => widget.session.setVoiceMode(modes.single),
             ),
+          ),
           // Each device selects its own transmit mode; receiving stays enabled.
           StageEnterItem(
             stage: stage,

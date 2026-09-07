@@ -30,6 +30,7 @@ internal class BoundedFrameWriter(
     private val jobs = ArrayBlockingQueue<Job>(capacity)
     private val worker = Thread({ run() }, "dawnmesh-peer-writer").apply {
         isDaemon = true
+        priority = Thread.MAX_PRIORITY
         start()
     }
 

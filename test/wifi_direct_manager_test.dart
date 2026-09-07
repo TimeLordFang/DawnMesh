@@ -1,44 +1,52 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sunset_ripple/core/transport/wifi_direct_manager.dart';
+import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
+import 'package:sunset_ripple/core/security/room_invite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
+  final credentials = WifiDirectCredentials.fromInvite(
+    RoomInvite.parse('012345'),
+  );
+  final calls = <MethodCall>[];
 
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
-      switch (call.method) {
-        case 'isSupported':
-          return true;
-        case 'isEnabled':
-          return true;
-        case 'createGroup':
-          return true;
-        case 'removeGroup':
-          return true;
-        case 'discoverPeers':
-          return true;
-        case 'connect':
-          return true;
-        case 'disconnect':
-          return true;
-        case 'getConnectionInfo':
-          return {
-            'isConnected': true,
-            'isGroupOwner': true,
-            'groupFormed': true,
-            'groupOwnerAddress': '192.168.49.1',
-          };
-        default:
-          return null;
-      }
-    });
+          calls.add(call);
+          switch (call.method) {
+            case 'isSupported':
+              return true;
+            case 'isEnabled':
+              return true;
+            case 'createGroup':
+              return true;
+            case 'removeGroup':
+              return true;
+            case 'discoverPeers':
+              return true;
+            case 'connect':
+              return true;
+            case 'disconnect':
+              return true;
+            case 'getConnectionInfo':
+              return {
+                'isConnected': true,
+                'isGroupOwner': true,
+                'groupFormed': true,
+                'groupOwnerAddress': '192.168.49.1',
+              };
+            default:
+              return null;
+          }
+        });
   });
 
   tearDown(() {
+    calls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
@@ -98,13 +106,18 @@ void main() {
     });
 
     test('createGroup and removeGroup succeed', () async {
-      expect(await manager.createGroup(), isTrue);
+      expect(await manager.createGroup(credentials), isTrue);
+      expect(calls.last.arguments, credentials.toMap());
       expect(await manager.removeGroup(), isTrue);
     });
 
     test('discoverPeers, connect and disconnect invoke correctly', () async {
       expect(await manager.discoverPeers(), isTrue);
-      expect(await manager.connect('46:b2:f7:ca:c4:b3'), isTrue);
+      expect(await manager.connect('46:b2:f7:ca:c4:b3', credentials), isTrue);
+      expect(calls.last.arguments, {
+        'deviceAddress': '46:b2:f7:ca:c4:b3',
+        ...credentials.toMap(),
+      });
       expect(await manager.disconnect(), isTrue);
     });
 
@@ -118,6 +131,7 @@ void main() {
     test('connectAndWait returns null when connection times out', () async {
       final result = await manager.connectAndWait(
         '46:b2:f7:ca:c4:b3',
+        credentials: credentials,
         timeout: const Duration(milliseconds: 50),
       );
       expect(result, isNull);

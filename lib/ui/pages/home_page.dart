@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/audio/audio_io.dart';
+import '../../core/preferences/nickname_store.dart';
 import '../../core/security/room_invite.dart';
 import '../widgets/room_invite_dialog.dart';
 import '../../core/session/device_code.dart';
@@ -11,6 +12,7 @@ import '../../core/transport/ble_l2cap_transport.dart';
 import '../../core/transport/lan_discovery.dart';
 import '../../core/transport/lan_transport.dart';
 import '../../core/transport/wifi_direct_manager.dart';
+import '../../core/transport/wifi_direct_credentials.dart';
 import '../theme/app_theme.dart';
 import '../transitions/stage_choreography.dart';
 import '../../core/update/update_service.dart';
@@ -46,6 +48,23 @@ class HomeContent extends StatefulWidget {
 class _HomeContentState extends State<HomeContent> {
   final _nicknameController = TextEditingController();
   String? _defaultNickname;
+  final _nicknameStore = NicknameStore();
+  bool _nicknameEdited = false;
+  bool _hasSavedNickname = false;
+
+  Future<void> _restoreNickname() async {
+    final saved = await _nicknameStore.load();
+    if (!mounted || _nicknameEdited || saved == null) return;
+    _hasSavedNickname = true;
+    _nicknameController.text = saved;
+  }
+
+  void _saveNickname(String value) {
+    _nicknameEdited = true;
+    _hasSavedNickname = true;
+    unawaited(_nicknameStore.save(value));
+  }
+
   final _lanDiscovery = LanRoomDiscovery();
   final _bleDiscovery = BleL2capTransport();
   bool _busy = false;
@@ -72,14 +91,17 @@ class _HomeContentState extends State<HomeContent> {
       }
     });
     _startScan();
+    unawaited(_restoreNickname());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final nickname = AppStrings.of(context).defaultNickname;
-    if (_defaultNickname == null ||
-        _nicknameController.text == _defaultNickname) {
+    if (!_hasSavedNickname &&
+        !_nicknameEdited &&
+        (_defaultNickname == null ||
+            _nicknameController.text == _defaultNickname)) {
       _nicknameController.text = nickname;
     }
     _defaultNickname = nickname;
@@ -320,6 +342,7 @@ class _HomeContentState extends State<HomeContent> {
                             Expanded(
                               child: TextField(
                                 controller: _nicknameController,
+                                onChanged: _saveNickname,
                                 style: TextStyle(
                                   color: textPrimary,
                                   fontSize: 17,
@@ -860,7 +883,8 @@ class _HomeContentState extends State<HomeContent> {
       mode: _selectedMode,
     );
 
-    await session.protectWithInvite(RoomInvite.generate());
+    final invite = RoomInvite.generate();
+    await session.protectWithInvite(invite);
     if (!mounted) {
       await session.dispose();
       return;
@@ -868,7 +892,11 @@ class _HomeContentState extends State<HomeContent> {
 
     if (_selectedMode == RoomMode.wifiFullDuplex) {
       _isHostingWifiDirect = true;
-      unawaited(WifiDirectManager.instance.createGroup());
+      unawaited(
+        WifiDirectManager.instance.createGroup(
+          WifiDirectCredentials.fromInvite(invite),
+        ),
+      );
       _startPeriodicScan();
       final transport = LanTransport(controlOnly: true);
       if (!await transport.startHost()) {
@@ -993,6 +1021,7 @@ class _HomeContentState extends State<HomeContent> {
 
     final connectionInfo = await WifiDirectManager.instance.connectAndWait(
       peer.address,
+      credentials: WifiDirectCredentials.fromInvite(invite),
     );
     if (connectionInfo == null ||
         !connectionInfo.isConnected ||

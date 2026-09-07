@@ -65,8 +65,8 @@ class PlatformAudioPlugin(
     }
 
     /** 一路远端音频流：抖动缓冲 + 它专属的解码器（Opus 解码器有状态，不能共用）。 */
-    private class RemoteStream {
-        val jitter = JitterBuffer()
+    private class RemoteStream(bluetooth: Boolean) {
+        val jitter = JitterBuffer(prebufferFrames = if (bluetooth) 6 else 3, ordered = true)
         val codec = OpusCodec()
     }
 
@@ -261,7 +261,7 @@ class PlatformAudioPlugin(
         }
 
         val packet = data.copyOfRange(FRAME_HEADER_SIZE, FRAME_HEADER_SIZE + payloadLength)
-        remotes.getOrPut(senderId) { RemoteStream() }.jitter.put(seq, packet)
+        remotes.getOrPut(senderId) { RemoteStream(currentBitrate <= OpusCodec.BLUETOOTH_BITRATE) }.jitter.put(seq, packet)
     }
 
     // ------------------------------------------------------------------ 采集
@@ -333,6 +333,10 @@ class PlatformAudioPlugin(
     }
 
     private fun captureLoop(record: AudioRecord) {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
+        var slowEncodes = 0
+        var lastReport = System.nanoTime()
+
         val pcm = ShortArray(SAMPLES_PER_FRAME)
         var consecutiveErrors = 0
         var offset = 0
@@ -375,6 +379,7 @@ class PlatformAudioPlugin(
 
             if (muted.get()) continue
 
+            val encodeStart = System.nanoTime()
             val level = rms(pcm)
             val packet = try {
                 uplinkCodec?.encode(pcm) ?: continue
@@ -383,6 +388,12 @@ class PlatformAudioPlugin(
                 continue
             }
 
+            if (System.nanoTime() - encodeStart > 20_000_000) slowEncodes++
+            if (System.nanoTime() - lastReport > 10_000_000_000L) {
+                if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
+                slowEncodes = 0
+                lastReport = System.nanoTime()
+            }
             val event = mapOf<String, Any>("data" to packet, "level" to level)
             mainHandler.post { eventSink?.success(event) }
         }
@@ -522,11 +533,18 @@ class PlatformAudioPlugin(
      * 没人说话时写静音帧，保持时钟连续，避免下次出声时的爆音与欠载。
      */
     private fun playbackLoop(track: AudioTrack) {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
+        var lastReport = System.nanoTime()
+
         val mix = IntArray(SAMPLES_PER_FRAME)
         val out = ShortArray(SAMPLES_PER_FRAME)
         var consecutiveErrors = 0
 
         while (playing.get()) {
+            if (System.nanoTime() - lastReport > 10_000_000_000L) {
+                for ((id, stream) in remotes) Log.d(TAG, "音频缓冲 #$id: ${stream.jitter.diagnostics()}; trackUnderruns=${track.underrunCount}")
+                lastReport = System.nanoTime()
+            }
             java.util.Arrays.fill(mix, 0)
             var contributors = 0
 

@@ -1,4 +1,4 @@
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.5-release.apk
 Verifies
 Verified using v1 scheme (JAR signing): false
 Verified using v2 scheme (APK Signature Scheme v2): true
@@ -17,8 +17,8 @@ Signer #1 public key SHA-256 digest: 04652d52898219540693fa649832222c9eabd25d8dd
 Signer #1 public key SHA-1 digest: 81e715e2a199a968a54d63ec3072d56ee4d3f85e
 Signer #1 public key MD5 digest: 35a25d1e029022e490f3ea6d6f71ec05
 
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/aapt dump badging /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
-package: name='dev.dawnmesh.intercom' versionCode='4' versionName='0.1.0-dev.4' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/aapt dump badging /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.5-release.apk
+package: name='dev.dawnmesh.intercom' versionCode='5' versionName='0.1.0-dev.5' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
 sdkVersion:'26'
 targetSdkVersion:'35'
 uses-permission: name='android.permission.WAKE_LOCK'
@@ -160,8 +160,8 @@ locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de
 densities: '160' '240' '320' '480' '640' '65534'
 native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'
 
-$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/zipalign -c -P 16 -v 4 /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk
-Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.4-release.apk (4)...
+$ /Users/judoon/workspace/DawnMesh/.tools/android-sdk/build-tools/35.0.0/zipalign -c -P 16 -v 4 /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.5-release.apk
+Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0-dev.5-release.apk (4)...
       87 META-INF/com/android/build/gradle/app-metadata.properties (OK - compressed)
      208 META-INF/version-control-info.textproto (OK - compressed)
      316 assets/dexopt/baseline.prof (OK)
@@ -267,7 +267,7 @@ Verifying alignment of /Users/judoon/workspace/DawnMesh/artifacts/DawnMesh-0.1.0
 52701512 resources.arsc (OK)
 Verification succesful
 
-SHA-256: ab988749b323793315d4510a7e0b10484c987e32f40dcac6df173e14ed825444
+SHA-256: 2bfdd626fead07a41ef07dd0629f34eb0cc288d525ca2e8937785d39fdf65ce1
 Bytes: 52771424
 ELF program headers:
 lib/arm64-v8a/libapp.so: PT_LOAD align=[65536, 65536, 65536], GNU_RELRO=False

@@ -383,7 +383,7 @@ class BleL2capPlugin(
             .build()
 
     private fun buildScanResponse(): AdvertiseData {
-        val nameBytes = truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
+        val nameBytes = BleRoomAdvertisement.truncateUtf8(advertisedRoomName, ROOM_NAME_BUDGET)
         val payload = ByteArray(3 + nameBytes.size)
         payload[0] = (advertisedPsm ushr 8).toByte()
         payload[1] = advertisedPsm.toByte()
@@ -394,17 +394,6 @@ class BleL2capPlugin(
             .setIncludeDeviceName(false)
             .addManufacturerData(MANUFACTURER_ID, payload)
             .build()
-    }
-
-    /** 按 UTF-8 字节数截断，且不切断多字节字符（中文房名会踩到）。 */
-    private fun truncateUtf8(text: String, maxBytes: Int): ByteArray {
-        var candidate = text
-        while (candidate.isNotEmpty()) {
-            val bytes = candidate.toByteArray(Charsets.UTF_8)
-            if (bytes.size <= maxBytes) return bytes
-            candidate = candidate.substring(0, candidate.length - 1)
-        }
-        return ByteArray(0)
     }
 
     private fun acceptLoop(server: BluetoothServerSocket) {
@@ -472,25 +461,14 @@ class BleL2capPlugin(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             val record = result?.scanRecord ?: return
-            val payload = record.getManufacturerSpecificData(MANUFACTURER_ID) ?: return
-            if (payload.size < 3) return
-
-            val psm = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
-            if (psm !in 1..255) return
-            val memberCount = payload[2].toInt() and 0xFF
-            if (memberCount !in 1..6) return
-            val roomName = if (payload.size > 3) {
-                String(payload, 3, payload.size - 3, Charsets.UTF_8)
-            } else {
-                "蓝牙房"
-            }
+            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
 
             val device = result.device ?: return
             val info = mapOf(
                 "address" to device.address,
-                "roomName" to roomName,
-                "psm" to psm,
-                "memberCount" to memberCount,
+                "roomName" to room.name,
+                "psm" to room.psm,
+                "memberCount" to room.members,
                 "rssi" to result.rssi,
             )
             mainHandler.post { scanSink?.success(info) }
@@ -585,7 +563,7 @@ class BleL2capPlugin(
         val address = socket.remoteDevice?.address ?: "unknown"
         val link = PeerLink(socket, address)
         peers[address] = link
-        Log.i(TAG, "蓝牙链路建立：$address")
+        Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
 
         Thread({ readLoop(link) }, "sunset-ble-read-$address").start()
         return link

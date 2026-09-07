@@ -30,17 +30,24 @@ class OpusCodec(bitrateBps: Int = DEFAULT_BITRATE) {
 
     private val encoder = OpusEncoder(
         SAMPLE_RATE, 1, OpusApplication.OPUS_APPLICATION_VOIP
-    ).also { it.bitrate = bitrateBps }
+    ).also {
+        it.bitrate = bitrateBps
+        // Concentus is JVM code: moderate complexity leaves headroom on older CPUs.
+        it.complexity = 5
+    }
 
     private val decoder = OpusDecoder(SAMPLE_RATE, 1)
     private val encodeBuffer = ByteArray(MAX_PACKET_BYTES)
+    private val decodeBuffer = ShortArray(FRAME_SAMPLES)
 
+    @Synchronized
     fun setBitrate(bitrateBps: Int) {
         require(bitrateBps in 6_000..64_000) { "码率超出 Opus 允许范围: $bitrateBps" }
         encoder.bitrate = bitrateBps
     }
 
     /** 编码一帧（320 样本）PCM，返回 Opus 包。 */
+    @Synchronized
     fun encode(pcm: ShortArray): ByteArray {
         val n = encoder.encode(pcm, 0, FRAME_SAMPLES, encodeBuffer, 0, encodeBuffer.size)
         return encodeBuffer.copyOf(n)
@@ -48,7 +55,7 @@ class OpusCodec(bitrateBps: Int = DEFAULT_BITRATE) {
 
     /** 解码一个 Opus 包为一帧 PCM；传 null 触发丢包隐藏（PLC）补帧。 */
     fun decode(packet: ByteArray?): ShortArray {
-        val out = ShortArray(FRAME_SAMPLES)
+        val out = decodeBuffer
         if (packet == null) {
             decoder.decode(null, 0, 0, out, 0, FRAME_SAMPLES, false)
         } else {
