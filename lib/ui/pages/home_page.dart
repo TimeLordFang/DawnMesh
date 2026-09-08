@@ -372,7 +372,7 @@ class _HomeContentState extends State<HomeContent> {
                                 decoration: BoxDecoration(
                                   color: (isNight
                                           ? AppTheme.nightSkyBlue
-                                          : AppTheme.sunsetCoral)
+                                          : AppTheme.dawnCoral)
                                       .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -386,7 +386,7 @@ class _HomeContentState extends State<HomeContent> {
                                     color:
                                         isNight
                                             ? AppTheme.nightSkyBlue
-                                            : AppTheme.sunsetCoral,
+                                            : AppTheme.dawnCoral,
                                   ),
                                 ),
                               ),
@@ -463,7 +463,7 @@ class _HomeContentState extends State<HomeContent> {
                                 backgroundColor:
                                     isNight
                                         ? AppTheme.nightSkyBlue
-                                        : AppTheme.sunsetBurgundy,
+                                        : AppTheme.dawnBurgundy,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -499,7 +499,7 @@ class _HomeContentState extends State<HomeContent> {
                                   color:
                                       isNight
                                           ? AppTheme.nightSkyBlue
-                                          : AppTheme.sunsetCoral,
+                                          : AppTheme.dawnCoral,
                                   width: 1.6,
                                 ),
                                 padding: const EdgeInsets.symmetric(
@@ -524,7 +524,7 @@ class _HomeContentState extends State<HomeContent> {
                                           color:
                                               isNight
                                                   ? AppTheme.moonSilverWhite
-                                                  : AppTheme.sunsetCoral,
+                                                  : AppTheme.dawnCoral,
                                         ),
                                       )
                                     else
@@ -534,7 +534,7 @@ class _HomeContentState extends State<HomeContent> {
                                         color:
                                             isNight
                                                 ? AppTheme.moonSilverWhite
-                                                : AppTheme.sunsetCoral,
+                                                : AppTheme.dawnCoral,
                                       ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -545,7 +545,7 @@ class _HomeContentState extends State<HomeContent> {
                                         color:
                                             isNight
                                                 ? AppTheme.moonSilverWhite
-                                                : AppTheme.sunsetCoral,
+                                                : AppTheme.dawnCoral,
                                       ),
                                     ),
                                   ],
@@ -589,7 +589,7 @@ class _HomeContentState extends State<HomeContent> {
                                 color:
                                     isNight
                                         ? AppTheme.nightSkyBlue
-                                        : AppTheme.sunsetCoral,
+                                        : AppTheme.dawnCoral,
                                 fontSize: 14,
                               ),
                             ),
@@ -708,7 +708,7 @@ class _HomeContentState extends State<HomeContent> {
                                             backgroundColor:
                                                 isNight
                                                     ? AppTheme.nightSkyBlue
-                                                    : AppTheme.sunsetCoral,
+                                                    : AppTheme.dawnCoral,
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 22,
@@ -789,7 +789,7 @@ class _HomeContentState extends State<HomeContent> {
                                             backgroundColor:
                                                 isNight
                                                     ? AppTheme.nightSkyBlue
-                                                    : AppTheme.sunsetCoral,
+                                                    : AppTheme.dawnCoral,
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 22,
@@ -1103,8 +1103,7 @@ class _ModeSelectChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor =
-        isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetBurgundy;
+    final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
     final textPrimary =
         isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;

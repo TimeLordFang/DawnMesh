@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/l10n/app_strings.dart';
+import 'package:dawn_mesh/l10n/app_strings.dart';
 
 void main() {
   group('AppStrings i18n Tests', () {

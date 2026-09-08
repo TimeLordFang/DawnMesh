@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -29,9 +29,9 @@ class WifiDirectPlugin(
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     companion object {
-        private const val TAG = "SunsetWifiP2p"
-        private const val METHOD_CHANNEL = "host.msknet.sunsetripple/wifi_direct"
-        private const val EVENT_CHANNEL = "host.msknet.sunsetripple/wifi_direct_events"
+        private const val TAG = "DawnWifiP2p"
+        private const val METHOD_CHANNEL = "dev.dawnmesh.intercom/wifi_direct"
+        private const val EVENT_CHANNEL = "dev.dawnmesh.intercom/wifi_direct_events"
     }
 
     private val methodChannel = MethodChannel(messenger, METHOD_CHANNEL)

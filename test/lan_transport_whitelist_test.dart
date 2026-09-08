@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/transport/lan_transport.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/transport/lan_transport.dart';
 
 /// 轮询直到 [probe] 为 true 或超时。真实回环 socket 的收发是异步的，
 /// 固定 sleep 既慢又脆，轮询是单元测试里最稳的同步方式。
@@ -37,8 +37,14 @@ void main() {
       // 名单由 RoomSession 的名单广播驱动，这里直接注入测试成员。
       host.updateKnownMemberIds({2, 3});
 
-      final speaker = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
-      final listener = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final speaker = await RawDatagramSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      final listener = await RawDatagramSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
       addTearDown(() {
         speaker.close();
         listener.close();
@@ -54,11 +60,11 @@ void main() {
       });
 
       Frame heartbeat(int id) => Frame(
-            type: FrameType.heartbeat,
-            senderId: id,
-            seq: 0,
-            payload: Uint8List(0),
-          );
+        type: FrameType.heartbeat,
+        senderId: id,
+        seq: 0,
+        payload: Uint8List(0),
+      );
 
       // 成员 2、3 各自用 UDP 心跳在房主侧登记语音端点。
       speaker.send(
@@ -116,8 +122,11 @@ void main() {
         isEmpty,
         reason: '不在册成员号的帧必须在传输层丢弃，不能借房主转发',
       );
-      expect(host.peerEndpoints.containsKey(99), isFalse,
-          reason: '伪造帧不能在房主侧凭空登记语音端点');
+      expect(
+        host.peerEndpoints.containsKey(99),
+        isFalse,
+        reason: '伪造帧不能在房主侧凭空登记语音端点',
+      );
     });
   });
 }

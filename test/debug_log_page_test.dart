@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/diagnostics/app_log.dart';
-import 'package:sunset_ripple/core/preferences/debug_log_settings_store.dart';
-import 'package:sunset_ripple/ui/pages/debug_log_page.dart';
+import 'package:dawn_mesh/core/diagnostics/app_log.dart';
+import 'package:dawn_mesh/core/platform/native_debug_log_channel.dart';
+import 'package:dawn_mesh/core/preferences/debug_log_settings_store.dart';
+import 'package:dawn_mesh/ui/pages/debug_log_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ void main() {
     tester,
   ) async {
     final calls = <MethodCall>[];
+    final controlCalls = <MethodCall>[];
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(DebugLogSettingsStore.channel, (
@@ -36,7 +38,19 @@ void main() {
         null,
       ),
     );
-    tester.view.physicalSize = const Size(360, 900);
+    messenger.setMockMethodCallHandler(NativeDebugLogChannel.control, (
+      call,
+    ) async {
+      controlCalls.add(call);
+      return true;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        NativeDebugLogChannel.control,
+        null,
+      ),
+    );
+    tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -51,17 +65,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(AppLog.isEnabled, isTrue);
     expect(calls.single.method, 'setDebugLoggingEnabled');
+    expect(controlCalls.single.method, 'captureSystemSnapshot');
+
+    await tester.tap(find.byIcon(Icons.memory_rounded));
+    await tester.pump();
+    expect(controlCalls, hasLength(2));
 
     AppLog.warn('蓝牙', '链路出现波动');
     AppLog.info('音频', '缓冲恢复正常');
     await tester.pumpAndSettle();
-    expect(find.text('缓冲恢复正常'), findsOneWidget);
+    expect(find.textContaining('缓冲恢复正常'), findsOneWidget);
     expect(AppLog.recent.any((entry) => entry.message == '链路出现波动'), isTrue);
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'WARN'));
     await tester.pump();
-    expect(find.text('链路出现波动'), findsOneWidget);
-    expect(find.text('缓冲恢复正常'), findsNothing);
+    expect(find.textContaining('链路出现波动'), findsOneWidget);
+    expect(find.textContaining('缓冲恢复正常'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
     await tester.pump();

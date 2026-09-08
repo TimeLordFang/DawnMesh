@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -13,23 +15,38 @@ Future<void> main() async {
   final debugLoggingEnabled = await DebugLogSettingsStore().load();
   AppLog.setEnabled(debugLoggingEnabled);
   NativeDebugLogChannel.start();
+  _installGlobalErrorLogging();
   NativeCoreFfi.initialize();
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  runApp(const SunsetRippleApp());
+  runApp(const DawnMeshApp());
 }
 
-/// Root Application Widget for SunsetRipple.
-class SunsetRippleApp extends StatefulWidget {
-  const SunsetRippleApp({super.key});
+void _installGlobalErrorLogging() {
+  final previousFlutterHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    AppLog.error('DawnFlutter', details.exceptionAsString(), details.stack);
+    previousFlutterHandler?.call(details);
+  };
+
+  final previousPlatformHandler = PlatformDispatcher.instance.onError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLog.error('DawnRuntime', '$error', stack);
+    return previousPlatformHandler?.call(error, stack) ?? false;
+  };
+}
+
+/// Root Application Widget for DawnMesh.
+class DawnMeshApp extends StatefulWidget {
+  const DawnMeshApp({super.key});
 
   @override
-  State<SunsetRippleApp> createState() => _SunsetRippleAppState();
+  State<DawnMeshApp> createState() => _DawnMeshAppState();
 }
 
-class _SunsetRippleAppState extends State<SunsetRippleApp> {
+class _DawnMeshAppState extends State<DawnMeshApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
   void _toggleTheme() {

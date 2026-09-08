@@ -1,16 +1,16 @@
-import 'package:sunset_ripple/core/security/room_invite.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/security/room_invite.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/audio/audio_io.dart';
-import 'package:sunset_ripple/core/session/room_session.dart';
-import 'package:sunset_ripple/ui/pages/home_page.dart';
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/ui/pages/home_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  const channel = MethodChannel('host.msknet.sunsetripple/ble_l2cap');
-  const scanChannel = 'host.msknet.sunsetripple/ble_l2cap_scan';
+  const channel = MethodChannel('dev.dawnmesh.intercom/ble_l2cap');
+  const scanChannel = 'dev.dawnmesh.intercom/ble_l2cap_scan';
   final calls = <MethodCall>[];
   bool advertisingWorks = true;
   late RoomInvite invite;
@@ -26,7 +26,7 @@ void main() {
     await host.createRoom(startAudio: false);
     host.onSendFrame = (frame) {
       messenger.handlePlatformMessage(
-        'host.msknet.sunsetripple/ble_l2cap_data',
+        'dev.dawnmesh.intercom/ble_l2cap_data',
         const StandardMethodCodec().encodeSuccessEnvelope({
           'data': frame.encode(),
           'peerAddress': 'host',
@@ -47,10 +47,7 @@ void main() {
       }
       return true;
     });
-    for (final name in [
-      scanChannel,
-      'host.msknet.sunsetripple/ble_l2cap_data',
-    ]) {
+    for (final name in [scanChannel, 'dev.dawnmesh.intercom/ble_l2cap_data']) {
       messenger.setMockMethodCallHandler(MethodChannel(name), (call) async {
         calls.add(call);
         return null;
@@ -62,10 +59,7 @@ void main() {
     host.onSendFrame = null;
     await host.dispose();
     messenger.setMockMethodCallHandler(channel, null);
-    for (final name in [
-      scanChannel,
-      'host.msknet.sunsetripple/ble_l2cap_data',
-    ]) {
+    for (final name in [scanChannel, 'dev.dawnmesh.intercom/ble_l2cap_data']) {
       messenger.setMockMethodCallHandler(MethodChannel(name), null);
     }
   });

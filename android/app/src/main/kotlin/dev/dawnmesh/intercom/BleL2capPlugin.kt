@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
@@ -50,11 +50,11 @@ class BleL2capPlugin(
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
-        private const val TAG = "SunsetBle"
+        private const val TAG = "DawnBle"
 
-        private const val METHOD_CHANNEL = "host.msknet.sunsetripple/ble_l2cap"
-        private const val DATA_CHANNEL = "host.msknet.sunsetripple/ble_l2cap_data"
-        private const val SCAN_CHANNEL = "host.msknet.sunsetripple/ble_l2cap_scan"
+        private const val METHOD_CHANNEL = "dev.dawnmesh.intercom/ble_l2cap"
+        private const val DATA_CHANNEL = "dev.dawnmesh.intercom/ble_l2cap_data"
+        private const val SCAN_CHANNEL = "dev.dawnmesh.intercom/ble_l2cap_scan"
 
         /** 蓝牙房的服务标识，客户端按它过滤扫描结果。 */
         private val SERVICE_UUID: UUID =
@@ -286,7 +286,7 @@ class BleL2capPlugin(
         Log.i(TAG, "L2CAP 监听已开启，系统分配的 PSM = $advertisedPsm")
 
         accepting.set(true)
-        acceptThread = Thread({ acceptLoop(server) }, "sunset-ble-accept").apply { start() }
+        acceptThread = Thread({ acceptLoop(server) }, "dawn-ble-accept").apply { start() }
 
         val advertiser = a.bluetoothLeAdvertiser
         if (advertiser == null) {
@@ -564,7 +564,7 @@ class BleL2capPlugin(
         peers[address] = link
         Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
 
-        Thread({ readLoop(link) }, "sunset-ble-read-$address").start()
+        Thread({ readLoop(link) }, "dawn-ble-read-$address").start()
         return link
     }
 

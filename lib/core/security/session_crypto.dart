@@ -205,7 +205,7 @@ class SessionCipher {
     final keyBytes = _hkdf(
       secret: sharedSecret,
       salt: roomContext,
-      info: Uint8List.fromList(utf8.encode('sunset-ripple-session')),
+      info: Uint8List.fromList(utf8.encode('dawn-mesh-session')),
       length: 32,
     );
 

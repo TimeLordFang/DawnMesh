@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

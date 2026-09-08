@@ -1,13 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/transport/wifi_direct_manager.dart';
-import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
-import 'package:sunset_ripple/core/security/room_invite.dart';
+import 'package:dawn_mesh/core/transport/wifi_direct_manager.dart';
+import 'package:dawn_mesh/core/transport/wifi_direct_credentials.dart';
+import 'package:dawn_mesh/core/security/room_invite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('host.msknet.sunsetripple/wifi_direct');
+  const channel = MethodChannel('dev.dawnmesh.intercom/wifi_direct');
   final credentials = WifiDirectCredentials.fromInvite(
     RoomInvite.parse('012345'),
   );

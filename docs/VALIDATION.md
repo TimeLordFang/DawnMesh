@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.7-release.apk`，**53,247,568 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.7` / versionCode **7**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`c4be066a9d673dc7c1dffa3b5135d5b61afd4df8ae014ec9b9a72fe65fc55ff2`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.8-release.apk`，**53,866,924 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.8` / versionCode **8**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`6ca12f876c2edd545c302a84d96cc960be782cbef67f10d043bc84dcea281f49`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
@@ -31,6 +31,14 @@
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。额外记录 GNU_RELRO：Flutter 引擎与本项目 C++ 具备该段；Flutter 3.29.3 生成的 `libapp.so` 没有该段。未对 Flutter 预编译运行时/AOT 生成器做进一步二进制加固审计。以上均为静态包检查，**没有据此声称已在 16 KB 手机运行通过**。
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
+
+## dev.8 本轮完成情况
+
+- 日志条目改为单一深色等宽控制台，按时间从上到下连续排列；毫秒时间、级别、模块和消息压缩到同一行，新日志自动滚动到底部。360×640 页面交互测试通过。
+- 系统快照新增应用版本/进程、设备与 SoC、Android/API/安全补丁、ABI、CPU/堆/RAM、低内存状态、电池优化、音频参数及路由设备、Wi-Fi/当前网络、BLE 能力和关键权限。支持页面内手动刷新。
+- Flutter 框架错误与根 isolate 未捕获异步错误进入日志总线。普通应用无法读取完整系统 Logcat，未声称能读取其他应用、内核或受保护系统服务的日志。
+- Dart 包改为 `dawn_mesh`；Kotlin namespace、平台通道和启动 Activity 改为 `dev.dawnmesh.intercom`；日志 tag、后台线程、C++ 库、FFI 类型和导出符号均采用 Dawn 标识。源码目录的 `sunset` 文本扫描结果为空。
+- 清除旧 CMake 增量缓存后重新构建，APK 只包含 `libdawn_mesh_native.so`，不包含旧原生库。发现 magic、PAKE 上下文与 HKDF 上下文也已更新，因此 dev.8 不能与 dev.7 及更早版本互通，所有手机必须一起升级。
 
 ## dev.7 本轮完成情况
 

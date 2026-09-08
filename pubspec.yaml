@@ -1,10 +1,10 @@
-name: sunset_ripple
-description: "SunsetRipple - Near-field voice intercom for Android, iOS, Windows, macOS, Linux."
+name: dawn_mesh
+description: "DawnMesh - Near-field voice intercom for Android, iOS, Windows, macOS, Linux."
 publish_to: 'none'
 
 # versionName 取 `+` 前半段，versionCode 取后半段。
-# DawnMesh 0.1.0-dev.7 / versionCode 7
-version: 0.1.0-dev.7+7
+# DawnMesh 0.1.0-dev.8 / versionCode 8
+version: 0.1.0-dev.8+8
 
 environment:
   sdk: '>=3.7.0 <4.0.0'

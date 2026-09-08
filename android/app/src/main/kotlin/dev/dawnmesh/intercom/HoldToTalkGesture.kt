@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 /** A cancelled hold cannot resume until a fresh pointer-down. */
 internal class HoldToTalkGesture(private val changed: (Boolean) -> Unit) {

@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:sunset_ripple/main.dart';
+import 'package:dawn_mesh/main.dart';
 
 void main() {
-  const audioChannel = MethodChannel('host.msknet.sunsetripple/audio');
+  const audioChannel = MethodChannel('dev.dawnmesh.intercom/audio');
   const audioEventsChannel = MethodChannel(
-    'host.msknet.sunsetripple/audio_events',
+    'dev.dawnmesh.intercom/audio_events',
   );
-  const wifiDirectChannel = MethodChannel(
-    'host.msknet.sunsetripple/wifi_direct',
-  );
+  const wifiDirectChannel = MethodChannel('dev.dawnmesh.intercom/wifi_direct');
   const wifiDirectEventsChannel = MethodChannel(
-    'host.msknet.sunsetripple/wifi_direct_events',
+    'dev.dawnmesh.intercom/wifi_direct_events',
   );
 
   setUp(() {
@@ -47,10 +45,10 @@ void main() {
   const scanSettle = Duration(seconds: 3);
 
   testWidgets('首页能正常渲染并显示输入框与建房按钮', (WidgetTester tester) async {
-    await tester.pumpWidget(const SunsetRippleApp());
+    await tester.pumpWidget(const DawnMeshApp());
     await tester.pump(scanSettle);
 
-    // 能找到标题（SunsetRipple 或 落日后残波）与输入框
+    // 能找到标题（DawnMesh 或 落日后残波）与输入框
     expect(
       find.byWidgetPredicate(
         (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),
@@ -69,7 +67,7 @@ void main() {
   });
 
   testWidgets('可以在 WiFi 房与蓝牙房之间切换', (WidgetTester tester) async {
-    await tester.pumpWidget(const SunsetRippleApp());
+    await tester.pumpWidget(const DawnMeshApp());
     await tester.pump(scanSettle);
 
     final bluetoothChip = find.byWidgetPredicate(

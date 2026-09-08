@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:sunset_ripple/ui/transitions/stage_choreography.dart';
+import 'package:dawn_mesh/ui/transitions/stage_choreography.dart';
 
 void main() {
   group('StageChoreography 编排表', () {
@@ -35,44 +35,54 @@ void main() {
     Widget host(Widget child) => MaterialApp(home: Scaffold(body: child));
 
     testWidgets('stage=0 时首页元素在、房间元素不可见', (tester) async {
-      await tester.pumpWidget(host(
-        const Column(children: [
-          StageExitItem(
-            stage: AlwaysStoppedAnimation(0.0),
-            index: 0,
-            child: Text('首页'),
+      await tester.pumpWidget(
+        host(
+          const Column(
+            children: [
+              StageExitItem(
+                stage: AlwaysStoppedAnimation(0.0),
+                index: 0,
+                child: Text('首页'),
+              ),
+              StageEnterItem(
+                stage: AlwaysStoppedAnimation(0.0),
+                index: 0,
+                child: Text('房间'),
+              ),
+            ],
           ),
-          StageEnterItem(
-            stage: AlwaysStoppedAnimation(0.0),
-            index: 0,
-            child: Text('房间'),
-          ),
-        ]),
-      ));
+        ),
+      );
 
       expect(find.text('首页'), findsOneWidget);
       // 房间元素仍在树里占位，但透明度为 0。
       final enterOpacity = tester.widget<Opacity>(
-        find.ancestor(of: find.text('房间'), matching: find.byType(Opacity)).first,
+        find
+            .ancestor(of: find.text('房间'), matching: find.byType(Opacity))
+            .first,
       );
       expect(enterOpacity.opacity, 0.0);
     });
 
     testWidgets('stage=1 时首页元素已撤走、房间元素完全落位', (tester) async {
-      await tester.pumpWidget(host(
-        const Column(children: [
-          StageExitItem(
-            stage: AlwaysStoppedAnimation(1.0),
-            index: 0,
-            child: Text('首页'),
+      await tester.pumpWidget(
+        host(
+          const Column(
+            children: [
+              StageExitItem(
+                stage: AlwaysStoppedAnimation(1.0),
+                index: 0,
+                child: Text('首页'),
+              ),
+              StageEnterItem(
+                stage: AlwaysStoppedAnimation(1.0),
+                index: 0,
+                child: Text('房间'),
+              ),
+            ],
           ),
-          StageEnterItem(
-            stage: AlwaysStoppedAnimation(1.0),
-            index: 0,
-            child: Text('房间'),
-          ),
-        ]),
-      ));
+        ),
+      );
 
       expect(find.text('首页'), findsNothing);
       expect(find.text('房间'), findsOneWidget);

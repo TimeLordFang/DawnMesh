@@ -1,16 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/session/host_transfer.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/session/host_transfer.dart';
 
 void main() {
-  HostTransferMember member(
-    int id,
-    int order,
-    String nick,
-    String endpoint,
-  ) =>
+  HostTransferMember member(int id, int order, String nick, String endpoint) =>
       HostTransferMember(
         memberId: id,
         joinOrder: order,
@@ -24,14 +19,13 @@ void main() {
     String nick = '成员',
     String endpoint = '192.168.1.2',
     bool connected = true,
-  }) =>
-      TransferCandidate(
-        memberId: id,
-        joinOrder: order,
-        nickname: nick,
-        endpoint: endpoint,
-        connected: connected,
-      );
+  }) => TransferCandidate(
+    memberId: id,
+    joinOrder: order,
+    nickname: nick,
+    endpoint: endpoint,
+    connected: connected,
+  );
 
   group('HostTransferCodec 编解码', () {
     test('往返一致', () {
@@ -74,8 +68,7 @@ void main() {
       final plan = HostTransferPlan(
         successorId: 2,
         members: [
-          for (int i = 2; i <= 6; i++)
-            member(i, i, '成员$i', '192.168.100.$i'),
+          for (int i = 2; i <= 6; i++) member(i, i, '成员$i', '192.168.100.$i'),
         ],
       );
 
@@ -241,10 +234,7 @@ void main() {
     test('expectedByEndpoint 不包含新房主自己', () {
       final plan = HostTransferPlan(
         successorId: 2,
-        members: [
-          member(2, 1, '甲', '10.0.0.2'),
-          member(3, 2, '乙', '10.0.0.3'),
-        ],
+        members: [member(2, 1, '甲', '10.0.0.2'), member(3, 2, '乙', '10.0.0.3')],
       );
 
       final byEndpoint = HostTransferSeed.from(plan).expectedByEndpoint();

@@ -1,5 +1,5 @@
-#ifndef SUNSET_PROTOCOL_FRAME_H
-#define SUNSET_PROTOCOL_FRAME_H
+#ifndef DAWN_PROTOCOL_FRAME_H
+#define DAWN_PROTOCOL_FRAME_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -15,30 +15,30 @@ extern "C" {
 #define FFI_EXPORT __attribute__((visibility("default"))) __attribute__((used))
 #endif
 
-#define SUNSET_FRAME_HEADER_SIZE 6
+#define DAWN_FRAME_HEADER_SIZE 6
 /* 必须与 Dart 侧 Frame.maxPayloadSize 及 Kotlin 版 Frame.MAX_PAYLOAD 一致。
    音频走 Opus，一帧几十字节，512 足够。 */
-#define SUNSET_MAX_PAYLOAD_SIZE 512
+#define DAWN_MAX_PAYLOAD_SIZE 512
 
 typedef enum {
-    SUNSET_FRAME_AUDIO = 0x01,
-    SUNSET_FRAME_JOIN_REQ = 0x02,
-    SUNSET_FRAME_ROSTER = 0x03,
-    SUNSET_FRAME_PTT_STATE = 0x04,
-    SUNSET_FRAME_HEARTBEAT = 0x05,
-    SUNSET_FRAME_LEAVE = 0x06,
-    SUNSET_FRAME_HOST_HANDOVER = 0x07,
-} SunsetFrameType;
+    DAWN_FRAME_AUDIO = 0x01,
+    DAWN_FRAME_JOIN_REQ = 0x02,
+    DAWN_FRAME_ROSTER = 0x03,
+    DAWN_FRAME_PTT_STATE = 0x04,
+    DAWN_FRAME_HEARTBEAT = 0x05,
+    DAWN_FRAME_LEAVE = 0x06,
+    DAWN_FRAME_HOST_HANDOVER = 0x07,
+} DawnFrameType;
 
 typedef struct {
     uint8_t type;
     uint8_t sender_id;
     uint16_t seq;
     uint16_t payload_len;
-    uint8_t payload[SUNSET_MAX_PAYLOAD_SIZE];
-} SunsetNativeFrame;
+    uint8_t payload[DAWN_MAX_PAYLOAD_SIZE];
+} DawnNativeFrame;
 
-FFI_EXPORT int sunset_frame_encode(
+FFI_EXPORT int dawn_frame_encode(
     uint8_t type,
     uint8_t sender_id,
     uint16_t seq,
@@ -48,15 +48,15 @@ FFI_EXPORT int sunset_frame_encode(
     size_t out_capacity
 );
 
-FFI_EXPORT int sunset_frame_decode(
+FFI_EXPORT int dawn_frame_decode(
     const uint8_t* in_buffer,
     size_t in_len,
-    SunsetNativeFrame* out_frame
+    DawnNativeFrame* out_frame
 );
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // SUNSET_PROTOCOL_FRAME_H
+#endif // DAWN_PROTOCOL_FRAME_H
 

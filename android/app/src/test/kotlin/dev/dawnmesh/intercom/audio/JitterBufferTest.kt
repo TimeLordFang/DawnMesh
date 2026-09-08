@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple.audio
+package dev.dawnmesh.intercom.audio
 
 import org.junit.Assert.*
 import org.junit.Test

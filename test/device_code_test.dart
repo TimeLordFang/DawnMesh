@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/session/device_code.dart';
+import 'package:dawn_mesh/core/session/device_code.dart';
 
 void main() {
   group('DeviceCode', () {
@@ -43,18 +43,9 @@ void main() {
       expect(DeviceCode.hasConflict('探索者', members), isTrue);
       expect(DeviceCode.hasConflict('阿彬', members), isFalse);
 
-      expect(
-        DeviceCode.formatSmart('探索者#108', members),
-        '探索者 #108',
-      );
-      expect(
-        DeviceCode.formatSmart('探索者#327', members),
-        '探索者 #327',
-      );
-      expect(
-        DeviceCode.formatSmart('阿彬#555', members),
-        '阿彬',
-      );
+      expect(DeviceCode.formatSmart('探索者#108', members), '探索者 #108');
+      expect(DeviceCode.formatSmart('探索者#327', members), '探索者 #327');
+      expect(DeviceCode.formatSmart('阿彬#555', members), '阿彬');
     });
   });
 }

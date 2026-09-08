@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import java.io.IOException
 import java.util.concurrent.ArrayBlockingQueue

@@ -57,7 +57,7 @@ class VoiceModeSwitch extends StatelessWidget {
                   color:
                       isNight
                           ? Colors.white.withValues(alpha: 0.10)
-                          : AppTheme.sunsetBurgundy.withValues(alpha: 0.12),
+                          : AppTheme.dawnBurgundy.withValues(alpha: 0.12),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -155,7 +155,7 @@ class VoiceModeSwitch extends StatelessWidget {
           : const [AppTheme.nightDeepOcean, Color(0xFF5275A9)];
     }
     return automatic
-        ? const [AppTheme.sunsetCoral, Color(0xFFE4B074)]
+        ? const [AppTheme.dawnCoral, Color(0xFFE4B074)]
         : const [Color(0xFF7E3947), Color(0xFFA75559)];
   }
 
@@ -163,7 +163,7 @@ class VoiceModeSwitch extends StatelessWidget {
     if (isNight) {
       return automatic ? const Color(0xFF4B9A8C) : AppTheme.nightSkyBlue;
     }
-    return automatic ? const Color(0xFFD99A68) : AppTheme.sunsetBurgundy;
+    return automatic ? const Color(0xFFD99A68) : AppTheme.dawnBurgundy;
   }
 }
 

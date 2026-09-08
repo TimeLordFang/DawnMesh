@@ -81,9 +81,10 @@ class _AboutPageState extends State<AboutPage> {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: widget.isNight
-                            ? const Color(0xFF141926)
-                            : const Color(0xFFF3F4F6),
+                        color:
+                            widget.isNight
+                                ? const Color(0xFF141926)
+                                : const Color(0xFFF3F4F6),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: SingleChildScrollView(
@@ -93,9 +94,10 @@ class _AboutPageState extends State<AboutPage> {
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 12,
-                            color: widget.isNight
-                                ? const Color(0xFFCBD5E1)
-                                : const Color(0xFF334155),
+                            color:
+                                widget.isNight
+                                    ? const Color(0xFFCBD5E1)
+                                    : const Color(0xFF334155),
                           ),
                         ),
                       ),
@@ -108,7 +110,8 @@ class _AboutPageState extends State<AboutPage> {
                         child: ElevatedButton.icon(
                           onPressed: () {
                             Clipboard.setData(
-                                ClipboardData(text: report.encode()));
+                              ClipboardData(text: report.encode()),
+                            );
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(s.reportCopied)),
                             );
@@ -116,7 +119,7 @@ class _AboutPageState extends State<AboutPage> {
                           icon: const Icon(Icons.copy, size: 18),
                           label: Text(s.copyReport),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.sunsetCoral,
+                            backgroundColor: AppTheme.dawnCoral,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
@@ -140,19 +143,22 @@ class _AboutPageState extends State<AboutPage> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isNight = widget.isNight;
-    final bgGradient = isNight
-        ? [AppTheme.nightAbyss, AppTheme.nightDeepOcean]
-        : [AppTheme.lightBg, AppTheme.sunsetCoral.withValues(alpha: 0.15)];
+    final bgGradient =
+        isNight
+            ? [AppTheme.nightAbyss, AppTheme.nightDeepOcean]
+            : [AppTheme.lightBg, AppTheme.dawnCoral.withValues(alpha: 0.15)];
     final textPrimary =
         isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
     final textSecondary =
         isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-    final cardBg = isNight
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.04);
-    final borderColor = isNight
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.08);
+    final cardBg =
+        isNight
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04);
+    final borderColor =
+        isNight
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.08);
 
     return Scaffold(
       body: Container(
@@ -168,8 +174,10 @@ class _AboutPageState extends State<AboutPage> {
             children: [
               // Custom App Bar
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     IconButton(
@@ -192,8 +200,10 @@ class _AboutPageState extends State<AboutPage> {
               // Content List
               Expanded(
                 child: ListView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 8,
+                  ),
                   children: [
                     // App Info Header
                     Center(
@@ -206,14 +216,15 @@ class _AboutPageState extends State<AboutPage> {
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
                                 colors: [
-                                  AppTheme.sunsetCoral,
-                                  AppTheme.sunWarmYellow
+                                  AppTheme.dawnCoral,
+                                  AppTheme.sunWarmYellow,
                                 ],
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.sunsetCoral
-                                      .withValues(alpha: 0.3),
+                                  color: AppTheme.dawnCoral.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   blurRadius: 16,
                                   spreadRadius: 2,
                                 ),
@@ -266,7 +277,7 @@ class _AboutPageState extends State<AboutPage> {
                             icon: const Icon(Icons.refresh, size: 18),
                             label: Text(s.checkUpdate),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.sunsetCoral,
+                              backgroundColor: AppTheme.dawnCoral,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -290,8 +301,10 @@ class _AboutPageState extends State<AboutPage> {
                       title: s.changelogTitle,
                       body: s.changelogBody,
                       isExpanded: _changelogExpanded,
-                      onToggle: () => setState(
-                          () => _changelogExpanded = !_changelogExpanded),
+                      onToggle:
+                          () => setState(
+                            () => _changelogExpanded = !_changelogExpanded,
+                          ),
                       cardBg: cardBg,
                       borderColor: borderColor,
                       textPrimary: textPrimary,
@@ -305,8 +318,10 @@ class _AboutPageState extends State<AboutPage> {
                       title: s.licenseTitle,
                       body: s.licenseBody,
                       isExpanded: _licenseExpanded,
-                      onToggle: () =>
-                          setState(() => _licenseExpanded = !_licenseExpanded),
+                      onToggle:
+                          () => setState(
+                            () => _licenseExpanded = !_licenseExpanded,
+                          ),
                       cardBg: cardBg,
                       borderColor: borderColor,
                       textPrimary: textPrimary,
@@ -320,8 +335,10 @@ class _AboutPageState extends State<AboutPage> {
                       title: s.privacyTitle,
                       body: s.privacyBody,
                       isExpanded: _privacyExpanded,
-                      onToggle: () =>
-                          setState(() => _privacyExpanded = !_privacyExpanded),
+                      onToggle:
+                          () => setState(
+                            () => _privacyExpanded = !_privacyExpanded,
+                          ),
                       cardBg: cardBg,
                       borderColor: borderColor,
                       textPrimary: textPrimary,

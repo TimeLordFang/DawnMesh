@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/audio/audio_io.dart';
-import 'package:sunset_ripple/core/platform/platform_audio_channel.dart';
-import 'package:sunset_ripple/core/session/room_session.dart';
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/platform/platform_audio_channel.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
 
 class DelayedAudio extends MockAudioIo {
   final waiting = Completer<void>();
@@ -52,8 +52,8 @@ void main() {
       const codec = StandardMethodCodec();
       final updates = <Map<Object?, Object?>>[];
       for (final name in [
-        'host.msknet.sunsetripple/audio',
-        'host.msknet.sunsetripple/audio_events',
+        'dev.dawnmesh.intercom/audio',
+        'dev.dawnmesh.intercom/audio_events',
         controlsName,
       ]) {
         messenger.setMockMethodCallHandler(MethodChannel(name), (call) async {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/security/room_invite.dart';
-import 'package:sunset_ripple/core/transport/wifi_direct_credentials.dart';
+import 'package:dawn_mesh/core/security/room_invite.dart';
+import 'package:dawn_mesh/core/transport/wifi_direct_credentials.dart';
 
 void main() {
   test('same invite derives valid stable Wi-Fi Direct credentials', () {

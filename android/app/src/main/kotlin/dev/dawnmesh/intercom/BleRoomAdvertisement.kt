@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction

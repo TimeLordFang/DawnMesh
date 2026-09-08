@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/audio/audio_io.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/protocol/payloads/join_request.dart';
-import 'package:sunset_ripple/core/security/session_crypto.dart';
-import 'package:sunset_ripple/core/security/session_handshake.dart';
-import 'package:sunset_ripple/core/session/room_session.dart';
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
+import 'package:dawn_mesh/core/security/session_crypto.dart';
+import 'package:dawn_mesh/core/security/session_handshake.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
 
 void main() {
   test(

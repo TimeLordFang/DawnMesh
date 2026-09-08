@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/diagnostics/app_log.dart';
 import '../../core/diagnostics/diagnostic_report.dart';
+import '../../core/platform/native_debug_log_channel.dart';
 import '../../core/preferences/debug_log_settings_store.dart';
 import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
@@ -21,6 +22,7 @@ class DebugLogPage extends StatefulWidget {
 class _DebugLogPageState extends State<DebugLogPage> {
   final _settings = DebugLogSettingsStore();
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   StreamSubscription<LogEntry>? _subscription;
   late bool _enabled;
   bool _saving = false;
@@ -31,22 +33,29 @@ class _DebugLogPageState extends State<DebugLogPage> {
   void initState() {
     super.initState();
     _enabled = AppLog.isEnabled;
-    _entries = AppLog.recent;
+    _entries = AppLog.recent.reversed.toList();
     _subscription = AppLog.stream.listen((entry) {
       if (!mounted) return;
       setState(() {
-        _entries.insert(0, entry);
+        _entries.add(entry);
         if (_entries.length > AppLog.maxRetained) {
-          _entries.removeLast();
+          _entries.removeAt(0);
         }
       });
+      _scrollToEnd();
     });
     _searchController.addListener(_refreshSearch);
+    if (_enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        NativeDebugLogChannel.captureSystemSnapshot();
+      });
+    }
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _scrollController.dispose();
     _searchController
       ..removeListener(_refreshSearch)
       ..dispose();
@@ -54,6 +63,17 @@ class _DebugLogPageState extends State<DebugLogPage> {
   }
 
   void _refreshSearch() => setState(() {});
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   List<LogEntry> get _visibleEntries {
     final query = _searchController.text.trim().toLowerCase();
@@ -89,6 +109,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
     });
     if (enabled) {
       AppLog.info('调试日志', '应用内调试日志已开启');
+      await NativeDebugLogChannel.captureSystemSnapshot();
     }
   }
 
@@ -104,7 +125,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
     final s = AppStrings.of(context);
     final entries = _visibleEntries;
     if (entries.isEmpty) return;
-    final text = entries.reversed
+    final text = entries
         .map((entry) => DiagnosticSanitizer.sanitize(entry.toString()))
         .join('\n');
     await Clipboard.setData(ClipboardData(text: text));
@@ -142,7 +163,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
                     ? const [AppTheme.nightAbyss, AppTheme.darkBg]
                     : [
                       AppTheme.lightBg,
-                      AppTheme.sunsetCoral.withValues(alpha: 0.10),
+                      AppTheme.dawnCoral.withValues(alpha: 0.10),
                     ],
           ),
         ),
@@ -159,34 +180,34 @@ class _DebugLogPageState extends State<DebugLogPage> {
                 onBack: () => Navigator.pop(context),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
                 child: Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
                   decoration: BoxDecoration(
                     color: card.withValues(alpha: isNight ? 0.88 : 0.94),
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: border),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(
                           alpha: isNight ? 0.16 : 0.05,
                         ),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
+                        width: 34,
+                        height: 34,
                         decoration: BoxDecoration(
                           color: (_enabled
                                   ? const Color(0xFF4B9A8C)
                                   : secondary)
                               .withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(11),
                         ),
                         child: Icon(
                           _enabled
@@ -195,7 +216,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
                           color: _enabled ? const Color(0xFF4B9A8C) : secondary,
                         ),
                       ),
-                      const SizedBox(width: 13),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,17 +225,17 @@ class _DebugLogPageState extends State<DebugLogPage> {
                               s.debugLoggingSwitch,
                               style: TextStyle(
                                 color: primary,
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Text(
                               s.debugLoggingDescription,
                               style: TextStyle(
                                 color: secondary,
-                                fontSize: 12,
-                                height: 1.35,
+                                fontSize: 10.5,
+                                height: 1.2,
                               ),
                             ),
                           ],
@@ -232,10 +253,10 @@ class _DebugLogPageState extends State<DebugLogPage> {
               ),
               if (_enabled) ...[
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: TextField(
                     controller: _searchController,
-                    style: TextStyle(color: primary, fontSize: 14),
+                    style: TextStyle(color: primary, fontSize: 12),
                     decoration: InputDecoration(
                       hintText: s.searchDebugLogs,
                       hintStyle: TextStyle(color: secondary),
@@ -253,24 +274,24 @@ class _DebugLogPageState extends State<DebugLogPage> {
                               ),
                       filled: true,
                       fillColor: card.withValues(alpha: 0.78),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(color: border),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 SizedBox(
-                  height: 38,
+                  height: 34,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
                       _filterChip(s.debugLogAll, null, primary, card),
                       _filterChip(
@@ -296,7 +317,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 12, 5),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 2),
                   child: Row(
                     children: [
                       Expanded(
@@ -306,15 +327,24 @@ class _DebugLogPageState extends State<DebugLogPage> {
                         ),
                       ),
                       IconButton(
+                        tooltip: s.captureSystemSnapshot,
+                        onPressed: NativeDebugLogChannel.captureSystemSnapshot,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.memory_rounded, size: 20),
+                        color: primary,
+                      ),
+                      IconButton(
                         tooltip: s.copyDebugLogs,
                         onPressed: entries.isEmpty ? null : _copy,
-                        icon: const Icon(Icons.copy_all_rounded),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.copy_all_rounded, size: 20),
                         color: primary,
                       ),
                       IconButton(
                         tooltip: s.clearDebugLogs,
                         onPressed: _entries.isEmpty ? null : _clear,
-                        icon: const Icon(Icons.delete_sweep_outlined),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 20),
                         color: primary,
                       ),
                     ],
@@ -339,29 +369,21 @@ class _DebugLogPageState extends State<DebugLogPage> {
                           primary: primary,
                           secondary: secondary,
                         )
-                        : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                          itemCount: entries.length,
-                          separatorBuilder:
-                              (_, __) => const SizedBox(height: 9),
-                          itemBuilder:
-                              (context, index) => _LogEntryCard(
-                                entry: entries[index],
-                                isNight: isNight,
-                                primary: primary,
-                                secondary: secondary,
-                                card: card,
-                                border: border,
-                              ),
+                        : _ConsoleOutput(
+                          entries: entries,
+                          controller: _scrollController,
+                          isNight: isNight,
+                          secondary: secondary,
+                          border: border,
                         ),
               ),
               if (_enabled)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  padding: const EdgeInsets.fromLTRB(20, 3, 20, 8),
                   child: Text(
                     s.debugLogPrivacyNote,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: secondary, fontSize: 11),
+                    style: TextStyle(color: secondary, fontSize: 10),
                   ),
                 ),
             ],
@@ -380,15 +402,15 @@ class _DebugLogPageState extends State<DebugLogPage> {
         selected: selected,
         onSelected: (_) => setState(() => _level = level),
         selectedColor:
-            widget.isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetCoral,
+            widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnCoral,
         backgroundColor: card,
         labelStyle: TextStyle(
           color: selected ? Colors.white : primary,
-          fontSize: 12,
+          fontSize: 10.5,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         ),
         side: BorderSide.none,
-        visualDensity: VisualDensity.compact,
+        visualDensity: const VisualDensity(horizontal: -2, vertical: -3),
       ),
     );
   }
@@ -516,107 +538,92 @@ class _EmptyLogs extends StatelessWidget {
   }
 }
 
-class _LogEntryCard extends StatelessWidget {
-  const _LogEntryCard({
-    required this.entry,
+class _ConsoleOutput extends StatelessWidget {
+  const _ConsoleOutput({
+    required this.entries,
+    required this.controller,
     required this.isNight,
-    required this.primary,
     required this.secondary,
-    required this.card,
     required this.border,
   });
 
-  final LogEntry entry;
+  final List<LogEntry> entries;
+  final ScrollController controller;
   final bool isNight;
-  final Color primary;
   final Color secondary;
-  final Color card;
   final Color border;
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+      decoration: BoxDecoration(
+        color: isNight ? const Color(0xFF0A111A) : const Color(0xFF172027),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SelectionArea(
+        child: ListView.builder(
+          controller: controller,
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          itemCount: entries.length,
+          itemBuilder:
+              (context, index) =>
+                  _ConsoleLogLine(entry: entries[index], secondary: secondary),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConsoleLogLine extends StatelessWidget {
+  const _ConsoleLogLine({required this.entry, required this.secondary});
+
+  final LogEntry entry;
+  final Color secondary;
+
+  @override
+  Widget build(BuildContext context) {
     final accent = switch (entry.level) {
-      LogLevel.debug => secondary,
-      LogLevel.info => const Color(0xFF4B9A8C),
-      LogLevel.warn => const Color(0xFFD99A68),
-      LogLevel.error => const Color(0xFFD8666F),
+      LogLevel.debug => const Color(0xFF8A98A6),
+      LogLevel.info => const Color(0xFF72C6B5),
+      LogLevel.warn => const Color(0xFFFFC06A),
+      LogLevel.error => const Color(0xFFFF7882),
     };
-    final levelLabel = entry.level.name.toUpperCase();
     final time =
         '${entry.time.hour.toString().padLeft(2, '0')}:'
         '${entry.time.minute.toString().padLeft(2, '0')}:'
         '${entry.time.second.toString().padLeft(2, '0')}.'
         '${entry.time.millisecond.toString().padLeft(3, '0')}';
+    final error = entry.error == null ? '' : '  ← ${entry.error}';
+    const baseStyle = TextStyle(
+      color: Color(0xFFE1E8EC),
+      fontFamily: 'monospace',
+      fontSize: 10.5,
+      height: 1.35,
+    );
 
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: card.withValues(alpha: isNight ? 0.76 : 0.90),
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  levelLabel,
-                  style: TextStyle(
-                    color: accent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  entry.tag,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                time,
-                style: TextStyle(
-                  color: secondary,
-                  fontFamily: 'monospace',
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          SelectableText(
-            entry.message,
-            style: TextStyle(color: primary, fontSize: 13, height: 1.4),
-          ),
-          if (entry.error != null) ...[
-            const SizedBox(height: 6),
-            SelectableText(
-              '${entry.error}',
-              style: TextStyle(
-                color: accent.withValues(alpha: 0.88),
-                fontFamily: 'monospace',
-                fontSize: 11,
-                height: 1.35,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Text.rich(
+        TextSpan(
+          style: baseStyle,
+          children: [
+            TextSpan(text: '$time ', style: TextStyle(color: secondary)),
+            TextSpan(
+              text: '${entry.level.name.toUpperCase().padRight(5)} ',
+              style: TextStyle(color: accent, fontWeight: FontWeight.w700),
             ),
+            TextSpan(
+              text: '[${entry.tag}] ',
+              style: const TextStyle(color: Color(0xFF8AB4F8)),
+            ),
+            TextSpan(text: entry.message),
+            if (error.isNotEmpty)
+              TextSpan(text: error, style: TextStyle(color: accent)),
           ],
-        ],
+        ),
       ),
     );
   }

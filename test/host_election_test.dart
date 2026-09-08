@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/session/host_transfer.dart';
+import 'package:dawn_mesh/core/session/host_transfer.dart';
 
 /// 旧的 `HostElection.electNextHost(List<Member>)` 已删除。
 /// 选举规则现在在 [HostElection]（`host_transfer.dart`）里，按 joinOrder 而不是时钟。

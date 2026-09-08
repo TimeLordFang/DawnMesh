@@ -54,7 +54,7 @@ adb -s SERIAL shell getprop ro.product.model
 adb -s SERIAL shell getprop ro.build.version.release
 adb -s SERIAL shell getprop ro.build.display.id
 adb -s SERIAL shell dumpsys package dev.dawnmesh.intercom
-adb -s SERIAL logcat -v time SunsetBle:I SunsetMain:I SunsetAudio:I flutter:I '*:S'
+adb -s SERIAL logcat -v time DawnBle:I DawnMain:I DawnAudio:I flutter:I '*:S'
 ```
 
 顺序判断：没出现“开始扫描蓝牙房” → 扫描/权限入口；房主没“BLE 广播已开启” → 广播/权限/硬件；双方都有但列表为空 → 扫描结果/广播解析；列表有而连接失败 → PSM、L2CAP、超时；连接成功没声音 → 麦克风、PTT、音频路由，与搜房分开定位。

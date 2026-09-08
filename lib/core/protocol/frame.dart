@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import '../diagnostics/app_log.dart';
 import 'frame_type.dart';
 
-/// SunsetRipple 6-byte Header Binary Frame.
+/// DawnMesh 6-byte Header Binary Frame.
 ///
 /// Format:
 /// [0]     : FrameType (1 byte)
@@ -82,12 +82,7 @@ class Frame {
       payload.setRange(0, length, data, headerSize);
     }
 
-    return Frame(
-      type: type,
-      senderId: senderId,
-      seq: seq,
-      payload: payload,
-    );
+    return Frame(type: type, senderId: senderId, seq: seq, payload: payload);
   }
 
   @override

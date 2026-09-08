@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple.audio
+package dev.dawnmesh.intercom.audio
 
 import io.github.jaredmdobson.concentus.OpusApplication
 import io.github.jaredmdobson.concentus.OpusDecoder

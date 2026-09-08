@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple.audio
+package dev.dawnmesh.intercom.audio
 
 sealed class PollResult {
     object NotReady : PollResult()

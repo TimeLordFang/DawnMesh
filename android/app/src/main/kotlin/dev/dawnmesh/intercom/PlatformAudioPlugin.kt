@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import android.Manifest
 import android.content.Context
@@ -17,9 +17,9 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import host.msknet.sunsetripple.audio.JitterBuffer
-import host.msknet.sunsetripple.audio.OpusCodec
-import host.msknet.sunsetripple.audio.PollResult
+import dev.dawnmesh.intercom.audio.JitterBuffer
+import dev.dawnmesh.intercom.audio.OpusCodec
+import dev.dawnmesh.intercom.audio.PollResult
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -51,10 +51,10 @@ class PlatformAudioPlugin(
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     companion object {
-        private const val TAG = "SunsetAudio"
+        private const val TAG = "DawnAudio"
 
-        private const val METHOD_CHANNEL = "host.msknet.sunsetripple/audio"
-        private const val EVENT_CHANNEL = "host.msknet.sunsetripple/audio_events"
+        private const val METHOD_CHANNEL = "dev.dawnmesh.intercom/audio"
+        private const val EVENT_CHANNEL = "dev.dawnmesh.intercom/audio_events"
 
         private const val SAMPLE_RATE = OpusCodec.SAMPLE_RATE
         private const val SAMPLES_PER_FRAME = OpusCodec.FRAME_SAMPLES // 320
@@ -171,7 +171,7 @@ class PlatformAudioPlugin(
                             else -> result.success(true)
                         }
                     }
-                }, "sunset-audio-start").start()
+                }, "dawn-audio-start").start()
             }
 
             "stopCapture" -> {
@@ -181,7 +181,7 @@ class PlatformAudioPlugin(
                     stopCapture()
                     stopPlayback()
                     mainHandler.post { result.success(true) }
-                }, "sunset-audio-stop").start()
+                }, "dawn-audio-stop").start()
             }
 
             // Dart 把收到的整帧（含 6 字节帧头）原样丢过来，这里解析发送方与序号后分流。
@@ -322,7 +322,7 @@ class PlatformAudioPlugin(
             return false
         }
 
-        captureThread = Thread({ captureLoop(record) }, "sunset-capture").apply {
+        captureThread = Thread({ captureLoop(record) }, "dawn-capture").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }
@@ -517,7 +517,7 @@ class PlatformAudioPlugin(
 
         updateAudioRouting()
 
-        playbackThread = Thread({ playbackLoop(track) }, "sunset-playback").apply {
+        playbackThread = Thread({ playbackLoop(track) }, "dawn-playback").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }

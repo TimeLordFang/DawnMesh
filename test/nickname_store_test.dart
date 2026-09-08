@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/preferences/debug_log_settings_store.dart';
-import 'package:sunset_ripple/core/preferences/nickname_store.dart';
+import 'package:dawn_mesh/core/preferences/debug_log_settings_store.dart';
+import 'package:dawn_mesh/core/preferences/nickname_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

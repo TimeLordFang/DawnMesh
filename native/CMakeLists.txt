@@ -1,21 +1,21 @@
 cmake_minimum_required(VERSION 3.10)
-project(sunset_ripple_native LANGUAGES C CXX)
+project(dawn_mesh_native LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(sunset_ripple_native SHARED
+add_library(dawn_mesh_native SHARED
     src/audio_dsp.cpp
     src/ring_buffer.cpp
     src/protocol_frame.cpp
 )
 
-target_include_directories(sunset_ripple_native PUBLIC
+target_include_directories(dawn_mesh_native PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 if (MSVC)
-    target_compile_options(sunset_ripple_native PRIVATE /W4 /O2)
+    target_compile_options(dawn_mesh_native PRIVATE /W4 /O2)
 else()
-    target_compile_options(sunset_ripple_native PRIVATE -Wall -Wextra -O3 -fPIC)
+    target_compile_options(dawn_mesh_native PRIVATE -Wall -Wextra -O3 -fPIC)
 endif()

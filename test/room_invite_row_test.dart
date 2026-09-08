@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/ui/widgets/room_invite_row.dart';
+import 'package:dawn_mesh/ui/widgets/room_invite_row.dart';
 
 void main() {
   Widget panel({String code = '012345', bool visible = true}) => MaterialApp(

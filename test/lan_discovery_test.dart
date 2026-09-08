@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/transport/lan_discovery.dart';
+import 'package:dawn_mesh/core/transport/lan_discovery.dart';
 
 import 'lan_transport_whitelist_test.dart' show pumpUntil;
 
@@ -27,21 +27,26 @@ void main() {
       await discovery.startListening();
       addTearDown(discovery.dispose);
 
-      final advertiser = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final advertiser = await RawDatagramSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
       addTearDown(advertiser.close);
 
       void advertise({required int port, String? name, String? action}) {
         advertiser.send(
-          utf8.encode(jsonEncode({
-            'magic': LanRoomDiscovery.magicHeader,
-            'roomId': 'room_origin_test',
-            'roomName': name ?? '测试房',
-            'hostNickname': '主持人',
-            'port': port,
-            'members': 2,
-            if (action != null) 'action': action,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          })),
+          utf8.encode(
+            jsonEncode({
+              'magic': LanRoomDiscovery.magicHeader,
+              'roomId': 'room_origin_test',
+              'roomName': name ?? '测试房',
+              'hostNickname': '主持人',
+              'port': port,
+              'members': 2,
+              if (action != null) 'action': action,
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            }),
+          ),
           InternetAddress.loopbackIPv4,
           LanRoomDiscovery.discoveryPort,
         );
@@ -69,9 +74,9 @@ void main() {
       await pumpUntil(
         () =>
             discovery.currentRooms
-                    .firstWhere((r) => r.roomId == 'room_origin_test')
-                    .roomName
-                    .length <=
+                .firstWhere((r) => r.roomId == 'room_origin_test')
+                .roomName
+                .length <=
             LanRoomDiscovery.maxAdvertisedTextLength,
         reason: '广播里的房名不受任何校验，必须钳制长度',
       );
@@ -79,7 +84,8 @@ void main() {
       // 同源解散通知：立即移除
       advertise(port: 8988, action: 'ROOM_CLOSED');
       await pumpUntil(
-        () => discovery.currentRooms.every((r) => r.roomId != 'room_origin_test'),
+        () =>
+            discovery.currentRooms.every((r) => r.roomId != 'room_origin_test'),
         reason: '同源的 ROOM_CLOSED 必须即时移除房间',
       );
     });
@@ -89,20 +95,25 @@ void main() {
       await discovery.startListening();
       addTearDown(discovery.dispose);
 
-      final advertiser = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final advertiser = await RawDatagramSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
       addTearDown(advertiser.close);
 
       for (int i = 0; i < LanRoomDiscovery.maxDiscoveredRooms + 20; i++) {
         advertiser.send(
-          utf8.encode(jsonEncode({
-            'magic': LanRoomDiscovery.magicHeader,
-            'roomId': 'room_flood_$i',
-            'roomName': '洪水房$i',
-            'hostNickname': '伪造者',
-            'port': 8988,
-            'members': 1,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          })),
+          utf8.encode(
+            jsonEncode({
+              'magic': LanRoomDiscovery.magicHeader,
+              'roomId': 'room_flood_$i',
+              'roomName': '洪水房$i',
+              'hostNickname': '伪造者',
+              'port': 8988,
+              'members': 1,
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            }),
+          ),
           InternetAddress.loopbackIPv4,
           LanRoomDiscovery.discoveryPort,
         );

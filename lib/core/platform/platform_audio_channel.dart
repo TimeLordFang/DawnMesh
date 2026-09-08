@@ -14,10 +14,12 @@ const String _tag = '音频';
 /// `catch (_) {}` 吞掉，Android 侧没有实现时表现为「界面一切正常但没有声音」，
 /// 是这个项目最难定位的一类问题。
 class PlatformAudioChannel implements AudioIo {
-  static const MethodChannel _methodChannel =
-      MethodChannel('host.msknet.sunsetripple/audio');
-  static const EventChannel _eventChannel =
-      EventChannel('host.msknet.sunsetripple/audio_events');
+  static const MethodChannel _methodChannel = MethodChannel(
+    'dev.dawnmesh.intercom/audio',
+  );
+  static const EventChannel _eventChannel = EventChannel(
+    'dev.dawnmesh.intercom/audio_events',
+  );
 
   bool _isRecording = false;
   bool _isMuted = false;

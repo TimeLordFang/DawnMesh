@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/security/room_admission.dart';
-import 'package:sunset_ripple/core/security/session_handshake.dart';
-import 'package:sunset_ripple/core/security/spake2.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/security/room_admission.dart';
+import 'package:dawn_mesh/core/security/session_handshake.dart';
+import 'package:dawn_mesh/core/security/spake2.dart';
 
 void main() {
   test(

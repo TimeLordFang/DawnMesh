@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/ui/pages/session_stage.dart';
-import 'package:sunset_ripple/ui/widgets/room_invite_row.dart';
+import 'package:dawn_mesh/ui/pages/session_stage.dart';
+import 'package:dawn_mesh/ui/widgets/room_invite_row.dart';
 
 /// 进房转场的端到端验收：点「创建 WiFi 房」之后，首页那组 UI 要走干净，
 /// 房间那组要到齐，中途每一帧都不许溢出；返回时再原路退回首页。
 void main() {
-  const audioChannel = MethodChannel('host.msknet.sunsetripple/audio');
+  const audioChannel = MethodChannel('dev.dawnmesh.intercom/audio');
   const audioEventsChannel = MethodChannel(
-    'host.msknet.sunsetripple/audio_events',
+    'dev.dawnmesh.intercom/audio_events',
   );
 
   setUp(() {

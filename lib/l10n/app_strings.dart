@@ -72,8 +72,8 @@ class AppStrings {
   String get debugLoggingDisabled => isEn ? 'Off' : '已关闭';
   String get debugLoggingDescription =>
       isEn
-          ? 'Capture app, audio, Bluetooth and Wi-Fi Direct events on this device'
-          : '在本机记录应用、音频、蓝牙和 Wi-Fi Direct 事件';
+          ? 'App events plus readable Android hardware and runtime state'
+          : '记录应用事件及 Android 可读取的硬件与运行状态';
   String get debugLogDisabledHint =>
       isEn
           ? 'Turn logging on before reproducing a problem'
@@ -85,6 +85,8 @@ class AppStrings {
   String get clearSearch => isEn ? 'Clear search' : '清除搜索';
   String get copyDebugLogs => isEn ? 'Copy visible logs' : '复制当前日志';
   String get clearDebugLogs => isEn ? 'Clear logs' : '清空日志';
+  String get captureSystemSnapshot =>
+      isEn ? 'Capture system snapshot' : '刷新系统快照';
   String get debugLogsCopied =>
       isEn ? 'Logs copied with private addresses redacted' : '日志已复制，地址和长令牌已隐藏';
   String get debugLogsCleared => isEn ? 'Logs cleared' : '日志已清空';
@@ -92,8 +94,8 @@ class AppStrings {
       isEn ? 'Could not save the logging setting' : '无法保存调试日志开关';
   String get debugLogPrivacyNote =>
       isEn
-          ? 'Logs stay in memory and are cleared when logging is turned off or the app exits. Review them before sharing.'
-          : '日志仅保存在内存中；关闭记录或退出应用后清空。对外发送前请检查内容。';
+          ? 'Memory only. Android does not expose full system logcat to normal apps. Review before sharing.'
+          : '仅存内存。普通应用无法读取完整系统 Logcat；对外发送前请检查内容。';
   String get debugLogAll => isEn ? 'All' : '全部';
   String get debugLogDebug => 'DEBUG';
   String get debugLogInfo => 'INFO';
@@ -156,8 +158,8 @@ class AppStrings {
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn
-          ? 'Apache License 2.0\nDawnMesh is based on SunsetRipple, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
-          : 'Apache License 2.0\n曙光之声基于 SunsetRipple 开发，采用 Apache License 2.0 开源许可证。\nhttps://www.apache.org/licenses/LICENSE-2.0';
+          ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
+          : 'Apache License 2.0\n曙光之声基于原始上游项目开发，采用 Apache License 2.0 开源许可证。\nhttps://www.apache.org/licenses/LICENSE-2.0';
   String get privacyTitle => isEn ? 'Messages & privacy' : '关于消息与隐私';
   String get privacyBody =>
       isEn
@@ -167,7 +169,7 @@ class AppStrings {
   // Theme
   String themeDescription(String current) =>
       isEn ? 'Current theme: $current' : '现在是$current';
-  String get themeLight => isEn ? 'Sunset glow' : '落日余晖';
+  String get themeLight => isEn ? 'Dawn glow' : '晨曦微光';
   String get themeDark => isEn ? 'Moonlit sea' : '月色入海';
 
   // Home & Stage
@@ -222,7 +224,7 @@ class AppStrings {
   // Stage Header
   String get tooltipInfoAndUpdates => aboutTitle;
   String get tooltipToggleTheme =>
-      isEn ? 'Switch sunset and moonlight themes' : '切换落日与月夜';
+      isEn ? 'Switch dawn and moonlight themes' : '切换晨曦与月夜';
   String get tooltipLeaveRoom => leaveRoom;
   String get tooltipDiagnostics =>
       isEn ? 'View connection and audio' : '查看连接与音质';

@@ -54,10 +54,10 @@ class WifiP2pConnectionInfo {
 /// Wi-Fi Direct (Wi-Fi P2P) 近场直连管理器。
 class WifiDirectManager {
   static const MethodChannel _channel = MethodChannel(
-    'host.msknet.sunsetripple/wifi_direct',
+    'dev.dawnmesh.intercom/wifi_direct',
   );
   static const EventChannel _eventChannel = EventChannel(
-    'host.msknet.sunsetripple/wifi_direct_events',
+    'dev.dawnmesh.intercom/wifi_direct_events',
   );
 
   static final WifiDirectManager instance = WifiDirectManager._internal();

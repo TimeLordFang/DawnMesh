@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/transport/lan_transport.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/transport/lan_transport.dart';
 
 void main() {
   test(

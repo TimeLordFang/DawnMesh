@@ -208,9 +208,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
-                color: (isNight
-                        ? AppTheme.moonSilverWhite
-                        : AppTheme.sunsetCoral)
+                color: (isNight ? AppTheme.moonSilverWhite : AppTheme.dawnCoral)
                     .withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -221,9 +219,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                     Icons.star,
                     size: 10,
                     color:
-                        isNight
-                            ? AppTheme.moonSilverWhite
-                            : AppTheme.sunsetCoral,
+                        isNight ? AppTheme.moonSilverWhite : AppTheme.dawnCoral,
                   ),
                   const SizedBox(width: 2),
                   Text(
@@ -234,7 +230,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                       color:
                           isNight
                               ? AppTheme.moonSilverWhite
-                              : AppTheme.sunsetCoral,
+                              : AppTheme.dawnCoral,
                     ),
                   ),
                 ],
@@ -304,7 +300,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
         isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
     final textSecondary =
         isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-    final accentColor = isNight ? AppTheme.nightSkyBlue : AppTheme.sunsetCoral;
+    final accentColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnCoral;
 
     final messages = widget.session.chatMessages;
     final activeMemberIds =
@@ -550,7 +546,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                                                                 ? AppTheme
                                                                     .nightSkyBlue
                                                                 : AppTheme
-                                                                    .sunsetCoral)
+                                                                    .dawnCoral)
                                                             : (isNight
                                                                 ? const Color(
                                                                   0xFF1E2D44,

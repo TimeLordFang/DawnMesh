@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -18,7 +18,7 @@ import android.os.PowerManager
 /** Foreground microphone lifetime owns CPU/network locks, released on stop. */
 class IntercomForegroundService : Service() {
     companion object {
-        private const val TAG = "SunsetFgs"
+        private const val TAG = "DawnFgs"
         private const val CHANNEL_ID = "dawnmesh_call_v2"
         private const val NOTIFICATION_ID = 4802
         @Volatile private var running = false

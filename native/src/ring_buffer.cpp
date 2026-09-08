@@ -6,9 +6,9 @@
 
 extern "C" {
 
-SunsetRingBuffer* sunset_ring_buffer_create(size_t capacity) {
+DawnRingBuffer* dawn_ring_buffer_create(size_t capacity) {
     if (capacity == 0) capacity = 65536; // default 64KB
-    SunsetRingBuffer* rb = new (std::nothrow) SunsetRingBuffer{};
+    DawnRingBuffer* rb = new (std::nothrow) DawnRingBuffer{};
     if (!rb) return NULL;
 
     rb->buffer = (uint8_t*)malloc(capacity);
@@ -23,13 +23,13 @@ SunsetRingBuffer* sunset_ring_buffer_create(size_t capacity) {
     return rb;
 }
 
-void sunset_ring_buffer_free(SunsetRingBuffer* rb) {
+void dawn_ring_buffer_free(DawnRingBuffer* rb) {
     if (!rb) return;
     if (rb->buffer) free(rb->buffer);
     delete rb;
 }
 
-size_t sunset_ring_buffer_available_write(const SunsetRingBuffer* rb) {
+size_t dawn_ring_buffer_available_write(const DawnRingBuffer* rb) {
     if (!rb) return 0;
     size_t head = rb->head.load(std::memory_order_acquire);
     size_t tail = rb->tail.load(std::memory_order_acquire);
@@ -40,7 +40,7 @@ size_t sunset_ring_buffer_available_write(const SunsetRingBuffer* rb) {
     }
 }
 
-size_t sunset_ring_buffer_available_read(const SunsetRingBuffer* rb) {
+size_t dawn_ring_buffer_available_read(const DawnRingBuffer* rb) {
     if (!rb) return 0;
     size_t head = rb->head.load(std::memory_order_acquire);
     size_t tail = rb->tail.load(std::memory_order_acquire);
@@ -51,10 +51,10 @@ size_t sunset_ring_buffer_available_read(const SunsetRingBuffer* rb) {
     }
 }
 
-size_t sunset_ring_buffer_write(SunsetRingBuffer* rb, const uint8_t* data, size_t length) {
+size_t dawn_ring_buffer_write(DawnRingBuffer* rb, const uint8_t* data, size_t length) {
     if (!rb || !data || length == 0) return 0;
 
-    size_t avail = sunset_ring_buffer_available_write(rb);
+    size_t avail = dawn_ring_buffer_available_write(rb);
     size_t to_write = std::min(length, avail);
     if (to_write == 0) return 0;
 
@@ -70,10 +70,10 @@ size_t sunset_ring_buffer_write(SunsetRingBuffer* rb, const uint8_t* data, size_
     return to_write;
 }
 
-size_t sunset_ring_buffer_read(SunsetRingBuffer* rb, uint8_t* out_data, size_t length) {
+size_t dawn_ring_buffer_read(DawnRingBuffer* rb, uint8_t* out_data, size_t length) {
     if (!rb || !out_data || length == 0) return 0;
 
-    size_t avail = sunset_ring_buffer_available_read(rb);
+    size_t avail = dawn_ring_buffer_available_read(rb);
     size_t to_read = std::min(length, avail);
     if (to_read == 0) return 0;
 
@@ -89,7 +89,7 @@ size_t sunset_ring_buffer_read(SunsetRingBuffer* rb, uint8_t* out_data, size_t l
     return to_read;
 }
 
-void sunset_ring_buffer_clear(SunsetRingBuffer* rb) {
+void dawn_ring_buffer_clear(DawnRingBuffer* rb) {
     if (!rb) return;
     rb->head.store(0, std::memory_order_release);
     rb->tail.store(0, std::memory_order_release);

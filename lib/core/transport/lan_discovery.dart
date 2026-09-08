@@ -34,7 +34,7 @@ class DiscoveredRoom {
 /// 局域网/热点下的零配置房间发现（UDP 8990 广播）。
 class LanRoomDiscovery {
   static const int discoveryPort = 8990;
-  static const String magicHeader = "SUNSET_RIPPLE_DISCOVERY_V1";
+  static const String magicHeader = "DAWN_MESH_DISCOVERY_V1";
 
   /// 发现列表容量上限。广播匿名可伪造，过期清理 3.5 秒才跑一轮，
   /// 没有上限的话伪造洪水能在窗口内灌出上千个假房间。
@@ -76,13 +76,11 @@ class LanRoomDiscovery {
     }
 
     _socket!.broadcastEnabled = true;
-    _socket!.listen(
-      (event) {
-        if (event != RawSocketEvent.read) return;
-        final datagram = _socket?.receive();
-        if (datagram != null) _handleIncomingPacket(datagram);
-      },
-    );
+    _socket!.listen((event) {
+      if (event != RawSocketEvent.read) return;
+      final datagram = _socket?.receive();
+      if (datagram != null) _handleIncomingPacket(datagram);
+    });
 
     AppLog.info(_tag, '已开始监听 UDP $discoveryPort');
     return true;
@@ -166,9 +164,7 @@ class LanRoomDiscovery {
   }
 
   Future<List<InternetAddress>> _getBroadcastAddresses() async {
-    final addresses = <InternetAddress>{
-      InternetAddress("255.255.255.255"),
-    };
+    final addresses = <InternetAddress>{InternetAddress("255.255.255.255")};
 
     try {
       final interfaces = await NetworkInterface.list(
@@ -321,8 +317,11 @@ class LanRoomDiscovery {
   void _notifyRoomsChanged() {
     if (_roomsController.isClosed) return;
     final signature = _discoveredRooms.values
-        .map((r) => '${r.roomId}|${r.roomName}|${r.hostNickname}|'
-            '${r.hostAddress.address}|${r.port}|${r.memberCount}')
+        .map(
+          (r) =>
+              '${r.roomId}|${r.roomName}|${r.hostNickname}|'
+              '${r.hostAddress.address}|${r.port}|${r.memberCount}',
+        )
         .join(';');
     if (signature == _lastRoomsSignature) return;
     _lastRoomsSignature = signature;

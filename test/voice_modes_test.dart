@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/audio/audio_io.dart';
-import 'package:sunset_ripple/core/audio/voice_activity_gate.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/session/room_session.dart';
-import 'package:sunset_ripple/ui/pages/room_page.dart';
-import 'package:sunset_ripple/ui/widgets/voice_mode_switch.dart';
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/audio/voice_activity_gate.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/ui/pages/room_page.dart';
+import 'package:dawn_mesh/ui/widgets/voice_mode_switch.dart';
 
 void main() {
   test('voice gate drops silence, retains onset, hangs over and closes', () {

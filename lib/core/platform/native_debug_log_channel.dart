@@ -9,6 +9,9 @@ class NativeDebugLogChannel {
   NativeDebugLogChannel._();
 
   static const _events = EventChannel('dev.dawnmesh.intercom/debug_logs');
+  static const control = MethodChannel(
+    'dev.dawnmesh.intercom/debug_log_control',
+  );
   static StreamSubscription<dynamic>? _subscription;
 
   static void start() {
@@ -31,5 +34,18 @@ class NativeDebugLogChannel {
     final message = event['message'];
     if (tag is! String || message is! String) return;
     AppLog.native(level, tag, message, event['error']);
+  }
+
+  /// 请求 Android 输出当前硬件、权限、电源、内存、音频与无线能力快照。
+  static Future<bool> captureSystemSnapshot() async {
+    if (!AppLog.isEnabled) return false;
+    try {
+      return await control.invokeMethod<bool>('captureSystemSnapshot') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (error) {
+      AppLog.warn('DawnSystem', '请求系统快照失败', error);
+      return false;
+    }
   }
 }

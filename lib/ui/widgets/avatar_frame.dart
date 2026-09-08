@@ -16,9 +16,9 @@ class AvatarFrameTheme {
   static const List<AvatarFrameTheme> memberThemes = [
     // 0. 夕阳琥珀
     AvatarFrameTheme(
-      name: 'SunsetAmber',
-      borderGradient: [AppTheme.sunsetCoral, Color(0xFFFFA726)],
-      glowColor: AppTheme.sunsetCoral,
+      name: 'DawnAmber',
+      borderGradient: [AppTheme.dawnCoral, Color(0xFFFFA726)],
+      glowColor: AppTheme.dawnCoral,
     ),
     // 1. 碧海青风
     AvatarFrameTheme(
@@ -116,9 +116,7 @@ class AvatarFrame extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: SweepGradient(
-              colors: theme.borderGradient,
-            ),
+            gradient: SweepGradient(colors: theme.borderGradient),
             boxShadow: [
               BoxShadow(
                 color: theme.glowColor.withValues(alpha: isHost ? 0.45 : 0.25),
@@ -156,12 +154,7 @@ class AvatarFrame extends StatelessWidget {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: Color(0xFFFFD700),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x66FFD700),
-                    blurRadius: 4,
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Color(0x66FFD700), blurRadius: 4)],
               ),
               child: const Icon(
                 Icons.star_rounded,
@@ -174,4 +167,3 @@ class AvatarFrame extends StatelessWidget {
     );
   }
 }
-

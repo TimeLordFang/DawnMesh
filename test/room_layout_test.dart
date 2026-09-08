@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/audio/audio_io.dart';
-import 'package:sunset_ripple/core/session/room_session.dart';
-import 'package:sunset_ripple/ui/pages/room_page.dart';
-import 'package:sunset_ripple/ui/pages/session_stage.dart';
-import 'package:sunset_ripple/ui/widgets/room_chat_sheet.dart';
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/ui/pages/room_page.dart';
+import 'package:dawn_mesh/ui/pages/session_stage.dart';
+import 'package:dawn_mesh/ui/widgets/room_chat_sheet.dart';
 
 /// 这轮把房内 UI 整体放大过（对讲盘 212、头像 64、控制条图标 24、正文 +2~4pt），
 /// 矮屏窄屏上很容易挤到溢出。这里在几种常见屏幕比例上各摆一次，

@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/protocol/frame.dart';
-import 'package:sunset_ripple/core/protocol/frame_type.dart';
-import 'package:sunset_ripple/core/protocol/payloads/chat_message.dart';
-import 'package:sunset_ripple/core/transport/ble_l2cap_transport.dart';
-import 'package:sunset_ripple/core/transport/lan_transport.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
+import 'package:dawn_mesh/core/transport/ble_l2cap_transport.dart';
+import 'package:dawn_mesh/core/transport/lan_transport.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +14,8 @@ void main() {
       final lan = LanTransport();
 
       // 在未启动状态下发送 chat 帧，断言其进入控制面逻辑且不会抛异常或混入 UDP
-      final chatPayload = const ChatMessagePayload(text: '测试 WiFi 路由隔离').encode();
+      final chatPayload =
+          const ChatMessagePayload(text: '测试 WiFi 路由隔离').encode();
       final chatFrame = Frame(
         type: FrameType.chat,
         senderId: 1,
@@ -30,15 +31,15 @@ void main() {
     });
 
     test('BleL2capTransport send: chat 帧完整打包并通过 sendL2capData 发送', () async {
-      const channel = MethodChannel('host.msknet.sunsetripple/ble_l2cap');
+      const channel = MethodChannel('dev.dawnmesh.intercom/ble_l2cap');
       final calls = <MethodCall>[];
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'startAdvertising') return true;
-        return null;
-      });
+            calls.add(call);
+            if (call.method == 'startAdvertising') return true;
+            return null;
+          });
 
       addTearDown(() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -49,7 +50,8 @@ void main() {
       // 启动并模拟进入 Host 角色
       await ble.startHost(roomName: '测试蓝牙房');
 
-      final chatPayload = const ChatMessagePayload(text: '测试 BLE L2CAP 路由').encode();
+      final chatPayload =
+          const ChatMessagePayload(text: '测试 BLE L2CAP 路由').encode();
       final chatFrame = Frame(
         type: FrameType.chat,
         senderId: 1,

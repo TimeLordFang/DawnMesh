@@ -29,7 +29,8 @@ class LogEntry {
     final ts =
         '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:'
-        '${time.second.toString().padLeft(2, '0')}';
+        '${time.second.toString().padLeft(2, '0')}.'
+        '${time.millisecond.toString().padLeft(3, '0')}';
     final suffix = error == null ? '' : ' <- $error';
     return '[$ts][${level.name.toUpperCase()}][$tag] $message$suffix';
   }

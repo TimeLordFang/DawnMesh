@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/security/spake2.dart';
+import 'package:dawn_mesh/core/security/spake2.dart';
 
 void main() {
   test('RFC 9382 Appendix B P-256 vector: messages, key and confirmations', () {

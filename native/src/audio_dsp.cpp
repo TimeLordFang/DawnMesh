@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 /// High-Performance C/C++ Multi-Stream 16-bit PCM Linear Mixer with SIMD / Saturation.
-FFI_EXPORT void sunset_mix_pcm_streams(
+FFI_EXPORT void dawn_mix_pcm_streams(
     const int16_t* const* input_streams,
     int stream_count,
     int sample_count,
@@ -46,7 +46,7 @@ FFI_EXPORT void sunset_mix_pcm_streams(
 }
 
 /// Calculate Root-Mean-Square (RMS) amplitude level [0.0 ~ 1.0].
-FFI_EXPORT float sunset_calculate_rms(const int16_t* samples, int sample_count) {
+FFI_EXPORT float dawn_calculate_rms(const int16_t* samples, int sample_count) {
     if (!samples || sample_count <= 0) return 0.0f;
 
     double sum_squares = 0.0;

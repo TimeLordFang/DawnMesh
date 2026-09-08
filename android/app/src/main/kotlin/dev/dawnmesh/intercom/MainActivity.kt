@@ -1,4 +1,4 @@
-package host.msknet.sunsetripple
+package dev.dawnmesh.intercom
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -13,7 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     companion object {
-        private const val TAG = "SunsetMain"
+        private const val TAG = "DawnMain"
         private const val REQUEST_CODE_RUNTIME_PERMISSIONS = 4801
     }
 
@@ -77,7 +77,7 @@ class MainActivity : FlutterActivity() {
     private fun acquireMulticastLock() {
         try {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            multicastLock = wifiManager?.createMulticastLock("SunsetRippleMulticastLock")?.apply {
+            multicastLock = wifiManager?.createMulticastLock("DawnMeshMulticastLock")?.apply {
                 setReferenceCounted(true)
                 acquire()
             }

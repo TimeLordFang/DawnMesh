@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/diagnostics/diagnostic_report.dart';
+import 'package:dawn_mesh/core/diagnostics/diagnostic_report.dart';
 
 void main() {
   group('Diagnostics Tests', () {

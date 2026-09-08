@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Binary codec for SunsetRipple chat message payload.
+/// Binary codec for DawnMesh chat message payload.
 ///
 /// Format v1 (legacy):
 /// [0]     : Version (1 byte, 0x01)
@@ -38,7 +38,9 @@ class ChatMessagePayload {
   /// Throws [ArgumentError] if text is empty/whitespace or exceeds 480 UTF-8 bytes.
   Uint8List encode() {
     if (text.trim().isEmpty) {
-      throw ArgumentError('Chat message text cannot be empty or whitespace-only.');
+      throw ArgumentError(
+        'Chat message text cannot be empty or whitespace-only.',
+      );
     }
 
     final textBytes = utf8.encode(text);
@@ -61,7 +63,11 @@ class ChatMessagePayload {
     final buffer = Uint8List(15 + textBytes.length);
     final bd = ByteData.sublistView(buffer);
     buffer[0] = 2;
-    bd.setUint64(1, timestampMs == 0 ? DateTime.now().millisecondsSinceEpoch : timestampMs, Endian.big);
+    bd.setUint64(
+      1,
+      timestampMs == 0 ? DateTime.now().millisecondsSinceEpoch : timestampMs,
+      Endian.big,
+    );
     buffer.setRange(9, 13, codeAscii);
     bd.setUint16(13, textBytes.length, Endian.big);
     buffer.setRange(15, 15 + textBytes.length, textBytes);

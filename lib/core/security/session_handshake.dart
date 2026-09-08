@@ -19,21 +19,21 @@ class SignedHello {
   });
 
   Map<String, dynamic> toJson() => {
-        'publicKey': publicKeyBase64,
-        'nonce': nonceBase64,
-        'signature': signatureBase64,
-      };
+    'publicKey': publicKeyBase64,
+    'nonce': nonceBase64,
+    'signature': signatureBase64,
+  };
 
   factory SignedHello.fromJson(Map<String, dynamic> json) => SignedHello(
-        publicKeyBase64: json['publicKey'] as String,
-        nonceBase64: json['nonce'] as String,
-        signatureBase64: json['signature'] as String,
-      );
+    publicKeyBase64: json['publicKey'] as String,
+    nonceBase64: json['nonce'] as String,
+    signatureBase64: json['signature'] as String,
+  );
 }
 
 /// 端到端会话密钥协商状态机。
 class SessionHandshake {
-  static const String protocol = 'sunset-ripple-alpha5';
+  static const String protocol = 'dawn-mesh-alpha5';
 
   /// 发起端或接收端生成自己的 SignedHello。
   static Future<SignedHello> create({
@@ -100,12 +100,10 @@ class SessionHandshake {
     final nonces = [localNonce, remoteNonce];
     nonces.sort((a, b) => _compareBytes(a, b));
 
-    final combined = <int>[
-      ...utf8.encode(roomId),
-      ...nonces[0],
-      ...nonces[1],
-    ];
-    final roomContext = Uint8List.fromList(crypto.sha256.convert(combined).bytes);
+    final combined = <int>[...utf8.encode(roomId), ...nonces[0], ...nonces[1]];
+    final roomContext = Uint8List.fromList(
+      crypto.sha256.convert(combined).bytes,
+    );
 
     return SessionCipher.establish(
       localIdentity: localIdentity,
@@ -212,4 +210,3 @@ class SecureFrameCodec {
     return buffer;
   }
 }
-

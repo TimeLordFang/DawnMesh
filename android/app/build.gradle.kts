@@ -22,8 +22,8 @@ val keystoreProperties = Properties().apply {
 val hasReleaseSigning = keystorePropertiesFile.exists()
 
 android {
-    // 保留 Kotlin namespace；独立 applicationId 在 defaultConfig 中配置。
-    namespace = "host.msknet.sunsetripple"
+    // Kotlin namespace 与独立 applicationId 统一使用 DawnMesh 标识。
+    namespace = "dev.dawnmesh.intercom"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
@@ -57,7 +57,7 @@ android {
     }
 
     // native/ 下的 C++（无锁环形缓冲、PCM 混音、帧编解码）此前从未接入构建，
-    // 所以 libsunset_ripple_native.so 根本不存在，FFI 每次都静默回退到纯 Dart。
+    // 所以 libdawn_mesh_native.so 根本不存在，FFI 每次都静默回退到纯 Dart。
     externalNativeBuild {
         cmake {
             path = file("../../native/CMakeLists.txt")

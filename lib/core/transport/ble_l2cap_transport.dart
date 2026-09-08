@@ -45,13 +45,13 @@ class DiscoveredBleRoom {
 /// 这里只负责收发。
 class BleL2capTransport implements RoomTransport {
   static const MethodChannel _channel = MethodChannel(
-    'host.msknet.sunsetripple/ble_l2cap',
+    'dev.dawnmesh.intercom/ble_l2cap',
   );
   static const EventChannel _dataChannel = EventChannel(
-    'host.msknet.sunsetripple/ble_l2cap_data',
+    'dev.dawnmesh.intercom/ble_l2cap_data',
   );
   static const EventChannel _scanChannel = EventChannel(
-    'host.msknet.sunsetripple/ble_l2cap_scan',
+    'dev.dawnmesh.intercom/ble_l2cap_scan',
   );
 
   /// 扫描结果多久没再出现就认为房间已经消失。

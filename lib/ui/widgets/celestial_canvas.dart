@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-/// Dynamic Canvas Painter for Sunset Sun / Moonlit Night & Water Wave Ripples.
+/// Dynamic Canvas Painter for Dawn Sun / Moonlit Night & Water Wave Ripples.
 class CelestialCanvas extends StatefulWidget {
   final bool isNight;
   final double waveIntensity; // 0.0 ~ 1.0 (audio activity)
@@ -95,38 +95,54 @@ class _CelestialPainter extends CustomPainter {
     final rect = Offset.zero & size;
 
     // 1. Sky Gradient
-    final skyColors = isNight
-        ? [AppTheme.nightSkyBlue, AppTheme.nightDeepOcean, AppTheme.nightAbyss]
-        : [AppTheme.sunsetCoral, AppTheme.sunsetBurgundy, AppTheme.sunsetDeepPlum];
+    final skyColors =
+        isNight
+            ? [
+              AppTheme.nightSkyBlue,
+              AppTheme.nightDeepOcean,
+              AppTheme.nightAbyss,
+            ]
+            : [
+              AppTheme.dawnCoral,
+              AppTheme.dawnBurgundy,
+              AppTheme.dawnDeepPlum,
+            ];
 
-    final skyPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: skyColors,
-      ).createShader(rect);
+    final skyPaint =
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: skyColors,
+          ).createShader(rect);
 
     canvas.drawRect(rect, skyPaint);
 
     // 2. Sun / Moon (Celestial Body)
-    final celestialCenter =
-        Offset(size.width / 2, size.height * celestialCenterFactorY);
+    final celestialCenter = Offset(
+      size.width / 2,
+      size.height * celestialCenterFactorY,
+    );
     final radius = celestialRadius;
 
-    final celestialColor = isNight ? AppTheme.moonSilverWhite : AppTheme.sunWarmYellow;
+    final celestialColor =
+        isNight ? AppTheme.moonSilverWhite : AppTheme.sunWarmYellow;
 
     // Outer Glow: GPU RadialGradient shader instead of expensive MaskFilter.blur
     final glowRadius = radius + 26;
-    final glowPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          celestialColor.withValues(alpha: 0.38 + 0.12 * math.sin(wavePhase)),
-          celestialColor.withValues(alpha: 0.0),
-        ],
-        stops: const [0.55, 1.0],
-      ).createShader(
-        Rect.fromCircle(center: celestialCenter, radius: glowRadius),
-      );
+    final glowPaint =
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              celestialColor.withValues(
+                alpha: 0.38 + 0.12 * math.sin(wavePhase),
+              ),
+              celestialColor.withValues(alpha: 0.0),
+            ],
+            stops: const [0.55, 1.0],
+          ).createShader(
+            Rect.fromCircle(center: celestialCenter, radius: glowRadius),
+          );
     canvas.drawCircle(celestialCenter, glowRadius, glowPaint);
 
     // Main Circle
@@ -158,7 +174,8 @@ class _CelestialPainter extends CustomPainter {
       path.moveTo(startX, y);
       for (double x = startX; x <= endX; x += 10) {
         final relX = (x - startX) / waveWidth;
-        final waveOffset = math.sin(relX * math.pi * 3 + wavePhase + i) *
+        final waveOffset =
+            math.sin(relX * math.pi * 3 + wavePhase + i) *
             (2.5 + waveIntensity * 6);
         path.lineTo(x, y + waveOffset);
       }
@@ -177,4 +194,3 @@ class _CelestialPainter extends CustomPainter {
         oldDelegate.waterLineFactor != waterLineFactor;
   }
 }
-

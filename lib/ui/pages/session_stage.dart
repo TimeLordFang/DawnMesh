@@ -501,7 +501,7 @@ class _SessionStageState extends State<SessionStage>
                         backgroundColor:
                             widget.isNight
                                 ? AppTheme.darkLeaveRosePink
-                                : AppTheme.sunsetCoral,
+                                : AppTheme.dawnCoral,
                         child: const Icon(
                           Icons.chat_bubble_outline_rounded,
                           color: Colors.white,

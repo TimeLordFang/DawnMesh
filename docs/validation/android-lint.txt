@@ -39,16 +39,16 @@
    https://developer.android.com/about/versions/12/backup-restore#xml-changes
    https://goo.gle/DataExtractionRules
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:101: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:101: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
     private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:305: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:305: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:428: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:428: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/host/msknet/sunsetripple/PlatformAudioPlugin.kt:719: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:719: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /Users/judoon/workspace/DawnMesh/android/app/src/main/res/drawable-v21: Warning: This folder configuration (v21) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into drawable. [ObsoleteSdkInt]

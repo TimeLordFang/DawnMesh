@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sunset_ripple/core/diagnostics/app_log.dart';
+import 'package:dawn_mesh/core/diagnostics/app_log.dart';
 
 void main() {
   setUp(() {
