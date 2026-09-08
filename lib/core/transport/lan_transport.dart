@@ -84,6 +84,10 @@ class LanTransport implements RoomTransport {
   // 客户端侧
   Socket? _hostSocket;
   InternetAddress? _hostAddress;
+  InternetAddress? _reconnectHostAddress;
+  int _reconnectPort = controlPort;
+  int _clientGeneration = 0;
+  bool _hostDisconnectReported = false;
 
   RawDatagramSocket? _udp;
   Timer? _udpKeepalive;
@@ -96,10 +100,15 @@ class LanTransport implements RoomTransport {
 
   final StreamController<Frame> _incoming = StreamController<Frame>.broadcast();
   final StreamController<int> _peerCount = StreamController<int>.broadcast();
+  final StreamController<TransportDisconnection> _disconnections =
+      StreamController<TransportDisconnection>.broadcast();
 
   /// 收到的、需要交给 [RoomSession.handleIncomingFrame] 的帧。
   @override
   Stream<Frame> get incoming => _incoming.stream;
+
+  @override
+  Stream<TransportDisconnection> get disconnections => _disconnections.stream;
 
   /// 当前连接上的对端数量。
   Stream<int> get peerCountStream => _peerCount.stream;
@@ -178,6 +187,21 @@ class LanTransport implements RoomTransport {
       await Future.delayed(const Duration(milliseconds: 300));
     }
     return false;
+  }
+
+  /// 恢复客户端到原房主的 TCP 链路。首次连接时就保存目标，因此即使
+  /// Wi-Fi 漫游或 Wi-Fi Direct 短暂掉组，也可以在网络回来后继续尝试。
+  Future<bool> reconnectClient({
+    InternetAddress? hostAddress,
+    int? port,
+  }) async {
+    final target = hostAddress ?? _reconnectHostAddress;
+    if (target == null) return false;
+    return startClient(
+      hostAddress: target,
+      port: port ?? _reconnectPort,
+      silent: true,
+    );
   }
 
   // ---------------------------------------------------------------- 房主
@@ -274,8 +298,12 @@ class LanTransport implements RoomTransport {
     bool silent = false,
   }) async {
     await stop();
+    _reconnectHostAddress = hostAddress;
+    _reconnectPort = port;
     _role = TransportRole.client;
     _hostAddress = hostAddress;
+    _hostDisconnectReported = false;
+    final generation = ++_clientGeneration;
 
     try {
       _hostSocket = await Socket.connect(
@@ -300,16 +328,21 @@ class LanTransport implements RoomTransport {
       return false;
     }
 
-    _hostSocket!.setOption(SocketOption.tcpNoDelay, true);
+    final socket = _hostSocket!;
+    socket.setOption(SocketOption.tcpNoDelay, true);
     final accumulator = _FrameAccumulator();
-    _hostSocket!.listen(
+    socket.listen(
       (chunk) {
         for (final frame in accumulator.add(chunk)) {
           _deliver(frame);
         }
       },
-      onError: (Object e) => AppLog.error(_tag, '与房主的连接出错', e),
-      onDone: () => AppLog.warn(_tag, '房主已断开连接'),
+      onError:
+          (Object e) =>
+              _handleHostDisconnect(socket, generation, 'socket_error', e),
+      onDone:
+          () =>
+              _handleHostDisconnect(socket, generation, 'remote_closed', null),
       cancelOnError: true,
     );
 
@@ -323,6 +356,36 @@ class LanTransport implements RoomTransport {
     _notifyPeerCount();
     AppLog.info(_tag, '已连接房主 ${hostAddress.address}:$port');
     return true;
+  }
+
+  void _handleHostDisconnect(
+    Socket socket,
+    int generation,
+    String reason,
+    Object? error,
+  ) {
+    if (generation != _clientGeneration || !identical(_hostSocket, socket)) {
+      return;
+    }
+    _hostSocket = null;
+    socket.destroy();
+    _udpKeepalive?.cancel();
+    _udpKeepalive = null;
+    _udp?.close();
+    _udp = null;
+    _notifyPeerCount();
+    if (_hostDisconnectReported) return;
+    _hostDisconnectReported = true;
+    AppLog.warn(
+      _tag,
+      reason == 'remote_closed' ? '房主关闭了 TCP 链路' : '与房主的 TCP 链路异常断开',
+      error,
+    );
+    if (!_disconnections.isClosed) {
+      _disconnections.add(
+        TransportDisconnection(reason: reason, detail: error?.toString()),
+      );
+    }
   }
 
   /// 客户端定期用 UDP 心跳「报到」，房主才知道该把别人的声音发到哪个端口。
@@ -538,6 +601,7 @@ class LanTransport implements RoomTransport {
 
   @override
   Future<void> stop() async {
+    _clientGeneration++;
     _udpKeepalive?.cancel();
     _udpKeepalive = null;
 
@@ -575,5 +639,6 @@ class LanTransport implements RoomTransport {
     await stop();
     await _incoming.close();
     await _peerCount.close();
+    await _disconnections.close();
   }
 }

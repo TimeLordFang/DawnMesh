@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="dev.dawnmesh.intercom.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-08T01:24:10" hostname="homemacmini.local" time="0.111">
+<testsuite name="dev.dawnmesh.intercom.BoundedFrameWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-08T11:47:55" hostname="homemacmini.local" time="0.115">
   <properties/>
-  <testcase name="preservesOrderAndFlushes" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.005"/>
-  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.104"/>
-  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.002"/>
+  <testcase name="preservesOrderAndFlushes" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.006"/>
+  <testcase name="blockedWriteTimesOutAndRejectsPendingFlush" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.108"/>
+  <testcase name="fullQueueClosesSlowPeerWithoutBlockingCaller" classname="dev.dawnmesh.intercom.BoundedFrameWriterTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

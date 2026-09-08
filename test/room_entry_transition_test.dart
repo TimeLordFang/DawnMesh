@@ -118,9 +118,9 @@ void main() {
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 300)),
-    );
+    // 等待会话和 TCP 监听端口真正释放，避免下一个用例立即
+    // 建房时与上一个异步 dispose 抢占同一端口。
+    await waitForRoom(tester, false);
   });
 
   testWidgets('离开房间：原路退回首页', (tester) async {

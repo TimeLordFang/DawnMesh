@@ -128,7 +128,33 @@ void main() {
       expect(info.groupOwnerAddress, '192.168.49.1');
     });
 
+    test('connectAndWait observes an already completed connection', () async {
+      final result = await manager.connectAndWait(
+        '46:b2:f7:ca:c4:b3',
+        credentials: credentials,
+        timeout: const Duration(milliseconds: 50),
+      );
+      expect(result?.groupOwnerAddress, '192.168.49.1');
+    });
+
     test('connectAndWait returns null when connection times out', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            switch (call.method) {
+              case 'isSupported':
+              case 'connect':
+                return true;
+              case 'getConnectionInfo':
+                return {
+                  'isConnected': false,
+                  'isGroupOwner': false,
+                  'groupFormed': false,
+                  'groupOwnerAddress': '',
+                };
+              default:
+                return null;
+            }
+          });
       final result = await manager.connectAndWait(
         '46:b2:f7:ca:c4:b3',
         credentials: credentials,

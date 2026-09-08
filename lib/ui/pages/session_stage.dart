@@ -545,16 +545,54 @@ class _SessionStageState extends State<SessionStage>
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                session.isHost
-                    ? s.hostBroadcastingStatus
-                    : s.memberConnectedStatus,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.88),
-                  fontSize: 15,
-                ),
+              StreamBuilder<RoomState>(
+                stream: session.stateStream,
+                initialData: session.state,
+                builder: (context, snapshot) {
+                  final state = snapshot.data ?? session.state;
+                  final reconnecting = state == RoomState.reconnecting;
+                  final disconnected = state == RoomState.disconnected;
+                  final status =
+                      reconnecting
+                          ? s.roomReconnecting
+                          : disconnected
+                          ? s.roomDisconnected
+                          : session.isHost
+                          ? s.hostBroadcastingStatus
+                          : s.memberConnectedStatus;
+                  return Row(
+                    children: [
+                      if (reconnecting)
+                        const SizedBox(
+                          width: 13,
+                          height: 13,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            color: Colors.white,
+                          ),
+                        )
+                      else if (disconnected)
+                        const Icon(
+                          Icons.link_off_rounded,
+                          size: 15,
+                          color: Colors.white,
+                        ),
+                      if (reconnecting || disconnected)
+                        const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          status,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               if (session.roomInvite case final invite?)
                 RoomInviteRow(

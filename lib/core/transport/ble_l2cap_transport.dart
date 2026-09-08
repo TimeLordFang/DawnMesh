@@ -63,6 +63,8 @@ class BleL2capTransport implements RoomTransport {
   StreamSubscription? _dataSubscription;
   StreamSubscription? _scanSubscription;
   Timer? _pruneTimer;
+  DiscoveredBleRoom? _lastConnectedRoom;
+  bool _stopping = false;
 
   bool _sendErrorReported = false;
 
@@ -70,9 +72,14 @@ class BleL2capTransport implements RoomTransport {
   final StreamController<Frame> _incoming = StreamController<Frame>.broadcast();
   final StreamController<List<DiscoveredBleRoom>> _roomsController =
       StreamController<List<DiscoveredBleRoom>>.broadcast();
+  final StreamController<TransportDisconnection> _disconnections =
+      StreamController<TransportDisconnection>.broadcast();
 
   @override
   Stream<Frame> get incoming => _incoming.stream;
+
+  @override
+  Stream<TransportDisconnection> get disconnections => _disconnections.stream;
 
   @override
   int get peerCount => _peerCount;
@@ -198,7 +205,10 @@ class BleL2capTransport implements RoomTransport {
     }
   }
 
-  Future<bool> connectToHost(DiscoveredBleRoom room) async {
+  Future<bool> connectToHost(
+    DiscoveredBleRoom room, {
+    bool silent = false,
+  }) async {
     if (!await _ensurePermissions()) return false;
     _role = BleRole.clientCentral;
     _sendErrorReported = false;
@@ -210,15 +220,16 @@ class BleL2capTransport implements RoomTransport {
         'psm': room.psm,
       });
       if (ok != true) {
-        AppLog.error(_tag, '连接蓝牙房主失败');
+        if (!silent) AppLog.error(_tag, '连接蓝牙房主失败');
         _role = BleRole.idle;
         return false;
       }
       _peerCount = 1;
+      _lastConnectedRoom = room;
       AppLog.info(_tag, '已连接蓝牙房「${room.roomName}」');
       return true;
     } on PlatformException catch (e) {
-      AppLog.error(_tag, e.message ?? '连接蓝牙房主失败', e);
+      if (!silent) AppLog.error(_tag, e.message ?? '连接蓝牙房主失败', e);
       _role = BleRole.idle;
       return false;
     } on MissingPluginException catch (e) {
@@ -226,6 +237,15 @@ class BleL2capTransport implements RoomTransport {
       _role = BleRole.idle;
       return false;
     }
+  }
+
+  /// 使用上次扫描得到的地址与 PSM 恢复 L2CAP。房主进程仍在时 PSM 保持
+  /// 有效；恢复窗口内反复失败时由上层退避，而不是频繁扫描耗尽 BLE 资源。
+  Future<bool> reconnect() async {
+    final room = _lastConnectedRoom;
+    if (room == null) return false;
+    await stop();
+    return connectToHost(room, silent: true);
   }
 
   // ------------------------------------------------------------ RoomTransport
@@ -298,10 +318,12 @@ class BleL2capTransport implements RoomTransport {
     await stop();
     await _incoming.close();
     await _roomsController.close();
+    await _disconnections.close();
   }
 
   @override
   Future<void> stop() async {
+    _stopping = true;
     _role = BleRole.idle;
     _sendErrorReported = false;
     _peerCount = 0;
@@ -315,6 +337,8 @@ class BleL2capTransport implements RoomTransport {
       await _channel.invokeMethod('stop');
     } catch (e) {
       AppLog.debug(_tag, '关闭蓝牙通道时被忽略的异常：$e');
+    } finally {
+      _stopping = false;
     }
   }
 
@@ -327,6 +351,27 @@ class BleL2capTransport implements RoomTransport {
     ) {
       if (event is! Map) {
         AppLog.warn(_tag, '收到非预期的蓝牙事件类型：${event.runtimeType}');
+        return;
+      }
+      final eventType = event['type'] as String?;
+      if (eventType == 'disconnected') {
+        _peerCount = 0;
+        final reason = event['reason'] as String? ?? 'unknown';
+        final detail = event['detail'] as String?;
+        final diagnostics = event['diagnostics'] as String?;
+        AppLog.warn(
+          _tag,
+          '蓝牙房主链路断开：reason=$reason${diagnostics == null ? '' : '；$diagnostics'}',
+          detail,
+        );
+        if (!_stopping && _role == BleRole.clientCentral) {
+          _role = BleRole.idle;
+          if (!_disconnections.isClosed) {
+            _disconnections.add(
+              TransportDisconnection(reason: reason, detail: detail),
+            );
+          }
+        }
         return;
       }
       final data = event['data'] as Uint8List?;

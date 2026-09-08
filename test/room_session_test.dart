@@ -625,10 +625,9 @@ void main() {
       session.handleIncomingFrame(joinFrame('失联者', token(0x11), seq: 1));
       expect(session.members.length, 2);
 
-      // 把成员 #2 的活跃时间拨回超时阈值之前。
-      session.members
-          .firstWhere((m) => m.memberId == 2)
-          .lastActiveAt = DateTime.now().subtract(const Duration(seconds: 11));
+      // 掉线恢复窗口为 10 分钟，超过后才释放名额。
+      session.members.firstWhere((m) => m.memberId == 2).lastActiveAt =
+          DateTime.now().subtract(const Duration(minutes: 10, seconds: 1));
 
       sent.clear();
       session.pruneStaleMembers();
@@ -646,9 +645,8 @@ void main() {
       await session.createRoom(startAudio: false);
 
       session.handleIncomingFrame(joinFrame('在线者', token(0x22), seq: 1));
-      session.members
-          .firstWhere((m) => m.memberId == 2)
-          .lastActiveAt = DateTime.now().subtract(const Duration(seconds: 11));
+      session.members.firstWhere((m) => m.memberId == 2).lastActiveAt =
+          DateTime.now().subtract(const Duration(minutes: 9, seconds: 59));
 
       // 心跳刷新活跃时间后再清理，成员应保留。
       session.handleIncomingFrame(

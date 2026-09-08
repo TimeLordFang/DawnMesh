@@ -41,6 +41,8 @@ class RoomAdmission {
   }
 
   void startClient() {
+    _ready = false;
+    _clientKeys = null;
     _client = Spake2(isA: true, passwordScalar: passwordScalar);
     _emit(1, token, _client!.message);
   }

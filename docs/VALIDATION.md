@@ -2,12 +2,12 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.8-release.apk`，**53,866,924 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.8` / versionCode **8**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`6ca12f876c2edd545c302a84d96cc960be782cbef67f10d043bc84dcea281f49`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.9-release.apk`，**53,899,852 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.9` / versionCode **9**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`bc724ae66a30f5abff7666c203cc0775887d1435aa05f95810283860c2267761`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
-- 调试 APK 也从最终代码重新构建：`build/app/outputs/flutter-apk/app-debug.apk`；优先将上述 release 安装到两台手机，避免混用签名。
+- 优先将上述 release 安装到所有测试手机，避免混用调试签名。
 
 ## 已执行
 
@@ -17,11 +17,11 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **160 项通过，0 失败** |
+| Flutter 全量测试（串行） | **167 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
 | `:app:testDebugUnitTest` | Kotlin **18 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
-| Flutter debug / release APK | 两种构建均成功；release 使用独立本地密钥 |
+| Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
 | `zipalign -c -P 16 -v 4` | Verification successful |
 | ELF PT_LOAD 对齐 | 全部 **6 个 arm64-v8a / x86_64** 库均 ≥ 16384；包括 Flutter 引擎、Dart AOT、本项目 C++ |
@@ -31,6 +31,16 @@
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。额外记录 GNU_RELRO：Flutter 引擎与本项目 C++ 具备该段；Flutter 3.29.3 生成的 `libapp.so` 没有该段。未对 Flutter 预编译运行时/AOT 生成器做进一步二进制加固审计。以上均为静态包检查，**没有据此声称已在 16 KB 手机运行通过**。
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
+
+## dev.9 本轮完成情况
+
+- BLE L2CAP 原生层不再吞掉 EOF 和 `IOException`；客户端会立即收到结构化断链原因。断开日志带收发帧/字节数、链路存活时间和收发空闲时间；连接期间每 10 秒输出同类快照。
+- Wi-Fi TCP 与蓝牙客户端都会重建物理链路、重新执行邀请码 PAKE 和入房，退避重试总窗口为 10 分钟。恢复期间不关闭音频前台服务与锁屏控件，成功后自动回到通话状态。
+- 房主为掉线成员保留 10 分钟的成员号、加入顺序和名额；Wi-Fi Direct 房主会轮询系统群组状态并在同一窗口内自动重建意外消失的群组。
+- 客户端对房主的存活判定从 6 秒放宽到 12 秒，且任意已认证的房主帧都会续期，降低 Android 后台调度抖动引发的假断线。房间标题下方会显示恢复状态。
+- Wi-Fi Direct 连接等待改为先订阅系统事件并主动回查当前状态，避免厂商系统在方法返回前已广播连接结果导致假超时。
+- 诊断日志的脱敏不再把 `securityPatch`、`batteryOptimizationIgnored` 等长字段名和安全补丁日期误删，仍会隐藏 IP、MAC 和随机长令牌。
+- 新增重连控制器、物理断链重入房、PAKE 重认证、10 分钟成员保留与 Wi-Fi Direct 事件竞态回归。完整串行 Flutter 测试 **167 项**、Kotlin 测试 **18 项**、Android Lint 与 release APK 构建均通过。
 
 ## dev.8 本轮完成情况
 

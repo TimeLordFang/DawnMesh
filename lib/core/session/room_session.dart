@@ -47,10 +47,12 @@ class RoomSession {
   /// (senderId, seq) 有界去重队列容量
   static const int maxDeduplicationKeys = 512;
 
-  /// 心跳每 2 秒一次，5 个周期没收到任何帧的成员视为已离开。
-  /// 房主用它清理静默掉线（TCP 断开不可感知）的成员，
-  /// 否则幽灵名额会一直占位，房满 6 人后新成员永远进不来。
-  static const Duration _memberTimeout = Duration(seconds: 10);
+  /// 房主为掉线成员保留 10 分钟名额和 sessionToken 身份。
+  /// 这样遮挡、锁屏省电或 Wi-Fi Direct 短暂掉组不会把成员踢出房间。
+  static const Duration _memberTimeout = Duration(minutes: 10);
+
+  /// 客户端允许至少 6 次心跳调度抖动；任意来自房主的合法帧都会续期。
+  static const Duration _hostSilenceBeforeReconnect = Duration(seconds: 12);
 
   final AudioIo audioIo;
   final String selfNickname;
@@ -144,6 +146,9 @@ class RoomSession {
   final Map<int, DateTime> _lastAudioAt = {};
   Timer? _speakingWatchTimer;
   Timer? _heartbeatTimer;
+  StreamSubscription<Frame>? _transportIncomingSubscription;
+  StreamSubscription<TransportDisconnection>? _transportDisconnectSubscription;
+  Future<bool> Function()? _reconnectTransport;
 
   /// 麦克风/扬声器是否已经打开，[startAudio] 用它做幂等。
   bool _audioStarted = false;
@@ -205,8 +210,25 @@ class RoomSession {
     _reconnectController = ReconnectController(
       onAttemptReconnect: _attemptReconnect,
       onMaxRetriesReached: () {
-        _updateState(RoomState.disconnected);
+        unawaited(_finishReconnectWindow());
       },
+    );
+  }
+
+  /// 绑定传输层及它的真实断链通知。重连闭包负责恢复物理链路，随后本类
+  /// 会重新执行邀请码 PAKE 和入房流程，沿用 sessionToken 认领原身份。
+  void attachTransport(
+    RoomTransport value, {
+    required Future<bool> Function() reconnect,
+  }) {
+    _transportIncomingSubscription?.cancel();
+    _transportDisconnectSubscription?.cancel();
+    transport = value;
+    onSendFrame = value.send;
+    _reconnectTransport = reconnect;
+    _transportIncomingSubscription = value.incoming.listen(handleIncomingFrame);
+    _transportDisconnectSubscription = value.disconnections.listen(
+      _handleTransportDisconnection,
     );
   }
 
@@ -396,6 +418,7 @@ class RoomSession {
         frame.type != FrameType.admission) {
       return;
     }
+    _markAuthenticatedHostActivity(frame);
     switch (frame.type) {
       case FrameType.admission:
         if (roomInvite != null &&
@@ -447,6 +470,16 @@ class RoomSession {
       case FrameType.handshakeConfirm:
       case FrameType.sealed:
         break;
+    }
+  }
+
+  void _markAuthenticatedHostActivity(Frame frame) {
+    if (_isHost) return;
+    for (final member in _members.values) {
+      if (member.isHost && member.memberId == frame.senderId) {
+        member.lastActiveAt = DateTime.now();
+        return;
+      }
     }
   }
 
@@ -581,8 +614,14 @@ class RoomSession {
     }
 
     if (roomInvite != null && !_members.containsKey(_selfMemberId)) return;
+    final recovered = _state == RoomState.reconnecting;
     if (_state != RoomState.inRoom) {
       _updateState(RoomState.inRoom);
+    }
+    if (recovered) {
+      final seconds = _reconnectController.elapsed.inSeconds;
+      _reconnectController.cancel();
+      AppLog.info('重连', '房间连接已恢复（耗时 ${seconds}s）');
     }
 
     // 名单换了以后，已经不在房里的人的音频流留着只会占内存。
@@ -681,14 +720,12 @@ class RoomSession {
 
     final now = DateTime.now();
     final hostAlive =
-        now.difference(currentHost.lastActiveAt).inMilliseconds < 6000;
+        now.difference(currentHost.lastActiveAt) < _hostSilenceBeforeReconnect;
     if (hostAlive) return;
 
     final plan = _cachedPlan;
-    if (plan == null) {
-      // 没有快照就无从得知谁该接任、别人在哪，只能散会。
-      AppLog.warn('RoomSession', '房主已失联，且没有可用的交接快照，房间解散');
-      _updateState(RoomState.disconnected);
+    if (plan == null || transport?.supportsHostTransfer != true) {
+      _beginReconnect('超过 ${_hostSilenceBeforeReconnect.inSeconds} 秒未收到房主数据');
       return;
     }
 
@@ -937,9 +974,8 @@ class RoomSession {
     });
   }
 
-  /// 房主清理静默掉线的成员。心跳每 2 秒一次，10 秒收不到任何心跳
-  /// 即视为离开；不清理的话 TCP 静默断开（WiFi 切换、杀进程）的成员
-  /// 会一直占着名额，房满 6 人后谁都进不来。
+  /// 房主清理超过 10 分钟没有合法帧的成员。恢复期内名额会保留，
+  /// 重连时使用 sessionToken 认领原成员号和加入顺序。
   ///
   /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
   void pruneStaleMembers() {
@@ -967,7 +1003,10 @@ class RoomSession {
 
   /// PTT 按住/松开切换。
   void setPtt(bool isPressed) {
-    if (isPressed && (isFullDuplex || isMuted || _closed)) return;
+    if (isPressed &&
+        (isFullDuplex || isMuted || _closed || _state != RoomState.inRoom)) {
+      return;
+    }
     isPttPressed = isPressed;
     _notifyControls();
     final self = _members[_selfMemberId];
@@ -1006,16 +1045,87 @@ class RoomSession {
   }
 
   Future<bool> _attemptReconnect() async {
+    if (_closed || _isHost) return false;
+    final reconnect = _reconnectTransport;
+    if (reconnect == null) return false;
     _updateState(RoomState.reconnecting);
-    // 不重开麦：音频管线与传输层是独立的，重连期间它一直在跑，
-    // 重启一次反而会造成一段可听见的断音。
-    await joinRoom(startAudio: false);
-    return _state == RoomState.inRoom;
+    AppLog.info(
+      '重连',
+      '第 ${_reconnectController.retryCount} 次尝试恢复链路，剩余 ${_reconnectController.remaining.inMinutes} 分钟',
+    );
+    if (!await reconnect()) return false;
+    if (_closed) return false;
+
+    // 物理链路恢复后重新 PAKE，避免沿用旧连接上的握手状态。房主仍持有
+    // 同一个随机房间密钥，sessionToken 则让重连成员取回原来的身份。
+    secureCodec = null;
+    _admitted = false;
+    _selfMemberId = 0;
+    _members.clear();
+    _lastAudioAt.clear();
+    await audioIo.clearRemoteMembers();
+    _updateState(RoomState.reconnecting);
+
+    final joined = stateStream
+        .firstWhere((value) => value == RoomState.inRoom)
+        .timeout(const Duration(seconds: 8));
+    if (_admission != null) {
+      _admission!.startClient();
+    } else {
+      await _sendJoinRequest();
+    }
+    _startHeartbeat();
+    try {
+      await joined;
+      return true;
+    } on TimeoutException {
+      AppLog.warn('重连', '链路已恢复，但 8 秒内未重新通过入房验证');
+      return false;
+    }
   }
 
   void triggerDisconnect() {
+    _beginReconnect('手动触发链路恢复');
+  }
+
+  void _handleTransportDisconnection(TransportDisconnection event) {
+    _beginReconnect(
+      '底层链路断开：${event.reason}${event.detail == null ? '' : ' (${event.detail})'}',
+    );
+  }
+
+  void _beginReconnect(String reason) {
+    if (_closed || _isHost || _state == RoomState.idle) return;
+    if (_reconnectTransport == null) {
+      AppLog.error('重连', '$reason；当前传输层没有恢复入口');
+      _updateState(RoomState.disconnected);
+      return;
+    }
+    if (_reconnectController.isReconnecting) return;
+    isPttPressed = false;
+    _voiceGate.reset();
+    _notifyControls();
+    unawaited(audioIo.clearRemoteMembers());
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _updateState(RoomState.reconnecting);
+    AppLog.warn('重连', '$reason；将在 10 分钟内自动恢复');
     _reconnectController.start();
+  }
+
+  Future<void> _finishReconnectWindow() async {
+    if (_closed || _isHost) return;
+    AppLog.error('重连', '自动恢复已持续 10 分钟，房间连接未能恢复');
+    _audioStarted = false;
+    isPttPressed = false;
+    _voiceGate.reset();
+    await _backgroundControls?.close();
+    _backgroundControls = null;
+    await audioIo.stopCapture();
+    await audioIo.stopPlayback();
+    await audioIo.clearRemoteMembers();
+    await transport?.stop();
+    _updateState(RoomState.disconnected);
   }
 
   /// Hook for network transmission
@@ -1468,6 +1578,11 @@ class RoomSession {
     _heartbeatTimer = null;
     _audioStarted = false;
     _reconnectController.cancel();
+    await _transportDisconnectSubscription?.cancel();
+    _transportDisconnectSubscription = null;
+    await _transportIncomingSubscription?.cancel();
+    _transportIncomingSubscription = null;
+    _reconnectTransport = null;
 
     await audioIo.stopCapture();
     await audioIo.stopPlayback();

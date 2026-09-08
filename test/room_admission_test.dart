@@ -108,4 +108,38 @@ void main() {
       expect(sent.every((f) => f.payload[1] == 2), isTrue); // No key grant.
     },
   );
+
+  test('client can repeat PAKE after a physical reconnection', () async {
+    final hostFrames = <Frame>[];
+    final guestFrames = <Frame>[];
+    final guestCodecs = <SecureFrameCodec>[];
+    final host = RoomAdmission(
+      passwordScalar: BigInt.from(123456),
+      token: Uint8List(16),
+      send: hostFrames.add,
+      onReady: (_) async {},
+    );
+    final guest = RoomAdmission(
+      passwordScalar: BigInt.from(123456),
+      token: Uint8List(16)..[0] = 7,
+      send: guestFrames.add,
+      onReady: (codec) async => guestCodecs.add(codec),
+    );
+    addTearDown(host.close);
+    addTearDown(guest.close);
+    await host.startHost();
+
+    Future<void> authenticate() async {
+      guest.startClient();
+      await host.handle(guestFrames.removeAt(0));
+      await guest.handle(hostFrames.removeAt(0));
+      await host.handle(guestFrames.removeAt(0));
+      await guest.handle(hostFrames.removeAt(0));
+    }
+
+    await authenticate();
+    await authenticate();
+    expect(guestCodecs, hasLength(2));
+    expect(identical(guestCodecs.first, guestCodecs.last), isFalse);
+  });
 }

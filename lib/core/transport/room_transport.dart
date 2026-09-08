@@ -2,6 +2,19 @@ import 'dart:async';
 
 import '../protocol/frame.dart';
 
+/// 底层链路意外中断。主动离房或切换传输层不会产生该事件。
+class TransportDisconnection {
+  final String reason;
+  final String? detail;
+  final DateTime occurredAt;
+
+  TransportDisconnection({
+    required this.reason,
+    this.detail,
+    DateTime? occurredAt,
+  }) : occurredAt = occurredAt ?? DateTime.now();
+}
+
 /// 房间传输层的统一契约。
 ///
 /// WiFi 房（[LanTransport]）和蓝牙房（[BleL2capTransport]）在上层看来必须
@@ -10,6 +23,12 @@ import '../protocol/frame.dart';
 abstract class RoomTransport {
   /// 收到的、需要交给 `RoomSession.handleIncomingFrame` 的帧。
   Stream<Frame> get incoming;
+
+  /// 客户端到房主的底层链路意外断开事件。
+  ///
+  /// 房主侧单个成员离开不应让整个房间重连，因此只上报客户端主链路。
+  Stream<TransportDisconnection> get disconnections =>
+      const Stream<TransportDisconnection>.empty();
 
   /// 当前连接上的对端数量。
   int get peerCount;

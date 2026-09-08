@@ -127,7 +127,7 @@ class SemVer implements Comparable<SemVer> {
 }
 
 class UpdateService {
-  static const String currentVersion = '0.1.0-dev.8';
+  static const String currentVersion = '0.1.0-dev.9';
 
   Future<UpdateState> checkUpdate() async {
     return const UpdateFailed('DawnMesh 独立开发版，请使用自己编译并签名的 APK 更新。');

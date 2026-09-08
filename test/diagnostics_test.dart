@@ -14,6 +14,12 @@ void main() {
       expect(sanitized.contains('[redacted-token]'), isTrue);
     });
 
+    test('DiagnosticSanitizer preserves system field names and dates', () {
+      const input =
+          'securityPatch=2025-08-01; batteryOptimizationIgnored=false';
+      expect(DiagnosticSanitizer.sanitize(input), input);
+    });
+
     test('DiagnosticReport creates valid JSON and issue summary', () {
       final report = DiagnosticReport.create(
         appVersion: '0.1.0-alpha.8',

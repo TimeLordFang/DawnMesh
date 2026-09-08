@@ -205,18 +205,31 @@ class WifiDirectManager {
     required WifiDirectCredentials credentials,
     Duration timeout = const Duration(seconds: 15),
   }) async {
+    final ready = Completer<WifiP2pConnectionInfo>();
+    final subscription = connectionStream.listen((info) {
+      if (!ready.isCompleted &&
+          info.isConnected &&
+          info.groupOwnerAddress.isNotEmpty) {
+        ready.complete(info);
+      }
+    });
     final initiated = await connect(deviceAddress, credentials);
     if (!initiated) {
+      await subscription.cancel();
       AppLog.error(_tag, '发起 Wi-Fi Direct 直连请求失败');
       return null;
     }
 
     try {
-      final info = await connectionStream
-          .firstWhere(
-            (info) => info.isConnected && info.groupOwnerAddress.isNotEmpty,
-          )
-          .timeout(timeout);
+      // 某些系统在 create/connect 方法返回前就已发出连接事件。
+      // 事先订阅之外再主动查一次，避免错过唯一一次广播后假超时。
+      final current = await getConnectionInfo();
+      if (!ready.isCompleted &&
+          current.isConnected &&
+          current.groupOwnerAddress.isNotEmpty) {
+        ready.complete(current);
+      }
+      final info = await ready.future.timeout(timeout);
       AppLog.info(_tag, 'Wi-Fi Direct 直连链路已就绪 (GO=${info.groupOwnerAddress})');
       return info;
     } on TimeoutException {
@@ -225,6 +238,8 @@ class WifiDirectManager {
     } catch (e) {
       AppLog.error(_tag, 'Wi-Fi Direct 握手连接异常: $e');
       return null;
+    } finally {
+      await subscription.cancel();
     }
   }
 

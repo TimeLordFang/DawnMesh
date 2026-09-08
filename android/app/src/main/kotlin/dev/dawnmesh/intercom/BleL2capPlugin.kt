@@ -19,14 +19,17 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.os.SystemClock
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.EOFException
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 蓝牙房的 BLE L2CAP CoC（面向连接通道）实现。
@@ -499,12 +502,14 @@ class BleL2capPlugin(
         val socket = try {
             a.getRemoteDevice(address).createInsecureL2capChannel(psm)
         } catch (e: Exception) {
+            Log.w(TAG, "创建蓝牙通道失败：$address, psm=$psm", e)
             result.error("CONNECT_FAILED", "无法创建蓝牙通道：${e.message}", null)
             return
         }
         pendingConnectSocket = socket
         mainHandler.postDelayed({
             if (completed.compareAndSet(false, true)) {
+                Log.w(TAG, "连接蓝牙房超时：$address, psm=$psm")
                 try { socket.close() } catch (_: IOException) {}
                 if (pendingConnectSocket === socket) pendingConnectSocket = null
                 result.error("CONNECT_TIMEOUT", "连接蓝牙房超时，请重新扫描后重试", null)
@@ -526,6 +531,7 @@ class BleL2capPlugin(
                     }
                 }
             } catch (e: Exception) {
+                Log.w(TAG, "连接蓝牙房主失败：$address, psm=$psm", e)
                 try { socket.close() } catch (_: IOException) {}
                 mainHandler.post {
                     if (pendingConnectSocket === socket) pendingConnectSocket = null
@@ -541,21 +547,58 @@ class BleL2capPlugin(
 
     private inner class PeerLink(val socket: BluetoothSocket, val address: String) {
         val alive = AtomicBoolean(true)
+        val disconnectReported = AtomicBoolean(false)
+        val openedAt = SystemClock.elapsedRealtime()
+        val rxFrames = AtomicLong(0)
+        val rxBytes = AtomicLong(0)
+        val txFrames = AtomicLong(0)
+        val txBytes = AtomicLong(0)
+        @Volatile var lastRxAt = openedAt
+        @Volatile var lastTxAt = openedAt
+        @Volatile var requestedCloseReason: String? = null
+        private val diagnosticsRunnable = object : Runnable {
+            override fun run() {
+                if (!alive.get()) return
+                Log.d(TAG, "蓝牙链路状态：$address；${diagnostics()}")
+                mainHandler.postDelayed(this, 10_000)
+            }
+        }
         private val writer = BoundedFrameWriter(
-            write = { data -> socket.outputStream.write(data); socket.outputStream.flush() },
+            write = { data ->
+                socket.outputStream.write(data)
+                socket.outputStream.flush()
+                txFrames.incrementAndGet()
+                txBytes.addAndGet(data.size.toLong())
+                lastTxAt = SystemClock.elapsedRealtime()
+            },
             closeTransport = {
                 alive.set(false)
                 try { socket.close() } catch (_: IOException) {}
             },
-            onFailure = {
-                peers.remove(address, this)
-                mainHandler.post { dataSink?.error("SLOW_PEER", "蓝牙连接写入超时或积压，已断开；请靠近后重新加入", null) }
+            onFailure = { error ->
+                removePeer(this@PeerLink, "write_failure", error)
             },
         )
 
         fun write(data: ByteArray): Boolean = writer.send(data)
         fun flush() = writer.flush()
-        fun close() { writer.close() }
+        fun startDiagnostics() {
+            mainHandler.postDelayed(diagnosticsRunnable, 10_000)
+        }
+        fun recordRx(bytes: Int) {
+            rxFrames.incrementAndGet()
+            rxBytes.addAndGet(bytes.toLong())
+            lastRxAt = SystemClock.elapsedRealtime()
+        }
+        fun diagnostics(now: Long = SystemClock.elapsedRealtime()): String =
+            "ageMs=${now - openedAt},rxFrames=${rxFrames.get()},rxBytes=${rxBytes.get()}," +
+                "txFrames=${txFrames.get()},txBytes=${txBytes.get()}," +
+                "rxIdleMs=${now - lastRxAt},txIdleMs=${now - lastTxAt}"
+        fun close(reason: String = "local_stop") {
+            requestedCloseReason = reason
+            mainHandler.removeCallbacks(diagnosticsRunnable)
+            writer.close()
+        }
     }
 
     private fun registerPeer(socket: BluetoothSocket): PeerLink {
@@ -563,6 +606,7 @@ class BleL2capPlugin(
         val link = PeerLink(socket, address)
         peers[address] = link
         Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
+        link.startDiagnostics()
 
         Thread({ readLoop(link) }, "dawn-ble-read-$address").start()
         return link
@@ -577,61 +621,72 @@ class BleL2capPlugin(
             link.socket.inputStream
         } catch (e: IOException) {
             Log.e(TAG, "拿不到 ${link.address} 的输入流", e)
-            removePeer(link)
+            removePeer(link, "input_stream_error", e)
             return
         }
 
         val header = ByteArray(FRAME_HEADER_SIZE)
+        var reason = "remote_eof"
+        var failure: Throwable? = null
+        try {
+            while (link.alive.get()) {
+                readFully(input, header, FRAME_HEADER_SIZE)
 
-        while (link.alive.get()) {
-            if (!readFully(input, header, FRAME_HEADER_SIZE)) break
+                val payloadLength =
+                    ((header[4].toInt() and 0xFF) shl 8) or (header[5].toInt() and 0xFF)
+                if (payloadLength > MAX_PAYLOAD) {
+                    reason = "frame_desync"
+                    Log.e(TAG, "${link.address} 帧长度 $payloadLength 越界，判定为流错位并断开")
+                    break
+                }
 
-            val payloadLength =
-                ((header[4].toInt() and 0xFF) shl 8) or (header[5].toInt() and 0xFF)
-            if (payloadLength > MAX_PAYLOAD) {
-                Log.e(TAG, "${link.address} 帧长度 $payloadLength 越界，判定为流错位并断开")
-                break
+                val full = ByteArray(FRAME_HEADER_SIZE + payloadLength)
+                header.copyInto(full, 0)
+                if (payloadLength > 0) {
+                    val payload = ByteArray(payloadLength)
+                    readFully(input, payload, payloadLength)
+                    payload.copyInto(full, FRAME_HEADER_SIZE)
+                }
+                link.recordRx(full.size)
+
+                // Host-only roster, handover, snapshot and chat-history commands
+                // must never be injected by an incoming client link.
+                val type = header[0].toInt() and 0xFF
+                if (isHost && type in listOf(0x03, 0x07, 0x08, 0x0d)) continue
+
+                // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
+                if (isHost) sendData(full, excludeAddress = link.address)
+
+                val event = mapOf<String, Any>(
+                    "type" to "frame",
+                    "data" to full,
+                    "peerAddress" to link.address,
+                )
+                mainHandler.post { dataSink?.success(event) }
             }
-
-            val full = ByteArray(FRAME_HEADER_SIZE + payloadLength)
-            header.copyInto(full, 0)
-            if (payloadLength > 0) {
-                val payload = ByteArray(payloadLength)
-                if (!readFully(input, payload, payloadLength)) break
-                payload.copyInto(full, FRAME_HEADER_SIZE)
-            }
-
-            // Host-only roster, handover, snapshot and chat-history commands
-            // must never be injected by an incoming client link.
-            val type = header[0].toInt() and 0xFF
-            if (isHost && type in listOf(0x03, 0x07, 0x08, 0x0d)) continue
-
-            // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
-            if (isHost) sendData(full, excludeAddress = link.address)
-
-            val event = mapOf<String, Any>(
-                "data" to full,
-                "peerAddress" to link.address,
-            )
-            mainHandler.post { dataSink?.success(event) }
+        } catch (e: EOFException) {
+            reason = "remote_eof"
+            failure = e
+        } catch (e: IOException) {
+            reason = "read_error"
+            failure = e
+        } catch (e: Exception) {
+            reason = "read_failure"
+            failure = e
+        } finally {
+            link.requestedCloseReason?.let { reason = it }
+            removePeer(link, reason, failure)
         }
-
-        Log.i(TAG, "蓝牙链路断开：${link.address}")
-        removePeer(link)
     }
 
-    private fun readFully(input: java.io.InputStream, dst: ByteArray, length: Int): Boolean {
+    @Throws(IOException::class)
+    private fun readFully(input: java.io.InputStream, dst: ByteArray, length: Int) {
         var offset = 0
         while (offset < length) {
-            val read = try {
-                input.read(dst, offset, length - offset)
-            } catch (e: IOException) {
-                return false
-            }
-            if (read < 0) return false
+            val read = input.read(dst, offset, length - offset)
+            if (read < 0) throw EOFException("stream ended at $offset/$length bytes")
             offset += read
         }
-        return true
     }
 
     private fun sendData(data: ByteArray, excludeAddress: String?): Boolean {
@@ -645,16 +700,32 @@ class BleL2capPlugin(
                 if (link.write(data)) anySent = true
             } catch (e: IOException) {
                 Log.w(TAG, "向 $address 发送失败，断开该链路", e)
-                removePeer(link)
+                removePeer(link, "write_error", e)
             }
         }
         return anySent
     }
 
-    private fun removePeer(link: PeerLink) {
+    private fun removePeer(link: PeerLink, reason: String, error: Throwable? = null) {
+        if (!link.disconnectReported.compareAndSet(false, true)) return
+        val wasHostLink = hostLink === link
         peers.remove(link.address, link)
-        link.close()
+        link.close(reason)
         if (hostLink === link) hostLink = null
+        val detail = error?.let { "${it.javaClass.simpleName}: ${it.message.orEmpty()}" }
+        val message = "蓝牙链路断开：${link.address}；reason=$reason；${link.diagnostics()}"
+        if (error == null || reason == "local_stop") Log.i(TAG, message)
+        else Log.w(TAG, message, error)
+        if (wasHostLink && reason != "local_stop") {
+            val event = mapOf(
+                "type" to "disconnected",
+                "reason" to reason,
+                "detail" to detail,
+                "peerAddress" to link.address,
+                "diagnostics" to link.diagnostics(),
+            )
+            mainHandler.post { dataSink?.success(event) }
+        }
     }
 
     // ---------------------------------------------------------------- 收尾
@@ -686,7 +757,7 @@ class BleL2capPlugin(
         serverSocket = null
         acceptThread = null
 
-        for (link in peers.values) link.close()
+        for (link in peers.values) link.close("local_stop")
         peers.clear()
         hostLink = null
 

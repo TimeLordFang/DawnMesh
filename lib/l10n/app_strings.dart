@@ -124,6 +124,12 @@ class AppStrings {
   String roomOnlineCount(int count) =>
       isEn ? '$count people here' : '$count 人在这里';
   String get roomConnected => isEn ? 'Connected' : '已连接';
+  String get roomReconnecting =>
+      isEn
+          ? 'Reconnecting automatically · up to 10 min'
+          : '连接中断 · 自动恢复中（最长 10 分钟）';
+  String get roomDisconnected =>
+      isEn ? 'Could not restore the room connection' : '房间连接暂未恢复';
   String get speaking => isEn ? 'Speaking' : '正在说话';
   String get muted => isEn ? 'Muted' : '已静音';
 

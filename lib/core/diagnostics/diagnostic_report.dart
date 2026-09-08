@@ -2,15 +2,26 @@ import 'dart:convert';
 import 'dart:io';
 
 class DiagnosticSanitizer {
-  static final RegExp _macAddress =
-      RegExp(r'\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b', caseSensitive: false);
+  static final RegExp _macAddress = RegExp(
+    r'\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b',
+    caseSensitive: false,
+  );
   static final RegExp _ipv4Address = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b');
-  static final RegExp _longToken = RegExp(r'\b[A-Za-z0-9+/=_-]{24,}\b');
+  static final RegExp _longToken = RegExp(r'\b[A-Za-z0-9+/_-]{24,}={0,2}\b');
+  static final RegExp _letter = RegExp(r'[A-Za-z]');
+  static final RegExp _digit = RegExp(r'\d');
 
   static String sanitize(String input) {
     var out = input.replaceAll(_macAddress, '[redacted-address]');
     out = out.replaceAll(_ipv4Address, '[redacted-address]');
-    out = out.replaceAll(_longToken, '[redacted-token]');
+    out = out.replaceAllMapped(_longToken, (match) {
+      final value = match.group(0)!;
+      // 长字段名和 ISO 日期不是秘密；随机令牌通常同时含字母和数字。
+      // 避免把 batteryOptimizationIgnored、securityPatch 等诊断字段误删。
+      return _letter.hasMatch(value) && _digit.hasMatch(value)
+          ? '[redacted-token]'
+          : value;
+    });
     return out;
   }
 }
@@ -52,9 +63,8 @@ class DiagnosticReport {
     String networkQuality = 'Unknown',
     List<String> recentErrors = const [],
   }) {
-    final sanitizedErrors = recentErrors
-        .map((e) => DiagnosticSanitizer.sanitize(e))
-        .toList();
+    final sanitizedErrors =
+        recentErrors.map((e) => DiagnosticSanitizer.sanitize(e)).toList();
 
     return DiagnosticReport(
       appVersion: appVersion,
@@ -71,18 +81,18 @@ class DiagnosticReport {
   }
 
   Map<String, dynamic> toJson() => {
-        'schemaVersion': schemaVersion,
-        'appVersion': appVersion,
-        'deviceModel': deviceModel,
-        'osVersion': osVersion,
-        'roomType': roomType,
-        'connected': connected,
-        'memberCount': memberCount,
-        'receivedFrames': receivedFrames,
-        'concealedFrames': concealedFrames,
-        'networkQuality': networkQuality,
-        'recentErrors': recentErrors,
-      };
+    'schemaVersion': schemaVersion,
+    'appVersion': appVersion,
+    'deviceModel': deviceModel,
+    'osVersion': osVersion,
+    'roomType': roomType,
+    'connected': connected,
+    'memberCount': memberCount,
+    'receivedFrames': receivedFrames,
+    'concealedFrames': concealedFrames,
+    'networkQuality': networkQuality,
+    'recentErrors': recentErrors,
+  };
 
   String encode() => const JsonEncoder.withIndent('  ').convert(toJson());
 

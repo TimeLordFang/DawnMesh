@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/audio/audio_io.dart';
+import '../../core/diagnostics/app_log.dart';
 import '../../core/preferences/nickname_store.dart';
 import '../../core/security/room_invite.dart';
 import '../widgets/room_invite_dialog.dart';
@@ -78,6 +79,9 @@ class _HomeContentState extends State<HomeContent> {
   Timer? _periodicScanTimer;
   StreamSubscription<List<WifiP2pPeer>>? _p2pSubscription;
   bool _isHostingWifiDirect = false;
+  bool _restoringWifiDirectGroup = false;
+  WifiDirectCredentials? _hostWifiCredentials;
+  DateTime? _wifiDirectRecoveryStartedAt;
 
   @override
   void initState() {
@@ -113,6 +117,9 @@ class _HomeContentState extends State<HomeContent> {
       _lanDiscovery.stopAdvertising();
       WifiDirectManager.instance.removeGroup();
       _isHostingWifiDirect = false;
+      _restoringWifiDirectGroup = false;
+      _hostWifiCredentials = null;
+      _wifiDirectRecoveryStartedAt = null;
     }
   }
 
@@ -235,9 +242,7 @@ class _HomeContentState extends State<HomeContent> {
       mode: RoomMode.bluetoothPtt,
     );
     await session.protectWithInvite(invite);
-    session.transport = transport;
-    session.onSendFrame = transport.send;
-    transport.incoming.listen(session.handleIncomingFrame);
+    session.attachTransport(transport, reconnect: transport.reconnect);
     final joined = session.stateStream
         .firstWhere((state) => state == RoomState.inRoom)
         .timeout(const Duration(seconds: 8));
@@ -262,9 +267,42 @@ class _HomeContentState extends State<HomeContent> {
     _periodicScanTimer?.cancel();
     _periodicScanTimer = Timer.periodic(const Duration(seconds: 6), (_) {
       if (mounted && _isHostingWifiDirect) {
-        WifiDirectManager.instance.discoverPeers();
+        unawaited(_maintainWifiDirectHost());
       }
     });
+  }
+
+  Future<void> _maintainWifiDirectHost() async {
+    if (_restoringWifiDirectGroup || !_isHostingWifiDirect) return;
+    final credentials = _hostWifiCredentials;
+    if (credentials == null) return;
+
+    _restoringWifiDirectGroup = true;
+    try {
+      final manager = WifiDirectManager.instance;
+      final info = await manager.getConnectionInfo();
+      if (info.groupFormed && info.isGroupOwner) {
+        if (_wifiDirectRecoveryStartedAt != null) {
+          AppLog.info('WiFiDirect', '房主群组已自动恢复');
+          _wifiDirectRecoveryStartedAt = null;
+        }
+        await manager.discoverPeers();
+        return;
+      }
+
+      final now = DateTime.now();
+      final startedAt = _wifiDirectRecoveryStartedAt ??= now;
+      if (now.difference(startedAt) >= const Duration(minutes: 10)) {
+        AppLog.error('WiFiDirect', '房主群组在 10 分钟内未能恢复，已停止自动重建');
+        _isHostingWifiDirect = false;
+        return;
+      }
+
+      AppLog.warn('WiFiDirect', '检测到房主群组丢失，正在自动重建');
+      await manager.createGroup(credentials);
+    } finally {
+      _restoringWifiDirectGroup = false;
+    }
   }
 
   void _stopPeriodicScan() {
@@ -892,11 +930,9 @@ class _HomeContentState extends State<HomeContent> {
 
     if (_selectedMode == RoomMode.wifiFullDuplex) {
       _isHostingWifiDirect = true;
-      unawaited(
-        WifiDirectManager.instance.createGroup(
-          WifiDirectCredentials.fromInvite(invite),
-        ),
-      );
+      _hostWifiCredentials = WifiDirectCredentials.fromInvite(invite);
+      _wifiDirectRecoveryStartedAt = null;
+      unawaited(WifiDirectManager.instance.createGroup(_hostWifiCredentials!));
       _startPeriodicScan();
       final transport = LanTransport(controlOnly: true);
       if (!await transport.startHost()) {
@@ -904,13 +940,15 @@ class _HomeContentState extends State<HomeContent> {
         _stopPeriodicScan();
         await WifiDirectManager.instance.removeGroup();
         _isHostingWifiDirect = false;
+        _hostWifiCredentials = null;
         if (mounted) setState(() => _busy = false);
         _showConnectionError('无法开启 Wi-Fi 房间，请检查网络和端口占用。');
         return;
       }
-      session.transport = transport;
-      session.onSendFrame = transport.send;
-      transport.incoming.listen(session.handleIncomingFrame);
+      session.attachTransport(
+        transport,
+        reconnect: () => transport.startHost(),
+      );
     } else {
       final transport = BleL2capTransport();
       if (!await transport.startHost(roomName: roomName)) {
@@ -919,9 +957,10 @@ class _HomeContentState extends State<HomeContent> {
         _showConnectionError('蓝牙广播未能开启。请检查蓝牙和附近设备权限后重试。');
         return;
       }
-      session.transport = transport;
-      session.onSendFrame = transport.send;
-      transport.incoming.listen(session.handleIncomingFrame);
+      session.attachTransport(
+        transport,
+        reconnect: () => transport.startHost(roomName: roomName),
+      );
     }
 
     // 不在这里开麦：AudioRecord/AudioTrack 的构造压在 Android 主线程上，
@@ -973,9 +1012,7 @@ class _HomeContentState extends State<HomeContent> {
       return;
     }
     await session.protectWithInvite(invite);
-    session.transport = transport;
-    session.onSendFrame = transport.send;
-    transport.incoming.listen(session.handleIncomingFrame);
+    session.attachTransport(transport, reconnect: transport.reconnectClient);
 
     // 同 _onCreateRoom：开麦推迟到转场跑完。
     final joined = session.stateStream
@@ -1019,9 +1056,10 @@ class _HomeContentState extends State<HomeContent> {
       ),
     );
 
+    final credentials = WifiDirectCredentials.fromInvite(invite);
     final connectionInfo = await WifiDirectManager.instance.connectAndWait(
       peer.address,
-      credentials: WifiDirectCredentials.fromInvite(invite),
+      credentials: credentials,
     );
     if (connectionInfo == null ||
         !connectionInfo.isConnected ||
@@ -1054,9 +1092,26 @@ class _HomeContentState extends State<HomeContent> {
       return;
     }
     await session.protectWithInvite(invite);
-    session.transport = transport;
-    session.onSendFrame = transport.send;
-    transport.incoming.listen(session.handleIncomingFrame);
+    session.attachTransport(
+      transport,
+      reconnect: () async {
+        var info = await WifiDirectManager.instance.getConnectionInfo();
+        if (!info.isConnected || info.groupOwnerAddress.isEmpty) {
+          final recovered = await WifiDirectManager.instance.connectAndWait(
+            peer.address,
+            credentials: credentials,
+            timeout: const Duration(seconds: 12),
+          );
+          if (recovered == null) return false;
+          info = recovered;
+        }
+        if (!info.isConnected || info.groupOwnerAddress.isEmpty) return false;
+        return transport.reconnectClient(
+          hostAddress: InternetAddress(info.groupOwnerAddress),
+          port: 8988,
+        );
+      },
+    );
 
     final joined = session.stateStream
         .firstWhere((state) => state == RoomState.inRoom)

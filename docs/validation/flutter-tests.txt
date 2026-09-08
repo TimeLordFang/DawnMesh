@@ -1,413 +1,12 @@
-00:00 +0: loading /Users/judoon/workspace/DawnMesh/test/update_service_test.dart00:00 +0: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Older pre-release (alpha.9) is NOT newer than current (alpha.10)00:00 +1: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Older pre-release (alpha.9) is NOT newer than current (alpha.10)00:00 +1: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Identical version is NOT newer00:00 +2: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Identical version is NOT newer00:00 +2: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Newer pre-release or channel (alpha.11, beta.1, rc.1) IS newer than alpha.1000:00 +3: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Newer pre-release or channel (alpha.11, beta.1, rc.1) IS newer than alpha.1000:00 +3: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Formal release 0.1.0 is newer than pre-release 0.1.0-alpha.1000:00 +4: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Formal release 0.1.0 is newer than pre-release 0.1.0-alpha.1000:00 +4: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Major and minor version bumps are newer00:00 +5: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Major and minor version bumps are newer00:00 +5: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Build metadata (+...) is handled correctly00:00 +6: /Users/judoon/workspace/DawnMesh/test/update_service_test.dart: UpdateService SemVer Comparison Tests Build metadata (+...) is handled correctly00:00 +6: loading /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart00:01 +6: loading /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart00:01 +6: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 往返一致00:01 +7: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 往返一致00:01 +7: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 中文昵称按 UTF-8 截断且不会切出半个字00:01 +8: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 中文昵称按 UTF-8 截断且不会切出半个字00:01 +8: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 载荷不超过帧上限00:01 +9: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 载荷不超过帧上限00:01 +9: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 非 ASCII 端点被拒绝00:01 +10: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 非 ASCII 端点被拒绝00:01 +10: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 尾部多余字节被拒绝00:01 +11: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 尾部多余字节被拒绝00:01 +11: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 截断的载荷被拒绝00:01 +12: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferCodec 编解码 截断的载荷被拒绝00:01 +12: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 成员 ID 重复被拒绝00:01 +13: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 成员 ID 重复被拒绝00:01 +13: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 端点重复被拒绝00:01 +14: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 端点重复被拒绝00:01 +14: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 继任者不在成员表里被拒绝00:01 +15: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 继任者不在成员表里被拒绝00:01 +15: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 成员数超过 6 被拒绝00:01 +16: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferPlan 校验 成员数超过 6 被拒绝00:01 +16: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 按 joinOrder 升序取最资深的00:01 +17: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 按 joinOrder 升序取最资深的00:01 +17: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 joinOrder 相同时按 memberId 升序00:01 +18: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 joinOrder 相同时按 memberId 升序00:01 +18: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 未连接或端点为空的候选被排除00:01 +19: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 未连接或端点为空的候选被排除00:01 +19: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 没有合格候选时返回 null00:01 +20: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostElection 选举规则 没有合格候选时返回 null00:01 +20: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 继任者排到最前，其余按 joinOrder 顺延00:01 +21: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 继任者排到最前，其余按 joinOrder 顺延00:01 +21: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 nextJoinOrder 接在最大值之后00:01 +22: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 nextJoinOrder 接在最大值之后00:01 +22: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 expectedByEndpoint 不包含新房主自己00:01 +23: /Users/judoon/workspace/DawnMesh/test/host_transfer_test.dart: HostTransferSeed 成员号重编 expectedByEndpoint 不包含新房主自己00:01 +23: loading /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart00:01 +23: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: invite hides after ten seconds and each reveal starts a fresh timer00:01 +24: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: invite hides after ten seconds and each reveal starts a fresh timer00:01 +24: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: background hides immediately and resume never exposes the code00:01 +25: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: background hides immediately and resume never exposes the code00:01 +25: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: room change replaces the code and disposal cancels timers00:01 +26: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: room change replaces the code and disposal cancels timers00:01 +26: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: member starts hidden and row fits compact screen at large text scale00:01 +27: /Users/judoon/workspace/DawnMesh/test/room_invite_row_test.dart: member starts hidden and row fits compact screen at large text scale00:01 +27: loading /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart00:02 +27: loading /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart00:02 +27: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: StageChoreography 编排表 三段区间按预期重叠，中间不留空档00:02 +28: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: StageChoreography 编排表 三段区间按预期重叠，中间不留空档00:02 +28: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: StageChoreography 编排表 离场顺序自上而下，入场顺序也自上而下00:02 +29: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: StageChoreography 编排表 离场顺序自上而下，入场顺序也自上而下00:02 +29: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: 转场端点状态 stage=0 时首页元素在、房间元素不可见00:02 +30: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: 转场端点状态 stage=0 时首页元素在、房间元素不可见00:02 +30: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: 转场端点状态 stage=1 时首页元素已撤走、房间元素完全落位00:02 +31: /Users/judoon/workspace/DawnMesh/test/stage_choreography_test.dart: 转场端点状态 stage=1 时首页元素已撤走、房间元素完全落位00:02 +31: loading /Users/judoon/workspace/DawnMesh/test/lan_transport_whitelist_test.dart00:02 +31: /Users/judoon/workspace/DawnMesh/test/lan_transport_whitelist_test.dart: LanTransport UDP 白名单 不在册 senderId 的帧不注册语音端点、不转发给其他成员00:03 +31: /Users/judoon/workspace/DawnMesh/test/lan_transport_whitelist_test.dart: LanTransport UDP 白名单 不在册 senderId 的帧不注册语音端点、不转发给其他成员00:03 +32: /Users/judoon/workspace/DawnMesh/test/lan_transport_whitelist_test.dart: LanTransport UDP 白名单 不在册 senderId 的帧不注册语音端点、不转发给其他成员00:03 +32: loading /Users/judoon/workspace/DawnMesh/test/room_admission_test.dart00:03 +32: /Users/judoon/workspace/DawnMesh/test/room_admission_test.dart: traffic key is released only after confirmation, and differs across rooms00:03 +33: /Users/judoon/workspace/DawnMesh/test/room_admission_test.dart: traffic key is released only after confirmation, and differs across rooms00:03 +33: /Users/judoon/workspace/DawnMesh/test/room_admission_test.dart: host rate limit bounds online guesses and duplicate challenges00:03 +34: /Users/judoon/workspace/DawnMesh/test/room_admission_test.dart: host rate limit bounds online guesses and duplicate challenges00:03 +34: loading /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart00:04 +34: loading /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart00:04 +34: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests 初始状态房间列表为空且生命周期释放正常00:04 +35: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests 初始状态房间列表为空且生命周期释放正常00:04 +35: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests ROOM_CLOSED 同源包即时移除房间；畸形字段被钳制00:04 +36: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests ROOM_CLOSED 同源包即时移除房间；畸形字段被钳制00:04 +36: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests 发现列表容量有上限，伪造洪水灌不满内存00:04 +37: /Users/judoon/workspace/DawnMesh/test/lan_discovery_test.dart: LanRoomDiscovery Tests 发现列表容量有上限，伪造洪水灌不满内存00:04 +37: loading /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart00:05 +37: loading /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart00:05 +37: /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart: WiFi / BLE 聊天路由隔离与通道验证 LanTransport send: chat 帧走 TCP 控制面，严格不走 UDP 音频端口00:05 +38: /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart: WiFi / BLE 聊天路由隔离与通道验证 LanTransport send: chat 帧走 TCP 控制面，严格不走 UDP 音频端口00:05 +38: /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart: WiFi / BLE 聊天路由隔离与通道验证 BleL2capTransport send: chat 帧完整打包并通过 sendL2capData 发送00:05 +39: /Users/judoon/workspace/DawnMesh/test/chat_transport_routing_test.dart: WiFi / BLE 聊天路由隔离与通道验证 BleL2capTransport send: chat 帧完整打包并通过 sendL2capData 发送00:05 +39: loading /Users/judoon/workspace/DawnMesh/test/app_log_test.dart00:05 +39: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: logging is opt-in and disabling clears retained entries00:05 +39: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: logging is opt-in and disabling clears retained entries
-[09:24:35.693][WARN][蓝牙] 测试链路波动
-00:05 +40: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: logging is opt-in and disabling clears retained entries00:05 +40: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: retains only the newest bounded set of entries00:05 +40: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: retains only the newest bounded set of entries
-[09:24:35.697][DEBUG][容量] 记录 0
-[09:24:35.697][DEBUG][容量] 记录 1
-[09:24:35.697][DEBUG][容量] 记录 2
-[09:24:35.697][DEBUG][容量] 记录 3
-[09:24:35.697][DEBUG][容量] 记录 4
-[09:24:35.697][DEBUG][容量] 记录 5
-[09:24:35.697][DEBUG][容量] 记录 6
-[09:24:35.697][DEBUG][容量] 记录 7
-[09:24:35.697][DEBUG][容量] 记录 8
-[09:24:35.698][DEBUG][容量] 记录 9
-[09:24:35.698][DEBUG][容量] 记录 10
-[09:24:35.698][DEBUG][容量] 记录 11
-[09:24:35.698][DEBUG][容量] 记录 12
-[09:24:35.698][DEBUG][容量] 记录 13
-[09:24:35.698][DEBUG][容量] 记录 14
-[09:24:35.698][DEBUG][容量] 记录 15
-[09:24:35.698][DEBUG][容量] 记录 16
-[09:24:35.698][DEBUG][容量] 记录 17
-[09:24:35.698][DEBUG][容量] 记录 18
-[09:24:35.698][DEBUG][容量] 记录 19
-[09:24:35.698][DEBUG][容量] 记录 20
-[09:24:35.699][DEBUG][容量] 记录 21
-[09:24:35.699][DEBUG][容量] 记录 22
-[09:24:35.699][DEBUG][容量] 记录 23
-[09:24:35.699][DEBUG][容量] 记录 24
-[09:24:35.699][DEBUG][容量] 记录 25
-[09:24:35.699][DEBUG][容量] 记录 26
-[09:24:35.699][DEBUG][容量] 记录 27
-[09:24:35.699][DEBUG][容量] 记录 28
-[09:24:35.699][DEBUG][容量] 记录 29
-[09:24:35.699][DEBUG][容量] 记录 30
-[09:24:35.699][DEBUG][容量] 记录 31
-[09:24:35.700][DEBUG][容量] 记录 32
-[09:24:35.700][DEBUG][容量] 记录 33
-[09:24:35.700][DEBUG][容量] 记录 34
-[09:24:35.700][DEBUG][容量] 记录 35
-[09:24:35.700][DEBUG][容量] 记录 36
-[09:24:35.700][DEBUG][容量] 记录 37
-[09:24:35.700][DEBUG][容量] 记录 38
-[09:24:35.700][DEBUG][容量] 记录 39
-[09:24:35.700][DEBUG][容量] 记录 40
-[09:24:35.701][DEBUG][容量] 记录 41
-[09:24:35.701][DEBUG][容量] 记录 42
-[09:24:35.701][DEBUG][容量] 记录 43
-[09:24:35.701][DEBUG][容量] 记录 44
-[09:24:35.701][DEBUG][容量] 记录 45
-[09:24:35.701][DEBUG][容量] 记录 46
-[09:24:35.701][DEBUG][容量] 记录 47
-[09:24:35.701][DEBUG][容量] 记录 48
-[09:24:35.701][DEBUG][容量] 记录 49
-[09:24:35.701][DEBUG][容量] 记录 50
-[09:24:35.701][DEBUG][容量] 记录 51
-[09:24:35.702][DEBUG][容量] 记录 52
-[09:24:35.702][DEBUG][容量] 记录 53
-[09:24:35.702][DEBUG][容量] 记录 54
-[09:24:35.702][DEBUG][容量] 记录 55
-[09:24:35.702][DEBUG][容量] 记录 56
-[09:24:35.702][DEBUG][容量] 记录 57
-[09:24:35.702][DEBUG][容量] 记录 58
-[09:24:35.702][DEBUG][容量] 记录 59
-[09:24:35.702][DEBUG][容量] 记录 60
-[09:24:35.702][DEBUG][容量] 记录 61
-[09:24:35.702][DEBUG][容量] 记录 62
-[09:24:35.702][DEBUG][容量] 记录 63
-[09:24:35.702][DEBUG][容量] 记录 64
-[09:24:35.703][DEBUG][容量] 记录 65
-[09:24:35.703][DEBUG][容量] 记录 66
-[09:24:35.703][DEBUG][容量] 记录 67
-[09:24:35.703][DEBUG][容量] 记录 68
-[09:24:35.703][DEBUG][容量] 记录 69
-[09:24:35.703][DEBUG][容量] 记录 70
-[09:24:35.703][DEBUG][容量] 记录 71
-[09:24:35.703][DEBUG][容量] 记录 72
-[09:24:35.703][DEBUG][容量] 记录 73
-[09:24:35.703][DEBUG][容量] 记录 74
-[09:24:35.704][DEBUG][容量] 记录 75
-[09:24:35.704][DEBUG][容量] 记录 76
-[09:24:35.704][DEBUG][容量] 记录 77
-[09:24:35.704][DEBUG][容量] 记录 78
-[09:24:35.704][DEBUG][容量] 记录 79
-[09:24:35.704][DEBUG][容量] 记录 80
-[09:24:35.704][DEBUG][容量] 记录 81
-[09:24:35.704][DEBUG][容量] 记录 82
-[09:24:35.704][DEBUG][容量] 记录 83
-[09:24:35.704][DEBUG][容量] 记录 84
-[09:24:35.704][DEBUG][容量] 记录 85
-[09:24:35.704][DEBUG][容量] 记录 86
-[09:24:35.704][DEBUG][容量] 记录 87
-[09:24:35.705][DEBUG][容量] 记录 88
-[09:24:35.705][DEBUG][容量] 记录 89
-[09:24:35.705][DEBUG][容量] 记录 90
-[09:24:35.705][DEBUG][容量] 记录 91
-[09:24:35.705][DEBUG][容量] 记录 92
-[09:24:35.705][DEBUG][容量] 记录 93
-[09:24:35.705][DEBUG][容量] 记录 94
-[09:24:35.705][DEBUG][容量] 记录 95
-[09:24:35.705][DEBUG][容量] 记录 96
-[09:24:35.705][DEBUG][容量] 记录 97
-[09:24:35.705][DEBUG][容量] 记录 98
-[09:24:35.705][DEBUG][容量] 记录 99
-[09:24:35.705][DEBUG][容量] 记录 100
-[09:24:35.706][DEBUG][容量] 记录 101
-[09:24:35.706][DEBUG][容量] 记录 102
-[09:24:35.706][DEBUG][容量] 记录 103
-[09:24:35.706][DEBUG][容量] 记录 104
-[09:24:35.706][DEBUG][容量] 记录 105
-[09:24:35.706][DEBUG][容量] 记录 106
-[09:24:35.706][DEBUG][容量] 记录 107
-[09:24:35.706][DEBUG][容量] 记录 108
-[09:24:35.706][DEBUG][容量] 记录 109
-[09:24:35.706][DEBUG][容量] 记录 110
-[09:24:35.706][DEBUG][容量] 记录 111
-[09:24:35.706][DEBUG][容量] 记录 112
-[09:24:35.707][DEBUG][容量] 记录 113
-[09:24:35.707][DEBUG][容量] 记录 114
-[09:24:35.707][DEBUG][容量] 记录 115
-[09:24:35.707][DEBUG][容量] 记录 116
-[09:24:35.707][DEBUG][容量] 记录 117
-[09:24:35.707][DEBUG][容量] 记录 118
-[09:24:35.707][DEBUG][容量] 记录 119
-[09:24:35.707][DEBUG][容量] 记录 120
-[09:24:35.707][DEBUG][容量] 记录 121
-[09:24:35.707][DEBUG][容量] 记录 122
-[09:24:35.707][DEBUG][容量] 记录 123
-[09:24:35.708][DEBUG][容量] 记录 124
-[09:24:35.708][DEBUG][容量] 记录 125
-[09:24:35.708][DEBUG][容量] 记录 126
-[09:24:35.708][DEBUG][容量] 记录 127
-[09:24:35.708][DEBUG][容量] 记录 128
-[09:24:35.708][DEBUG][容量] 记录 129
-[09:24:35.708][DEBUG][容量] 记录 130
-[09:24:35.708][DEBUG][容量] 记录 131
-[09:24:35.708][DEBUG][容量] 记录 132
-[09:24:35.708][DEBUG][容量] 记录 133
-[09:24:35.708][DEBUG][容量] 记录 134
-[09:24:35.708][DEBUG][容量] 记录 135
-[09:24:35.708][DEBUG][容量] 记录 136
-[09:24:35.709][DEBUG][容量] 记录 137
-[09:24:35.709][DEBUG][容量] 记录 138
-[09:24:35.709][DEBUG][容量] 记录 139
-[09:24:35.709][DEBUG][容量] 记录 140
-[09:24:35.709][DEBUG][容量] 记录 141
-[09:24:35.709][DEBUG][容量] 记录 142
-[09:24:35.709][DEBUG][容量] 记录 143
-[09:24:35.709][DEBUG][容量] 记录 144
-[09:24:35.709][DEBUG][容量] 记录 145
-[09:24:35.709][DEBUG][容量] 记录 146
-[09:24:35.709][DEBUG][容量] 记录 147
-[09:24:35.709][DEBUG][容量] 记录 148
-[09:24:35.709][DEBUG][容量] 记录 149
-[09:24:35.709][DEBUG][容量] 记录 150
-[09:24:35.710][DEBUG][容量] 记录 151
-[09:24:35.710][DEBUG][容量] 记录 152
-[09:24:35.710][DEBUG][容量] 记录 153
-[09:24:35.710][DEBUG][容量] 记录 154
-[09:24:35.710][DEBUG][容量] 记录 155
-[09:24:35.710][DEBUG][容量] 记录 156
-[09:24:35.710][DEBUG][容量] 记录 157
-[09:24:35.710][DEBUG][容量] 记录 158
-[09:24:35.710][DEBUG][容量] 记录 159
-[09:24:35.710][DEBUG][容量] 记录 160
-[09:24:35.710][DEBUG][容量] 记录 161
-[09:24:35.710][DEBUG][容量] 记录 162
-[09:24:35.710][DEBUG][容量] 记录 163
-[09:24:35.711][DEBUG][容量] 记录 164
-[09:24:35.711][DEBUG][容量] 记录 165
-[09:24:35.711][DEBUG][容量] 记录 166
-[09:24:35.711][DEBUG][容量] 记录 167
-[09:24:35.711][DEBUG][容量] 记录 168
-[09:24:35.711][DEBUG][容量] 记录 169
-[09:24:35.711][DEBUG][容量] 记录 170
-[09:24:35.711][DEBUG][容量] 记录 171
-[09:24:35.711][DEBUG][容量] 记录 172
-[09:24:35.711][DEBUG][容量] 记录 173
-[09:24:35.711][DEBUG][容量] 记录 174
-[09:24:35.711][DEBUG][容量] 记录 175
-[09:24:35.711][DEBUG][容量] 记录 176
-[09:24:35.712][DEBUG][容量] 记录 177
-[09:24:35.712][DEBUG][容量] 记录 178
-[09:24:35.712][DEBUG][容量] 记录 179
-[09:24:35.712][DEBUG][容量] 记录 180
-[09:24:35.712][DEBUG][容量] 记录 181
-[09:24:35.712][DEBUG][容量] 记录 182
-[09:24:35.712][DEBUG][容量] 记录 183
-[09:24:35.712][DEBUG][容量] 记录 184
-[09:24:35.712][DEBUG][容量] 记录 185
-[09:24:35.712][DEBUG][容量] 记录 186
-[09:24:35.712][DEBUG][容量] 记录 187
-[09:24:35.712][DEBUG][容量] 记录 188
-[09:24:35.712][DEBUG][容量] 记录 189
-[09:24:35.712][DEBUG][容量] 记录 190
-[09:24:35.713][DEBUG][容量] 记录 191
-[09:24:35.713][DEBUG][容量] 记录 192
-[09:24:35.713][DEBUG][容量] 记录 193
-[09:24:35.713][DEBUG][容量] 记录 194
-[09:24:35.713][DEBUG][容量] 记录 195
-[09:24:35.713][DEBUG][容量] 记录 196
-[09:24:35.713][DEBUG][容量] 记录 197
-[09:24:35.713][DEBUG][容量] 记录 198
-[09:24:35.713][DEBUG][容量] 记录 199
-[09:24:35.713][DEBUG][容量] 记录 200
-[09:24:35.713][DEBUG][容量] 记录 201
-[09:24:35.713][DEBUG][容量] 记录 202
-[09:24:35.713][DEBUG][容量] 记录 203
-[09:24:35.713][DEBUG][容量] 记录 204
-[09:24:35.714][DEBUG][容量] 记录 205
-[09:24:35.714][DEBUG][容量] 记录 206
-[09:24:35.714][DEBUG][容量] 记录 207
-[09:24:35.714][DEBUG][容量] 记录 208
-[09:24:35.714][DEBUG][容量] 记录 209
-[09:24:35.714][DEBUG][容量] 记录 210
-[09:24:35.714][DEBUG][容量] 记录 211
-[09:24:35.714][DEBUG][容量] 记录 212
-[09:24:35.714][DEBUG][容量] 记录 213
-[09:24:35.714][DEBUG][容量] 记录 214
-[09:24:35.714][DEBUG][容量] 记录 215
-[09:24:35.714][DEBUG][容量] 记录 216
-[09:24:35.714][DEBUG][容量] 记录 217
-[09:24:35.715][DEBUG][容量] 记录 218
-[09:24:35.715][DEBUG][容量] 记录 219
-[09:24:35.715][DEBUG][容量] 记录 220
-[09:24:35.715][DEBUG][容量] 记录 221
-[09:24:35.715][DEBUG][容量] 记录 222
-[09:24:35.715][DEBUG][容量] 记录 223
-[09:24:35.715][DEBUG][容量] 记录 224
-[09:24:35.715][DEBUG][容量] 记录 225
-[09:24:35.715][DEBUG][容量] 记录 226
-[09:24:35.715][DEBUG][容量] 记录 227
-[09:24:35.715][DEBUG][容量] 记录 228
-[09:24:35.715][DEBUG][容量] 记录 229
-[09:24:35.715][DEBUG][容量] 记录 230
-[09:24:35.715][DEBUG][容量] 记录 231
-[09:24:35.715][DEBUG][容量] 记录 232
-[09:24:35.716][DEBUG][容量] 记录 233
-[09:24:35.716][DEBUG][容量] 记录 234
-[09:24:35.716][DEBUG][容量] 记录 235
-[09:24:35.716][DEBUG][容量] 记录 236
-[09:24:35.716][DEBUG][容量] 记录 237
-[09:24:35.716][DEBUG][容量] 记录 238
-[09:24:35.716][DEBUG][容量] 记录 239
-[09:24:35.716][DEBUG][容量] 记录 240
-[09:24:35.716][DEBUG][容量] 记录 241
-[09:24:35.716][DEBUG][容量] 记录 242
-[09:24:35.716][DEBUG][容量] 记录 243
-[09:24:35.716][DEBUG][容量] 记录 244
-[09:24:35.716][DEBUG][容量] 记录 245
-[09:24:35.717][DEBUG][容量] 记录 246
-[09:24:35.717][DEBUG][容量] 记录 247
-[09:24:35.717][DEBUG][容量] 记录 248
-[09:24:35.717][DEBUG][容量] 记录 249
-[09:24:35.717][DEBUG][容量] 记录 250
-[09:24:35.717][DEBUG][容量] 记录 251
-[09:24:35.717][DEBUG][容量] 记录 252
-[09:24:35.717][DEBUG][容量] 记录 253
-[09:24:35.717][DEBUG][容量] 记录 254
-[09:24:35.717][DEBUG][容量] 记录 255
-[09:24:35.717][DEBUG][容量] 记录 256
-[09:24:35.717][DEBUG][容量] 记录 257
-[09:24:35.717][DEBUG][容量] 记录 258
-[09:24:35.717][DEBUG][容量] 记录 259
-[09:24:35.718][DEBUG][容量] 记录 260
-[09:24:35.718][DEBUG][容量] 记录 261
-[09:24:35.718][DEBUG][容量] 记录 262
-[09:24:35.718][DEBUG][容量] 记录 263
-[09:24:35.718][DEBUG][容量] 记录 264
-[09:24:35.718][DEBUG][容量] 记录 265
-[09:24:35.718][DEBUG][容量] 记录 266
-[09:24:35.718][DEBUG][容量] 记录 267
-[09:24:35.718][DEBUG][容量] 记录 268
-[09:24:35.718][DEBUG][容量] 记录 269
-[09:24:35.718][DEBUG][容量] 记录 270
-[09:24:35.718][DEBUG][容量] 记录 271
-[09:24:35.718][DEBUG][容量] 记录 272
-[09:24:35.718][DEBUG][容量] 记录 273
-[09:24:35.718][DEBUG][容量] 记录 274
-[09:24:35.718][DEBUG][容量] 记录 275
-[09:24:35.719][DEBUG][容量] 记录 276
-[09:24:35.719][DEBUG][容量] 记录 277
-[09:24:35.719][DEBUG][容量] 记录 278
-[09:24:35.719][DEBUG][容量] 记录 279
-[09:24:35.719][DEBUG][容量] 记录 280
-[09:24:35.719][DEBUG][容量] 记录 281
-[09:24:35.719][DEBUG][容量] 记录 282
-[09:24:35.719][DEBUG][容量] 记录 283
-[09:24:35.720][DEBUG][容量] 记录 284
-[09:24:35.720][DEBUG][容量] 记录 285
-[09:24:35.720][DEBUG][容量] 记录 286
-[09:24:35.720][DEBUG][容量] 记录 287
-[09:24:35.720][DEBUG][容量] 记录 288
-[09:24:35.720][DEBUG][容量] 记录 289
-[09:24:35.720][DEBUG][容量] 记录 290
-[09:24:35.720][DEBUG][容量] 记录 291
-[09:24:35.720][DEBUG][容量] 记录 292
-[09:24:35.720][DEBUG][容量] 记录 293
-[09:24:35.720][DEBUG][容量] 记录 294
-[09:24:35.720][DEBUG][容量] 记录 295
-[09:24:35.720][DEBUG][容量] 记录 296
-[09:24:35.721][DEBUG][容量] 记录 297
-[09:24:35.721][DEBUG][容量] 记录 298
-[09:24:35.721][DEBUG][容量] 记录 299
-[09:24:35.721][DEBUG][容量] 记录 300
-[09:24:35.721][DEBUG][容量] 记录 301
-[09:24:35.721][DEBUG][容量] 记录 302
-[09:24:35.721][DEBUG][容量] 记录 303
-[09:24:35.721][DEBUG][容量] 记录 304
-[09:24:35.721][DEBUG][容量] 记录 305
-[09:24:35.721][DEBUG][容量] 记录 306
-[09:24:35.721][DEBUG][容量] 记录 307
-[09:24:35.721][DEBUG][容量] 记录 308
-[09:24:35.721][DEBUG][容量] 记录 309
-[09:24:35.721][DEBUG][容量] 记录 310
-[09:24:35.721][DEBUG][容量] 记录 311
-[09:24:35.722][DEBUG][容量] 记录 312
-[09:24:35.722][DEBUG][容量] 记录 313
-[09:24:35.722][DEBUG][容量] 记录 314
-[09:24:35.722][DEBUG][容量] 记录 315
-[09:24:35.722][DEBUG][容量] 记录 316
-[09:24:35.722][DEBUG][容量] 记录 317
-[09:24:35.722][DEBUG][容量] 记录 318
-[09:24:35.722][DEBUG][容量] 记录 319
-[09:24:35.722][DEBUG][容量] 记录 320
-[09:24:35.722][DEBUG][容量] 记录 321
-[09:24:35.722][DEBUG][容量] 记录 322
-[09:24:35.722][DEBUG][容量] 记录 323
-[09:24:35.722][DEBUG][容量] 记录 324
-[09:24:35.722][DEBUG][容量] 记录 325
-[09:24:35.722][DEBUG][容量] 记录 326
-[09:24:35.723][DEBUG][容量] 记录 327
-[09:24:35.723][DEBUG][容量] 记录 328
-[09:24:35.723][DEBUG][容量] 记录 329
-[09:24:35.723][DEBUG][容量] 记录 330
-[09:24:35.723][DEBUG][容量] 记录 331
-[09:24:35.723][DEBUG][容量] 记录 332
-[09:24:35.723][DEBUG][容量] 记录 333
-[09:24:35.723][DEBUG][容量] 记录 334
-[09:24:35.723][DEBUG][容量] 记录 335
-[09:24:35.723][DEBUG][容量] 记录 336
-[09:24:35.723][DEBUG][容量] 记录 337
-[09:24:35.723][DEBUG][容量] 记录 338
-[09:24:35.723][DEBUG][容量] 记录 339
-[09:24:35.723][DEBUG][容量] 记录 340
-[09:24:35.723][DEBUG][容量] 记录 341
-[09:24:35.724][DEBUG][容量] 记录 342
-[09:24:35.724][DEBUG][容量] 记录 343
-[09:24:35.724][DEBUG][容量] 记录 344
-[09:24:35.724][DEBUG][容量] 记录 345
-[09:24:35.724][DEBUG][容量] 记录 346
-[09:24:35.724][DEBUG][容量] 记录 347
-[09:24:35.724][DEBUG][容量] 记录 348
-[09:24:35.724][DEBUG][容量] 记录 349
-[09:24:35.724][DEBUG][容量] 记录 350
-[09:24:35.724][DEBUG][容量] 记录 351
-[09:24:35.724][DEBUG][容量] 记录 352
-[09:24:35.725][DEBUG][容量] 记录 353
-[09:24:35.725][DEBUG][容量] 记录 354
-[09:24:35.725][DEBUG][容量] 记录 355
-[09:24:35.725][DEBUG][容量] 记录 356
-[09:24:35.725][DEBUG][容量] 记录 357
-[09:24:35.725][DEBUG][容量] 记录 358
-[09:24:35.725][DEBUG][容量] 记录 359
-[09:24:35.725][DEBUG][容量] 记录 360
-[09:24:35.725][DEBUG][容量] 记录 361
-[09:24:35.725][DEBUG][容量] 记录 362
-[09:24:35.725][DEBUG][容量] 记录 363
-[09:24:35.726][DEBUG][容量] 记录 364
-[09:24:35.726][DEBUG][容量] 记录 365
-[09:24:35.726][DEBUG][容量] 记录 366
-[09:24:35.726][DEBUG][容量] 记录 367
-[09:24:35.726][DEBUG][容量] 记录 368
-[09:24:35.726][DEBUG][容量] 记录 369
-[09:24:35.726][DEBUG][容量] 记录 370
-[09:24:35.726][DEBUG][容量] 记录 371
-[09:24:35.726][DEBUG][容量] 记录 372
-[09:24:35.726][DEBUG][容量] 记录 373
-[09:24:35.726][DEBUG][容量] 记录 374
-[09:24:35.726][DEBUG][容量] 记录 375
-[09:24:35.726][DEBUG][容量] 记录 376
-[09:24:35.726][DEBUG][容量] 记录 377
-[09:24:35.727][DEBUG][容量] 记录 378
-[09:24:35.727][DEBUG][容量] 记录 379
-[09:24:35.727][DEBUG][容量] 记录 380
-[09:24:35.727][DEBUG][容量] 记录 381
-[09:24:35.727][DEBUG][容量] 记录 382
-[09:24:35.727][DEBUG][容量] 记录 383
-[09:24:35.727][DEBUG][容量] 记录 384
-[09:24:35.727][DEBUG][容量] 记录 385
-[09:24:35.727][DEBUG][容量] 记录 386
-[09:24:35.727][DEBUG][容量] 记录 387
-[09:24:35.727][DEBUG][容量] 记录 388
-[09:24:35.727][DEBUG][容量] 记录 389
-[09:24:35.727][DEBUG][容量] 记录 390
-[09:24:35.727][DEBUG][容量] 记录 391
-[09:24:35.727][DEBUG][容量] 记录 392
-[09:24:35.727][DEBUG][容量] 记录 393
-[09:24:35.728][DEBUG][容量] 记录 394
-[09:24:35.728][DEBUG][容量] 记录 395
-[09:24:35.728][DEBUG][容量] 记录 396
-[09:24:35.728][DEBUG][容量] 记录 397
-[09:24:35.728][DEBUG][容量] 记录 398
-[09:24:35.728][DEBUG][容量] 记录 399
-[09:24:35.728][DEBUG][容量] 记录 400
-[09:24:35.728][DEBUG][容量] 记录 401
-[09:24:35.728][DEBUG][容量] 记录 402
-[09:24:35.728][DEBUG][容量] 记录 403
-[09:24:35.728][DEBUG][容量] 记录 404
-00:05 +41: /Users/judoon/workspace/DawnMesh/test/app_log_test.dart: retains only the newest bounded set of entries00:05 +41: loading /Users/judoon/workspace/DawnMesh/test/security_test.dart00:05 +41: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests DeviceIdentity generates valid fingerprint, shortCode, and signs payloads00:05 +42: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests DeviceIdentity generates valid fingerprint, shortCode, and signs payloads00:05 +42: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher roundtrip encryption and decryption with AAD00:05 +43: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher roundtrip encryption and decryption with AAD00:05 +43: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher rejects corrupted ciphertext or wrong tag00:05 +44: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher rejects corrupted ciphertext or wrong tag00:05 +44: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher rejects replayed nonces00:05 +45: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionCrypto Tests SessionCipher rejects replayed nonces00:05 +45: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests Handshake establishes matching ciphers and seals/opens frames00:05 +46: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests Handshake establishes matching ciphers and seals/opens frames00:05 +46: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests Handshake fails when remote signature is invalid00:05 +47: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests Handshake fails when remote signature is invalid00:05 +47: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests SecureFrameCodec rejects already sealed frame or mismatched header00:05 +48: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests SecureFrameCodec rejects already sealed frame or mismatched header00:05 +48: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests RoomSession chat sealing pipeline: unsealed by default, sealed when secureCodec is set00:05 +49: /Users/judoon/workspace/DawnMesh/test/security_test.dart: SessionHandshake & SecureFrameCodec Tests RoomSession chat sealing pipeline: unsealed by default, sealed when secureCodec is set00:05 +49: loading /Users/judoon/workspace/DawnMesh/test/protocol_test.dart00:06 +49: loading /Users/judoon/workspace/DawnMesh/test/protocol_test.dart00:06 +49: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests Frame encode and decode roundtrip00:06 +50: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests Frame encode and decode roundtrip00:06 +50: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests JoinRequestPayload encode and decode00:06 +51: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests JoinRequestPayload encode and decode00:06 +51: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests RosterPayload encode and decode00:06 +52: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests RosterPayload encode and decode00:06 +52: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests PttStatePayload encode and decode00:06 +53: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests PttStatePayload encode and decode00:06 +53: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests LeavePayload encode and decode00:06 +54: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests LeavePayload encode and decode00:06 +54: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests FrameType chat, chatSync, chatDelete values and existing types preserved00:06 +55: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests FrameType chat, chatSync, chatDelete values and existing types preserved00:06 +55: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Chat payload v2 roundtrip with timestamp and senderCode00:06 +56: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Chat payload v2 roundtrip with timestamp and senderCode00:06 +56: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Chat payload v1 legacy roundtrip backwards compatibility00:06 +57: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Chat payload v1 legacy roundtrip backwards compatibility00:06 +57: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Empty or whitespace text throws ArgumentError on encode00:06 +58: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Empty or whitespace text throws ArgumentError on encode00:06 +58: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Boundary: exactly 480 UTF-8 bytes succeeds, 481 throws ArgumentError00:06 +59: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatMessagePayload Tests Boundary: exactly 480 UTF-8 bytes succeeds, 481 throws ArgumentError00:06 +59: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: ... Protocol Tests ChatMessagePayload Tests Decode rejects invalid version, wrong length, trailing bytes, or malformed UTF-800:06 +60: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: ... Protocol Tests ChatMessagePayload Tests Decode rejects invalid version, wrong length, trailing bytes, or malformed UTF-800:06 +60: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: ... Binary Protocol Tests ChatMessagePayload Tests Frame with FrameType.chat encode and decode roundtrip within 512 bytes limit00:06 +61: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: ... Binary Protocol Tests ChatMessagePayload Tests Frame with FrameType.chat encode and decode roundtrip within 512 bytes limit00:06 +61: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatSyncPayload Tests ChatSyncPayload encode and decode roundtrip00:06 +62: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatSyncPayload Tests ChatSyncPayload encode and decode roundtrip00:06 +62: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatDeletePayload Tests ChatDeletePayload encode and decode roundtrip00:06 +63: /Users/judoon/workspace/DawnMesh/test/protocol_test.dart: DawnMesh Binary Protocol Tests ChatDeletePayload Tests ChatDeletePayload encode and decode roundtrip00:06 +63: loading /Users/judoon/workspace/DawnMesh/test/background_call_controls_test.dart00:06 +63: /Users/judoon/workspace/DawnMesh/test/background_call_controls_test.dart: leaving during audio startup does not reopen the microphone00:06 +64: /Users/judoon/workspace/DawnMesh/test/background_call_controls_test.dart: leaving during audio startup does not reopen the microphone00:06 +64: /Users/judoon/workspace/DawnMesh/test/background_call_controls_test.dart: lock-screen controls switch mode, gate PTT and mute, then detach on leave00:06 +65: /Users/judoon/workspace/DawnMesh/test/background_call_controls_test.dart: lock-screen controls switch mode, gate PTT and mute, then detach on leave00:06 +65: loading /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart00:06 +65: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: voice gate drops silence, retains onset, hangs over and closes00:06 +66: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: voice gate drops silence, retains onset, hangs over and closes00:06 +66: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: Bluetooth switches locally without restarting capture, mute/leave stop sending00:06 +67: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: Bluetooth switches locally without restarting capture, mute/leave stop sending00:06 +67: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: Wi-Fi room can switch between automatic and push-to-talk00:06 +68: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: Wi-Fi room can switch between automatic and push-to-talk00:06 +68: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: compact Bluetooth room switches both voice modes without overflow00:07 +68: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: compact Bluetooth room switches both voice modes without overflow00:07 +69: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: compact Bluetooth room switches both voice modes without overflow00:07 +69: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: voice mode switch adapts to large text and keeps both targets00:07 +70: /Users/judoon/workspace/DawnMesh/test/voice_modes_test.dart: voice mode switch adapts to large text and keeps both targets00:07 +70: loading /Users/judoon/workspace/DawnMesh/test/host_election_test.dart00:07 +70: /Users/judoon/workspace/DawnMesh/test/host_election_test.dart: 没有合格候选时返回 null00:07 +71: /Users/judoon/workspace/DawnMesh/test/host_election_test.dart: 没有合格候选时返回 null00:07 +71: loading /Users/judoon/workspace/DawnMesh/test/nickname_store_test.dart00:07 +71: /Users/judoon/workspace/DawnMesh/test/nickname_store_test.dart: nickname is saved and restored through private app preferences00:07 +72: /Users/judoon/workspace/DawnMesh/test/nickname_store_test.dart: nickname is saved and restored through private app preferences00:07 +72: /Users/judoon/workspace/DawnMesh/test/nickname_store_test.dart: debug logging preference is loaded and saved privately00:07 +73: /Users/judoon/workspace/DawnMesh/test/nickname_store_test.dart: debug logging preference is loaded and saved privately00:07 +73: loading /Users/judoon/workspace/DawnMesh/test/device_code_test.dart00:08 +73: loading /Users/judoon/workspace/DawnMesh/test/device_code_test.dart00:08 +73: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 短码是 3 位纯数字，进程内稳定00:08 +74: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 短码是 3 位纯数字，进程内稳定00:08 +74: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode attach 接上 3 位纯数字短码，重复调用不会接两次00:08 +75: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode attach 接上 3 位纯数字短码，重复调用不会接两次00:08 +75: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode split 能把 3 位纯数字短码拆出来00:08 +76: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode split 能把 3 位纯数字短码拆出来00:08 +76: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 兼容旧版 4 位十六进制短码，确定性映射为 3 位数字00:08 +77: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 兼容旧版 4 位十六进制短码，确定性映射为 3 位数字00:08 +77: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 不把用户自己起的带 # 的名字切坏00:08 +78: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 不把用户自己起的带 # 的名字切坏00:08 +78: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 智能同名冲突判断 hasConflict 与 formatSmart00:08 +79: /Users/judoon/workspace/DawnMesh/test/device_code_test.dart: DeviceCode 智能同名冲突判断 hasConflict 与 formatSmart00:08 +79: loading /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart00:08 +79: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 创建房间：首页 UI 离场、背景留场、房间 UI 入场00:09 +79: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 创建房间：首页 UI 离场、背景留场、房间 UI 入场00:10 +79: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 创建房间：首页 UI 离场、背景留场、房间 UI 入场00:10 +80: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 创建房间：首页 UI 离场、背景留场、房间 UI 入场00:10 +80: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 离开房间：原路退回首页00:11 +80: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 离开房间：原路退回首页00:11 +81: /Users/judoon/workspace/DawnMesh/test/room_entry_transition_test.dart: 离开房间：原路退回首页00:11 +81: loading /Users/judoon/workspace/DawnMesh/test/widget_test.dart00:11 +81: /Users/judoon/workspace/DawnMesh/test/widget_test.dart: 首页能正常渲染并显示输入框与建房按钮00:12 +81: /Users/judoon/workspace/DawnMesh/test/widget_test.dart: 首页能正常渲染并显示输入框与建房按钮00:12 +82: /Users/judoon/workspace/DawnMesh/test/widget_test.dart: 首页能正常渲染并显示输入框与建房按钮00:12 +82: /Users/judoon/workspace/DawnMesh/test/widget_test.dart: 可以在 WiFi 房与蓝牙房之间切换00:12 +83: /Users/judoon/workspace/DawnMesh/test/widget_test.dart: 可以在 WiFi 房与蓝牙房之间切换00:12 +83: loading /Users/judoon/workspace/DawnMesh/test/diagnostics_test.dart00:12 +83: /Users/judoon/workspace/DawnMesh/test/diagnostics_test.dart: Diagnostics Tests DiagnosticSanitizer strips IP, MAC, and long tokens00:12 +84: /Users/judoon/workspace/DawnMesh/test/diagnostics_test.dart: Diagnostics Tests DiagnosticSanitizer strips IP, MAC, and long tokens00:12 +84: /Users/judoon/workspace/DawnMesh/test/diagnostics_test.dart: Diagnostics Tests DiagnosticReport creates valid JSON and issue summary00:12 +85: /Users/judoon/workspace/DawnMesh/test/diagnostics_test.dart: Diagnostics Tests DiagnosticReport creates valid JSON and issue summary00:12 +85: loading /Users/judoon/workspace/DawnMesh/test/dawnmesh_transport_security_test.dart00:12 +85: /Users/judoon/workspace/DawnMesh/test/dawnmesh_transport_security_test.dart: client cannot inject host-only commands over TCP or control frames over UDP00:12 +86: /Users/judoon/workspace/DawnMesh/test/dawnmesh_transport_security_test.dart: client cannot inject host-only commands over TCP or control frames over UDP00:12 +86: loading /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart00:13 +86: loading /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart00:13 +86: /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart: same invite derives valid stable Wi-Fi Direct credentials00:13 +87: /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart: same invite derives valid stable Wi-Fi Direct credentials00:13 +87: /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart: different invites do not share transport credentials00:13 +88: /Users/judoon/workspace/DawnMesh/test/wifi_direct_credentials_test.dart: different invites do not share transport credentials00:13 +88: loading /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart00:13 +88: /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart: BLE mode scans, renders a discovered room, and connects to its PSM00:14 +88: /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart: BLE mode scans, renders a discovered room, and connects to its PSM00:14 +89: /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart: BLE mode scans, renders a discovered room, and connects to its PSM00:14 +89: /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart: advertising failure never enters a phantom room00:14 +90: /Users/judoon/workspace/DawnMesh/test/ble_home_test.dart: advertising failure never enters a phantom room00:14 +90: loading /Users/judoon/workspace/DawnMesh/test/debug_log_page_test.dart00:14 +90: /Users/judoon/workspace/DawnMesh/test/debug_log_page_test.dart: debug log page enables, displays, filters and clears logs00:15 +90: /Users/judoon/workspace/DawnMesh/test/debug_log_page_test.dart: debug log page enables, displays, filters and clears logs00:15 +90: /Users/judoon/workspace/DawnMesh/test/debug_log_page_test.dart: debug log page enables, displays, filters and clears logs
-[09:24:45.336][INFO][调试日志] 应用内调试日志已开启
-[09:24:45.484][WARN][蓝牙] 链路出现波动
-[09:24:45.484][INFO][音频] 缓冲恢复正常
-00:15 +91: /Users/judoon/workspace/DawnMesh/test/debug_log_page_test.dart: debug log page enables, displays, filters and clears logs00:15 +91: loading /Users/judoon/workspace/DawnMesh/test/i18n_test.dart00:15 +91: /Users/judoon/workspace/DawnMesh/test/i18n_test.dart: AppStrings i18n Tests Chinese strings return non-empty localized texts00:15 +92: /Users/judoon/workspace/DawnMesh/test/i18n_test.dart: AppStrings i18n Tests Chinese strings return non-empty localized texts00:15 +92: /Users/judoon/workspace/DawnMesh/test/i18n_test.dart: AppStrings i18n Tests English strings return non-empty localized texts00:15 +93: /Users/judoon/workspace/DawnMesh/test/i18n_test.dart: AppStrings i18n Tests English strings return non-empty localized texts00:15 +93: loading /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart00:15 +93: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pPeer.fromMap parses standard map properly00:15 +94: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pPeer.fromMap parses standard map properly00:15 +94: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pPeer.fromMap uses sensible defaults on empty/null values00:15 +95: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pPeer.fromMap uses sensible defaults on empty/null values00:15 +95: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pConnectionInfo.fromMap parses standard map00:15 +96: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pConnectionInfo.fromMap parses standard map00:15 +96: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pConnectionInfo.fromMap uses defaults on empty map00:15 +97: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiP2pPeer & WifiP2pConnectionInfo Model Tests WifiP2pConnectionInfo.fromMap uses defaults on empty map00:15 +97: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests isSupported and isEnabled return true when mocked00:15 +98: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests isSupported and isEnabled return true when mocked00:15 +98: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests createGroup and removeGroup succeed00:15 +99: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests createGroup and removeGroup succeed00:15 +99: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests discoverPeers, connect and disconnect invoke correctly00:15 +100: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests discoverPeers, connect and disconnect invoke correctly00:15 +100: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests getConnectionInfo retrieves structured info00:15 +101: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests getConnectionInfo retrieves structured info00:15 +101: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests connectAndWait returns null when connection times out00:15 +102: /Users/judoon/workspace/DawnMesh/test/wifi_direct_manager_test.dart: WifiDirectManager MethodChannel Tests connectAndWait returns null when connection times out00:15 +102: loading /Users/judoon/workspace/DawnMesh/test/room_session_test.dart00:16 +102: loading /Users/judoon/workspace/DawnMesh/test/room_session_test.dart00:16 +102: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 createRoom 进入房间并把自己登记为房主00:16 +103: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 createRoom 进入房间并把自己登记为房主00:16 +103: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 leave 发出离开帧并回到 idle00:16 +104: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 leave 发出离开帧并回到 idle00:16 +104: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 dispose 不会往已关闭的 StreamController 写入00:16 +105: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主生命周期 dispose 不会往已关闭的 StreamController 写入00:16 +105: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 客户端加入 joinRoom 发出 joinReq00:16 +106: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 客户端加入 joinRoom 发出 joinReq00:16 +106: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 客户端加入 收到名单后认领自己的成员号并进入房间00:16 +107: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 客户端加入 收到名单后认领自己的成员号并进入房间00:16 +107: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 交接快照与交接帧 快照只缓存、不改变当前房主00:16 +108: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 交接快照与交接帧 快照只缓存、不改变当前房主00:16 +108: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 交接快照与交接帧 joinOrder 更小的旧交接帧被丢弃00:16 +109: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 交接快照与交接帧 joinOrder 更小的旧交接帧被丢弃00:16 +109: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 说话状态 全双工模式下音频停流后说话指示会熄灭00:17 +109: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 说话状态 全双工模式下音频停流后说话指示会熄灭00:17 +110: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 说话状态 全双工模式下音频停流后说话指示会熄灭00:17 +110: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 说话状态 不在名单里的发送方不会进入播放管线00:17 +111: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 说话状态 不在名单里的发送方不会进入播放管线00:17 +111: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: PTT 与静音 setPtt 发出 pttState 帧并标记自己在说话00:17 +112: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: PTT 与静音 setPtt 发出 pttState 帧并标记自己在说话00:17 +112: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: PTT 与静音 toggleMute 同时改动音频设备与自身状态00:17 +113: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: PTT 与静音 toggleMute 同时改动音频设备与自身状态00:17 +113: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 帧载荷上限 Opus 包能完整通过 Frame 编解码00:17 +114: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 帧载荷上限 Opus 包能完整通过 Frame 编解码00:17 +114: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 帧载荷上限 上限是 512，与已发布的 Kotlin 版一致00:17 +115: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 帧载荷上限 上限是 512，与已发布的 Kotlin 版一致00:17 +115: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 静音返回 000:17 +116: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 静音返回 000:17 +116: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 满量程方波接近 1.000:17 +117: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 满量程方波接近 1.000:17 +117: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 轻声不会被顶到满格00:17 +118: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 响度计算 轻声不会被顶到满格00:17 +118: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 未进房时 sendChat 抛出 StateError00:17 +119: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 未进房时 sendChat 抛出 StateError00:17 +119: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 空文本或纯空白 sendChat 抛出 ArgumentError00:17 +120: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 空文本或纯空白 sendChat 抛出 ArgumentError00:17 +120: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 房主与客户端 sendChat 均发出 FrameType.chat 帧并本地立即回显00:17 +121: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 房主与客户端 sendChat 均发出 FrameType.chat 帧并本地立即回显00:17 +121: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 收到在册成员合法聊天帧：进流、进历史、未读计数递增00:17 +122: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 收到在册成员合法聊天帧：进流、进历史、未读计数递增00:17 +122: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 收到本机 senderId 回环帧或未知 sender 帧直接丢弃00:17 +123: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 收到本机 senderId 回环帧或未知 sender 帧直接丢弃00:17 +123: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 重复 (senderId, seq) 消息被有界去重静默丢弃00:17 +124: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 重复 (senderId, seq) 消息被有界去重静默丢弃00:17 +124: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 内存历史上限为 100 条，超出时淘汰最旧消息00:17 +125: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 内存历史上限为 100 条，超出时淘汰最旧消息00:17 +125: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 leave 与 dispose 正确清空聊天状态与流00:17 +126: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 文字聊天室业务逻辑与去重 leave 与 dispose 正确清空聊天状态与流00:17 +126: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 同令牌重连复用原成员号，不会变成两个成员00:17 +127: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 同令牌重连复用原成员号，不会变成两个成员00:17 +127: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 同昵称不同令牌是新成员，不能顶掉在册成员的号00:17 +128: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 同昵称不同令牌是新成员，不能顶掉在册成员的号00:17 +128: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 全零令牌（旧版客户端）按昵称兜底，但不影响新客户端00:17 +129: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 入房身份判定（sessionToken） 全零令牌（旧版客户端）按昵称兜底，但不影响新客户端00:17 +129: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主侧成员超时清理 心跳超时的成员被移出名单并重广播00:17 +130: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主侧成员超时清理 心跳超时的成员被移出名单并重广播00:17 +130: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主侧成员超时清理 刷新过心跳的成员不会被误清00:17 +131: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 房主侧成员超时清理 刷新过心跳的成员不会被误清00:17 +131: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 历史同步与撤回的权限校验 chatSync 仅接受房主发送，普通成员伪造的历史被拒绝00:17 +132: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 历史同步与撤回的权限校验 chatSync 仅接受房主发送，普通成员伪造的历史被拒绝00:17 +132: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 历史同步与撤回的权限校验 chatDelete 校验帧的实际发送者，冒用他人设备码无效00:17 +133: /Users/judoon/workspace/DawnMesh/test/room_session_test.dart: 历史同步与撤回的权限校验 chatDelete 校验帧的实际发送者，冒用他人设备码无效00:17 +133: loading /Users/judoon/workspace/DawnMesh/test/dawnmesh_security_test.dart00:17 +133: /Users/judoon/workspace/DawnMesh/test/dawnmesh_security_test.dart: oversized sealed packet is dropped without sending plaintext00:17 +134: /Users/judoon/workspace/DawnMesh/test/dawnmesh_security_test.dart: oversized sealed packet is dropped without sending plaintext00:17 +134: /Users/judoon/workspace/DawnMesh/test/dawnmesh_security_test.dart: encrypted session rejects plaintext join but accepts a sealed join00:17 +135: /Users/judoon/workspace/DawnMesh/test/dawnmesh_security_test.dart: encrypted session rejects plaintext join but accepts a sealed join00:17 +135: loading /Users/judoon/workspace/DawnMesh/test/spake2_test.dart00:17 +135: /Users/judoon/workspace/DawnMesh/test/spake2_test.dart: RFC 9382 Appendix B P-256 vector: messages, key and confirmations00:17 +136: /Users/judoon/workspace/DawnMesh/test/spake2_test.dart: RFC 9382 Appendix B P-256 vector: messages, key and confirmations00:17 +136: /Users/judoon/workspace/DawnMesh/test/spake2_test.dart: wrong PIN and off-curve public point fail authentication00:17 +137: /Users/judoon/workspace/DawnMesh/test/spake2_test.dart: wrong PIN and off-curve public point fail authentication00:17 +137: loading /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart00:18 +137: loading /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart00:18 +137: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: invitation is canonical, random, and redacted00:18 +138: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: invitation is canonical, random, and redacted00:18 +138: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: wrong key, modified ciphertext, and concurrent replay are rejected00:18 +139: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: wrong key, modified ciphertext, and concurrent replay are rejected00:18 +139: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: old counters remain rejected after replay window advances00:18 +140: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: old counters remain rejected after replay window advances00:18 +140: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: captured roster cannot admit a fresh client without its challenge00:18 +141: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: captured roster cannot admit a fresh client without its challenge00:18 +141: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: real TCP protected rooms carry chat, history and audio; wrong invite cannot join00:18 +142: /Users/judoon/workspace/DawnMesh/test/room_invite_test.dart: real TCP protected rooms carry chat, history and audio; wrong invite cannot join00:18 +142: loading /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart00:19 +142: loading /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart00:19 +142: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 Host 在新成员进房时自动补发全量历史聊天帧 (Chat History Sync)00:19 +143: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 Host 在新成员进房时自动补发全量历史聊天帧 (Chat History Sync)00:19 +143: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 跨退出改名识别：同一设备短码改名重入后正确识别同人并关联曾用名00:19 +144: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 跨退出改名识别：同一设备短码改名重入后正确识别同人并关联曾用名00:19 +144: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 全员撤回与删除消息：本人可撤回，他人无法伪造撤回，各端同步移除00:19 +145: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 全员撤回与删除消息：本人可撤回，他人无法伪造撤回，各端同步移除00:19 +145: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 确定性系统头像框：不可自定义，房主专属金辉，成员算法恒定映射00:19 +146: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 确定性系统头像框：不可自定义，房主专属金辉，成员算法恒定映射00:19 +146: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 RoomChatSheet 气泡署名：同名冲突显隐与身份徽标00:19 +147: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 RoomChatSheet 气泡署名：同名冲突显隐与身份徽标00:19 +147: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 平板宽屏软键盘弹起时零 Overflow 测试00:19 +148: /Users/judoon/workspace/DawnMesh/test/chat_advanced_test.dart: 近场聊天全生命周期、同人识别、头像框与全员撤回测试 平板宽屏软键盘弹起时零 Overflow 测试00:19 +148: loading /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart00:19 +148: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 WiFi 房内布局不溢出00:20 +148: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 WiFi 房内布局不溢出00:20 +149: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 WiFi 房内布局不溢出00:20 +149: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 蓝牙房内布局不溢出00:20 +150: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 蓝牙房内布局不溢出00:20 +150: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 首页整场（背景+标题+前景）不溢出00:20 +151: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 首页整场（背景+标题+前景）不溢出00:20 +151: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 聊天面板弹出、输入发送、长消息不溢出00:20 +152: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 360x640 聊天面板弹出、输入发送、长消息不溢出00:20 +152: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 WiFi 房内布局不溢出00:20 +153: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 WiFi 房内布局不溢出00:20 +153: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 蓝牙房内布局不溢出00:20 +154: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 蓝牙房内布局不溢出00:20 +154: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 首页整场（背景+标题+前景）不溢出00:20 +155: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 首页整场（背景+标题+前景）不溢出00:20 +155: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 聊天面板弹出、输入发送、长消息不溢出00:20 +156: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 411x892 聊天面板弹出、输入发送、长消息不溢出00:20 +156: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 WiFi 房内布局不溢出00:20 +157: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 WiFi 房内布局不溢出00:20 +157: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 蓝牙房内布局不溢出00:20 +158: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 蓝牙房内布局不溢出00:20 +158: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 首页整场（背景+标题+前景）不溢出00:20 +159: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 首页整场（背景+标题+前景）不溢出00:20 +159: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 聊天面板弹出、输入发送、长消息不溢出00:20 +160: /Users/judoon/workspace/DawnMesh/test/room_layout_test.dart: 430x932 聊天面板弹出、输入发送、长消息不溢出00:20 +160: All tests passed!
+Command: ./scripts/flutter.sh test --concurrency=1
+Date: 2026-09-08
+Exit code: 0
+Result: All tests passed (167)
+
+New recovery coverage:
+- retry delays continue until the 10-minute recovery window expires
+- duplicate disconnect signals do not reset the active recovery window
+- a physical transport disconnect rebuilds the link and rejoins the room
+- invitation PAKE can run again after rebuilding the physical link
+- hosts reserve disconnected member identity and capacity for 10 minutes
+- Wi-Fi Direct accepts a connection event that completed before the method returned

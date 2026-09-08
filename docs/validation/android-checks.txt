@@ -10,49 +10,45 @@
 > Task :app:packJniLibsflutterBuildDebug
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
-> Task :app:cleanMergeDebugAssets UP-TO-DATE
-> Task :app:mergeDebugShaders
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:cleanMergeDebugAssets
+> Task :app:mergeDebugShaders UP-TO-DATE
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:checkDebugAarMetadata
 > Task :app:copyFlutterAssetsDebug
-> Task :app:generateDebugResValues
-> Task :app:mapDebugSourceSetPaths
-> Task :app:generateDebugResources
-> Task :app:packageDebugResources
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
 > Task :app:createDebugCompatibleScreenManifests
-> Task :app:extractDeepLinksDebug
-> Task :app:mergeDebugResources
-> Task :app:parseDebugLocalResources
+> Task :app:extractDeepLinksDebug UP-TO-DATE
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
-> Task :app:javaPreCompileDebug
+> Task :app:javaPreCompileDebug UP-TO-DATE
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
 > Task :app:preDebugAndroidTestBuild SKIPPED
-> Task :app:javaPreCompileDebugUnitTest
-> Task :app:generateDebugAndroidTestResValues
-> Task :app:extractProguardFiles
+> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:processDebugManifestForPackage
 > Task :app:processDebugResources
-
 > Task :app:compileDebugKotlin
-w: file:///Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/CallPanelGraphics.kt:102:58 'scaledDensity: Float' is deprecated. Deprecated in Java
-w: file:///Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/IntercomForegroundService.kt:63:48 'constructor Builder(Int, CharSequence!, PendingIntent?)' is deprecated. Deprecated in Java
-
-> Task :app:compileDebugJavaWithJavac
-> Task :app:processDebugJavaRes
-> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
 > Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
 > Task :app:generateDebugLintReportModel
 > Task :app:generateDebugAndroidTestLintModel
 > Task :app:generateDebugUnitTestLintModel
 > Task :app:compileDebugUnitTestKotlin
 > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
-> Task :app:processDebugUnitTestJavaRes
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
 > Task :app:lintAnalyzeDebugAndroidTest
 > Task :app:lintAnalyzeDebugUnitTest
-> Task :app:testDebugUnitTest
 > Task :app:lintAnalyzeDebug
 
 > Task :app:lintReportDebug
@@ -68,5 +64,5 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 10s
-44 actionable tasks: 38 executed, 6 up-to-date
+BUILD SUCCESSFUL in 8s
+44 actionable tasks: 23 executed, 21 up-to-date
