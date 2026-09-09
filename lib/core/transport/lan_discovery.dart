@@ -207,7 +207,7 @@ class LanRoomDiscovery {
       "hostNickname": hostNickname,
       "port": tcpPort,
       "members": memberCount,
-      if (action != null) "action": action,
+      "action": ?action,
       "timestamp": DateTime.now().millisecondsSinceEpoch,
     });
 

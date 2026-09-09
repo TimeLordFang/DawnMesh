@@ -43,7 +43,7 @@ void main() {
               'hostNickname': '主持人',
               'port': port,
               'members': 2,
-              if (action != null) 'action': action,
+              'action': ?action,
               'timestamp': DateTime.now().millisecondsSinceEpoch,
             }),
           ),

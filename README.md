@@ -5,7 +5,7 @@
 **所有应用建房/入房入口默认启用邀请码加密（AES-256-GCM）。** 每次建房生成随机 **6 位数字邀请码**（可包含前导零），当面口述即可。短码通过 PAKE 验证后下发独立随机房间密钥，语音、聊天与成员控制消息使用 AES-GCM 加密。邀请码代表可信小组的访问权，不能防范持码成员冒名；仍需你完成真机验证。
 
 - 安装包 ID：`dev.dawnmesh.intercom`，可以与原版并存。
-- 版本：`0.1.0-dev.13+13`。
+- 版本：`0.1.0-dev.14+14`。
 - Kotlin namespace、Dart 包、平台通道、原生库和日志 tag 已统一为 DawnMesh 标识。
 - 中文名：曙光之声；英文名：DawnMesh。原作者许可与来源说明保留。
 - 不包含旧版根目录 `app/`（纯 Kotlin alpha.7）及 iOS、桌面、Web、HarmonyOS。
@@ -13,7 +13,9 @@
 
 ## 本机直接构建与使用
 
-本次已在项目 `.tools/` 安装 Flutter、JDK 17、Android SDK/NDK/CMake；无需再次配置全局 PATH：
+GitHub 标签自动发布及签名 Secret 配置见 [GitHub 自动发布](docs/GITHUB_RELEASES.md)。
+
+本次已在项目 `.tools/` 安装 Flutter 3.47.2、JDK 17、Android SDK/NDK/CMake；无需再次配置全局 PATH：
 
 ```sh
 cd /Users/judoon/workspace/DawnMesh
@@ -30,9 +32,9 @@ cd /Users/judoon/workspace/DawnMesh
 
 昵称保存在 Android 应用私有设置中，关闭并重新打开应用后自动恢复；清除应用数据或卸载会删除。Wi-Fi 和蓝牙房现在都可在“按住对讲”与“自动通话”之间切换。Android 10 及以上的 Wi-Fi Direct 使用邀请码派生的临时 SSID/口令连接，避免房主侧旧式 WPS 确认；部分厂商若额外强制系统确认，应用没有权限代替用户操作。普通同一局域网房仍直接通过 TCP 加入。
 
-dev.13 在蓝牙 L2CAP 和 Wi-Fi TCP 客户端发现物理断链后，会按 1、2、4、8、15、30 秒退避重建链路，之后每 30 秒重试，总恢复窗口为 10 分钟。蓝牙客户端每次恢复会重新扫描房主广播，刷新可能变化的设备地址和动态 PSM，并在重新订阅数据通道前等待旧订阅完全关闭。房主关闭蓝牙时会保留房间状态；适配器重新到达 `STATE_ON` 后，应用重新申请动态 PSM、重开 L2CAP 监听并恢复 BLE 广播。链路恢复后会重新做邀请码 PAKE 验证并自动进房；房主在同一窗口内保留成员号和名额。Wi-Fi Direct 房主也会监测并重建意外消失的系统群组。恢复期间音频前台服务与锁屏控件保持运行，Android 14+ 前台服务同时声明麦克风与连接设备用途。
+dev.14 在蓝牙 L2CAP 和 Wi-Fi TCP 客户端发现物理断链后，会按 1、2、4、8、15、30 秒退避重建链路，之后每 30 秒重试，总恢复窗口为 10 分钟。蓝牙客户端每次恢复会重新扫描房主广播，刷新可能变化的设备地址和动态 PSM，并在重新订阅数据通道前等待旧订阅完全关闭。房主关闭蓝牙时会保留房间状态；适配器重新到达 `STATE_ON` 后，应用重新申请动态 PSM、重开 L2CAP 监听并恢复 BLE 广播。链路恢复后会重新做邀请码 PAKE 验证并自动进房；房主在同一窗口内保留成员号和名额。Wi-Fi Direct 房主也会监测并重建意外消失的系统群组。恢复期间音频前台服务与锁屏控件保持运行，Android 14+ 前台服务同时声明麦克风与连接设备用途。
 
-蓝牙房与蓝牙耳机同时使用时，dev.13 自动把 Opus 从 16 kbps 调整为 10 kbps，并把相邻协议帧最多 60 ms 合并为一次 L2CAP socket 写入；接收端改为 160 ms 起步、最高 400 ms 的自适应缓冲。发生欠载时缓冲快速增加，连续稳定 5 秒后每次平滑修剪 20 ms，逐步回到低延迟。没有耳机时仍使用 16 kbps 与 25 ms 合并窗口。房间底部可切换“耳机麦克风”和“手机麦克风”；选择手机麦克风后仍从蓝牙耳机播放，经典耳机可保持 A2DP 媒体输出，更适合同时播放音乐。调试日志会记录具名的 AudioRecord、AudioTrack 与通信设备路由、共存模式、实际 Opus 码率，以及缓冲 `trimmed` 和 L2CAP `txFrames/txWrites`。
+蓝牙房与蓝牙耳机同时使用时，dev.14 自动把 Opus 从 16 kbps 调整为 10 kbps，并把相邻协议帧最多 60 ms 合并为一次 L2CAP socket 写入；接收端改为 160 ms 起步、最高 400 ms 的自适应缓冲。发生欠载时缓冲快速增加，连续稳定 5 秒后每次平滑修剪 20 ms，逐步回到低延迟。没有耳机时仍使用 16 kbps 与 25 ms 合并窗口。房间底部可切换“耳机麦克风”和“手机麦克风”；选择手机麦克风后仍从蓝牙耳机播放，经典耳机可保持 A2DP 媒体输出，更适合同时播放音乐。调试日志会记录具名的 AudioRecord、AudioTrack 与通信设备路由、共存模式、实际 Opus 码率，以及缓冲 `trimmed` 和 L2CAP `txFrames/txWrites`。
 
 ## 发言模式与锁屏使用
 
@@ -41,7 +43,7 @@ dev.13 在蓝牙 L2CAP 和 Wi-Fi TCP 客户端发现物理断链后，会按 1�
 - **按住对讲**：按住发送，松开收听。切换模式、静音或应用失去前台焦点时释放按住状态。
 - **自动通话**：无需按键，检测到声音后发送，静音环境暂停发送。保留约 100 ms 前置音频和 400 ms 尾音。它是本地响度/噪声门限检测，不是语义识别人声；环境噪声也可能触发。Wi-Fi 自动通话使用相同声音触发逻辑。
 
-每台手机独立选择自己的发言方式，两种方式均可接收其他人的声音。dev.6 将模式选择改为带图标、状态说明和滑动高亮的胶囊控件，自动适配矮屏与大字号。蓝牙房通常使用 16 kbps；检测到蓝牙耳机并用时，dev.13 自动切换为 10 kbps 共存参数。实际延迟和音质仍需在目标设备复测。
+每台手机独立选择自己的发言方式，两种方式均可接收其他人的声音。dev.6 将模式选择改为带图标、状态说明和滑动高亮的胶囊控件，自动适配矮屏与大字号。蓝牙房通常使用 16 kbps；检测到蓝牙耳机并用时，dev.14 自动切换为 10 kbps 共存参数。实际延迟和音质仍需在目标设备复测。
 
 **先在应用前台进入房间，允许麦克风、附近设备和通知，再锁屏。** 自动模式继续收发。按住模式下唤醒屏幕后，点击常驻的“曙光之声 · 房间通话”通知进入锁屏通话面板，使用中央圆形按钮按住说话、松手停止。面板采用深色渐变、图标化胶囊模式切换和独立静音卡片，选中项带色彩、缩放与轻震反馈；滑出圆环即停止发送，滑回不会重新开麦。面板不会解锁手机，不显示邀请码或聊天记录。再次熄屏或切走会释放对讲按钮。
 
@@ -59,22 +61,22 @@ dev.13 在蓝牙 L2CAP 和 Wi-Fi TCP 客户端发现物理断链后，会按 1�
 
 | 依赖 | 版本 / 用途 |
 | --- | --- |
-| Flutter | **3.29.3**（随带 Dart 3.7.2），与原仓库 CI 的 3.29.x 对齐 |
+| Flutter | **3.47.2**（随带 Dart 3.13.2），当前 stable |
 | JDK | **17**，运行 Gradle；只安装 JRE 不够 |
-| Android SDK Platform | **35**，本项目固定 compileSdk/targetSdk 35；可在 Android 16 运行 |
-| Android SDK Build-Tools | **35.0.0**，另保留 AGP 自动要求的 **34.0.0** |
+| Android SDK Platform | **36**，本项目固定 compileSdk/targetSdk 36；可在 Android 16 运行 |
+| Android SDK Build-Tools | **36.1.0**（AGP 运行时也会使用 36.0.0） |
 | Command-line Tools | SDK Manager 安装与许可证管理 |
 | Platform-Tools | 包含 adb，用于安装、日志和连接真机 |
-| NDK Side by side | **27.0.12077973**，构建 native/ 下 C++ |
+| NDK Side by side | **28.2.13676358**，构建 native/ 下 C++ |
 | CMake | **3.22.1** |
 | Git | 获取 Flutter 和管理源码 |
 
-Gradle 8.12、AGP 8.7.0、Kotlin 1.8.22 由项目/Flutter 构建工具解析，不需要全局安装 Gradle、Kotlin。无需 Node.js、Python 或 iOS 的完整 Xcode 来构建 APK；macOS 获取 Git/本机 C++ 检查可安装 Xcode Command Line Tools。Android Studio 可用于安装和管理 SDK，但不是强制依赖。Apple Silicon Mac 使用此 Flutter 版本编译 release 还需要 Rosetta（`softwareupdate --install-rosetta --agree-to-license`），因为其 Android AOT 编译器为 Intel 架构。
+Gradle **9.4.1** 和 AGP **9.2.1** 由项目 Wrapper/构建脚本固定，Kotlin 使用 AGP 9 的内置实现（顶层版本约束 **2.4.0**），不需要全局安装 Gradle 或 Kotlin。无需 Node.js、Python 或 iOS 的完整 Xcode 来构建 APK；macOS 获取 Git/本机 C++ 检查可安装 Xcode Command Line Tools。Android Studio 可用于安装和管理 SDK，但不是强制依赖。
 
 安装 Flutter 后将 `flutter/bin` 加入 PATH。Android Studio 中打开 SDK Manager，安装表中的组件；或配置好 `sdkmanager` 后执行：
 
 ```sh
-sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
 flutter doctor --android-licenses
 flutter doctor -v
 ```
@@ -112,10 +114,10 @@ flutter build apk --release
 
 默认使用官方 Maven / pub.dev。若网络无法连接，可自行选择镜像：`DAWNMESH_USE_MIRROR=1 flutter build apk --debug` 为 Gradle 启用原有阿里云镜像；Dart 的源由 `PUB_HOSTED_URL` 控制。镜像是另一条供应链，不能代替构件校验；仓库未完成完整依赖锁定、SBOM 或 CVE 审计。
 
-NDK r27 已开启 `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`。最终 APK 的 ELF 段与 ZIP 对齐检查结果见验证记录；对齐检查不能替代 Android 16 真机运行测试。
+NDK 28.2 已开启 `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`。最终 APK 的 ELF 段与 ZIP 对齐检查结果见验证记录；对齐检查不能替代 Android 16 真机运行测试。
 
 ## 修复与验证
 
 见 [安全审查](docs/SECURITY_REVIEW.md)、[蓝牙复测步骤](docs/ANDROID16_BLUETOOTH.md)、[验证记录](docs/VALIDATION.md)。
 
-官方资料：[Flutter Android 环境](https://docs.flutter.dev/platform-integration/android/setup)、[AGP 8.7 兼容表](https://developer.android.com/build/releases/agp-8-7-0-release-notes)、[Android 蓝牙权限](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)、[16 KB 页面](https://developer.android.com/guide/practices/page-sizes)。
+官方资料：[Flutter Android 环境](https://docs.flutter.dev/platform-integration/android/setup)、[Flutter 内置 Kotlin 迁移](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers)、[AGP 9.2 兼容表](https://developer.android.com/build/releases/agp-9-2-0-release-notes)、[Android 蓝牙权限](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)、[16 KB 页面](https://developer.android.com/guide/practices/page-sizes)。

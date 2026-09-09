@@ -1,9 +1,12 @@
 package dev.dawnmesh.intercom
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
@@ -82,6 +85,7 @@ class WifiDirectPlugin(
         }
 
         receiver = object : BroadcastReceiver() {
+            @SuppressLint("MissingPermission")
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 when (intent?.action) {
                     WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
@@ -91,6 +95,10 @@ class WifiDirectPlugin(
                     }
 
                     WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                        if (!hasNearbyWifiPermission()) {
+                            Log.w(TAG, "收到对端列表变化，但近场 Wi-Fi 权限已被撤销")
+                            return
+                        }
                         Log.i(TAG, "收到系统 WIFI_P2P_PEERS_CHANGED_ACTION 广播，开始请求对端列表")
                         manager?.requestPeers(channel) { peerList: WifiP2pDeviceList? ->
                             peers.clear()
@@ -169,6 +177,15 @@ class WifiDirectPlugin(
         eventSink?.success(data)
     }
 
+    private fun hasNearbyWifiPermission(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        } else {
+            Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun configuredGroup(
         networkName: String?,
         passphrase: String?,
@@ -187,7 +204,12 @@ class WifiDirectPlugin(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun createGroupInternal(config: WifiP2pConfig?, result: MethodChannel.Result) {
+        if (!hasNearbyWifiPermission()) {
+            result.error("PERMISSION_DENIED", "缺少附近 Wi-Fi 设备权限", null)
+            return
+        }
         val p2pManager = manager
         val p2pChannel = channel
         if (p2pManager == null || p2pChannel == null) {
@@ -233,7 +255,14 @@ class WifiDirectPlugin(
 
     // MARK: - MethodChannel
 
+    @SuppressLint("MissingPermission")
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (call.method in setOf("createGroup", "removeGroup", "discoverPeers", "connect", "disconnect") &&
+            !hasNearbyWifiPermission()
+        ) {
+            result.error("PERMISSION_DENIED", "缺少附近 Wi-Fi 设备权限", null)
+            return
+        }
         when (call.method) {
             "isSupported" -> {
                 result.success(manager != null && channel != null)

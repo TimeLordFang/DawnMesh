@@ -1,6 +1,7 @@
 package dev.dawnmesh.intercom
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
@@ -278,8 +279,14 @@ class PlatformAudioPlugin(
 
     // ------------------------------------------------------------------ 采集
 
+    @SuppressLint("MissingPermission")
     private fun startCapture(): Boolean {
         if (capturing.get()) return true
+        // 权限可能在 MethodChannel 检查后、后台线程真正创建 AudioRecord 前被撤销。
+        if (!hasMicPermission()) {
+            Log.w(TAG, "创建 AudioRecord 前录音权限已被撤销")
+            return false
+        }
 
         val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,

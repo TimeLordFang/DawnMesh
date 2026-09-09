@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart' as crypt;
 import 'package:pointycastle/api.dart';
@@ -13,6 +14,7 @@ import 'package:pointycastle/key_generators/ec_key_generator.dart';
 import 'package:pointycastle/macs/hmac.dart';
 import 'package:pointycastle/random/fortuna_random.dart';
 import 'package:pointycastle/signers/ecdsa_signer.dart';
+
 import '../diagnostics/app_log.dart';
 
 const String _tag = '加密';
@@ -76,8 +78,8 @@ class DeviceIdentity {
     );
 
     final pair = keyGen.generateKeyPair();
-    final priv = pair.privateKey as ECPrivateKey;
-    final pub = pair.publicKey as ECPublicKey;
+    final priv = pair.privateKey;
+    final pub = pair.publicKey;
 
     // 转换为标准 65 字节非压缩公钥 (0x04 || X[32] || Y[32])
     final pkBytes = pub.Q!.getEncoded(false);
@@ -349,10 +351,9 @@ class _ReplayWindow {
     if (rejects(counter)) throw StateError('replayed encrypted frame');
     if (counter > highest) {
       final shift = counter - highest;
-      bits =
-          shift >= SessionCipher.replayWindowSize
-              ? BigInt.one
-              : ((bits << shift) | BigInt.one) & mask;
+      bits = shift >= SessionCipher.replayWindowSize
+          ? BigInt.one
+          : ((bits << shift) | BigInt.one) & mask;
       highest = counter;
     } else {
       bits |= BigInt.one << (highest - counter);

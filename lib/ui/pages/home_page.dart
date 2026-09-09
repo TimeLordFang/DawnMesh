@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+
 import '../../core/audio/audio_io.dart';
 import '../../core/diagnostics/app_log.dart';
 import '../../core/preferences/nickname_store.dart';
@@ -169,9 +171,8 @@ class _HomeContentState extends State<HomeContent> {
 
   void _showConnectionError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _bleRoomList(AppStrings s, Color textSecondary) {
@@ -201,10 +202,9 @@ class _HomeContentState extends State<HomeContent> {
                 ),
                 subtitle: Text('${room.memberCount}/6 · ${room.rssi} dBm'),
                 trailing: TextButton(
-                  onPressed:
-                      _busy || room.memberCount >= 6
-                          ? null
-                          : () => _onJoinBleRoom(room),
+                  onPressed: _busy || room.memberCount >= 6
+                      ? null
+                      : () => _onJoinBleRoom(room),
                   child: Text(s.joinRoom),
                 ),
               ),
@@ -328,10 +328,12 @@ class _HomeContentState extends State<HomeContent> {
     final s = AppStrings.of(context);
     final isNight = widget.isNight;
     final stage = widget.stage;
-    final textPrimary =
-        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final textSecondary =
-        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+    final textPrimary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isNight
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
 
     return SafeArea(
@@ -362,10 +364,9 @@ class _HomeContentState extends State<HomeContent> {
                           color: cardBg,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color:
-                                isNight
-                                    ? const Color(0xFF283A52)
-                                    : const Color(0xFFDCCEC8),
+                            color: isNight
+                                ? const Color(0xFF283A52)
+                                : const Color(0xFFDCCEC8),
                             width: 1.2,
                           ),
                         ),
@@ -408,10 +409,11 @@ class _HomeContentState extends State<HomeContent> {
                                   vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: (isNight
-                                          ? AppTheme.nightSkyBlue
-                                          : AppTheme.dawnCoral)
-                                      .withValues(alpha: 0.15),
+                                  color:
+                                      (isNight
+                                              ? AppTheme.nightSkyBlue
+                                              : AppTheme.dawnCoral)
+                                          .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -421,10 +423,9 @@ class _HomeContentState extends State<HomeContent> {
                                     fontFamily: 'monospace',
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.8,
-                                    color:
-                                        isNight
-                                            ? AppTheme.nightSkyBlue
-                                            : AppTheme.dawnCoral,
+                                    color: isNight
+                                        ? AppTheme.nightSkyBlue
+                                        : AppTheme.dawnCoral,
                                   ),
                                 ),
                               ),
@@ -457,8 +458,8 @@ class _HomeContentState extends State<HomeContent> {
                                 isSelected:
                                     _selectedMode == RoomMode.wifiFullDuplex,
                                 isNight: isNight,
-                                onTap:
-                                    () => _selectMode(RoomMode.wifiFullDuplex),
+                                onTap: () =>
+                                    _selectMode(RoomMode.wifiFullDuplex),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -498,10 +499,9 @@ class _HomeContentState extends State<HomeContent> {
                             child: ElevatedButton(
                               onPressed: _busy ? null : _onCreateRoom,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    isNight
-                                        ? AppTheme.nightSkyBlue
-                                        : AppTheme.dawnBurgundy,
+                                backgroundColor: isNight
+                                    ? AppTheme.nightSkyBlue
+                                    : AppTheme.dawnBurgundy,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -530,14 +530,14 @@ class _HomeContentState extends State<HomeContent> {
                           Expanded(
                             flex: 5,
                             child: OutlinedButton(
-                              onPressed:
-                                  _isScanning || _busy ? null : _startScan,
+                              onPressed: _isScanning || _busy
+                                  ? null
+                                  : _startScan,
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(
-                                  color:
-                                      isNight
-                                          ? AppTheme.nightSkyBlue
-                                          : AppTheme.dawnCoral,
+                                  color: isNight
+                                      ? AppTheme.nightSkyBlue
+                                      : AppTheme.dawnCoral,
                                   width: 1.6,
                                 ),
                                 padding: const EdgeInsets.symmetric(
@@ -559,20 +559,18 @@ class _HomeContentState extends State<HomeContent> {
                                         height: 18,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2.2,
-                                          color:
-                                              isNight
-                                                  ? AppTheme.moonSilverWhite
-                                                  : AppTheme.dawnCoral,
+                                          color: isNight
+                                              ? AppTheme.moonSilverWhite
+                                              : AppTheme.dawnCoral,
                                         ),
                                       )
                                     else
                                       Icon(
                                         Icons.radar,
                                         size: 21,
-                                        color:
-                                            isNight
-                                                ? AppTheme.moonSilverWhite
-                                                : AppTheme.dawnCoral,
+                                        color: isNight
+                                            ? AppTheme.moonSilverWhite
+                                            : AppTheme.dawnCoral,
                                       ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -580,10 +578,9 @@ class _HomeContentState extends State<HomeContent> {
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color:
-                                            isNight
-                                                ? AppTheme.moonSilverWhite
-                                                : AppTheme.dawnCoral,
+                                        color: isNight
+                                            ? AppTheme.moonSilverWhite
+                                            : AppTheme.dawnCoral,
                                       ),
                                     ),
                                   ],
@@ -624,10 +621,9 @@ class _HomeContentState extends State<HomeContent> {
                             Text(
                               s.detectingRooms,
                               style: TextStyle(
-                                color:
-                                    isNight
-                                        ? AppTheme.nightSkyBlue
-                                        : AppTheme.dawnCoral,
+                                color: isNight
+                                    ? AppTheme.nightSkyBlue
+                                    : AppTheme.dawnCoral,
                                 fontSize: 14,
                               ),
                             ),
@@ -647,213 +643,209 @@ class _HomeContentState extends State<HomeContent> {
               child: StageExitItem(
                 stage: stage,
                 index: 4,
-                child:
-                    _selectedMode == RoomMode.bluetoothPtt
-                        ? _bleRoomList(s, textSecondary)
-                        : StreamBuilder<List<DiscoveredRoom>>(
-                          stream: _lanDiscovery.roomsStream,
-                          initialData: _lanDiscovery.currentRooms,
-                          builder: (context, snapshot) {
-                            final rooms = snapshot.data ?? [];
-                            final p2pPeers = _p2pPeers;
-                            final totalCount = rooms.length + p2pPeers.length;
+                child: _selectedMode == RoomMode.bluetoothPtt
+                    ? _bleRoomList(s, textSecondary)
+                    : StreamBuilder<List<DiscoveredRoom>>(
+                        stream: _lanDiscovery.roomsStream,
+                        initialData: _lanDiscovery.currentRooms,
+                        builder: (context, snapshot) {
+                          final rooms = snapshot.data ?? [];
+                          final p2pPeers = _p2pPeers;
+                          final totalCount = rooms.length + p2pPeers.length;
 
-                            if (totalCount == 0) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 32,
-                                  vertical: 32,
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  s.noRoomsDiscoveredHint,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: textSecondary.withValues(alpha: 0.7),
-                                    fontSize: 15,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              );
-                            }
-
-                            return ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
+                          if (totalCount == 0) {
+                            return Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 8,
+                                horizontal: 32,
+                                vertical: 32,
                               ),
-                              itemCount: totalCount,
-                              separatorBuilder:
-                                  (_, __) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                if (index < rooms.length) {
-                                  final room = rooms[index];
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 18,
-                                      vertical: 16,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: cardBg,
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color:
-                                            isNight
-                                                ? const Color(0xFF283A52)
-                                                : const Color(0xFFDCCEC8),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                room.roomName,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  color: textPrimary,
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                s.roomHostInfo(
-                                                  room.hostNickname,
-                                                  room.memberCount,
-                                                  6,
-                                                ),
-                                                style: TextStyle(
-                                                  color: textSecondary,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        ElevatedButton(
-                                          onPressed: () => _onJoinRoom(room),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                isNight
-                                                    ? AppTheme.nightSkyBlue
-                                                    : AppTheme.dawnCoral,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 22,
-                                              vertical: 14,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(22),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            s.joinRoom,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                } else {
-                                  final peer = p2pPeers[index - rooms.length];
-                                  final peerTitle =
-                                      peer.name.isNotEmpty
-                                          ? s.defaultWifiRoomTitle(peer.name)
-                                          : s.nearbyWifiRoom;
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 18,
-                                      vertical: 16,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: cardBg,
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color:
-                                            isNight
-                                                ? const Color(0xFF283A52)
-                                                : const Color(0xFFDCCEC8),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                peerTitle,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  color: textPrimary,
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                "${s.hostTag}: ${peer.name.isNotEmpty ? peer.name : s.nearbyDevice} · ${s.nearFieldDirect}",
-                                                style: TextStyle(
-                                                  color: textSecondary,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        ElevatedButton(
-                                          onPressed:
-                                              () => _onJoinWifiDirectPeer(peer),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                isNight
-                                                    ? AppTheme.nightSkyBlue
-                                                    : AppTheme.dawnCoral,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 22,
-                                              vertical: 14,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(22),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            s.joinRoom,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }
-                              },
+                              alignment: Alignment.center,
+                              child: Text(
+                                s.noRoomsDiscoveredHint,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: textSecondary.withValues(alpha: 0.7),
+                                  fontSize: 15,
+                                  height: 1.5,
+                                ),
+                              ),
                             );
-                          },
-                        ),
+                          }
+
+                          return ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 8,
+                            ),
+                            itemCount: totalCount,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              if (index < rooms.length) {
+                                final room = rooms[index];
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: cardBg,
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: isNight
+                                          ? const Color(0xFF283A52)
+                                          : const Color(0xFFDCCEC8),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              room.roomName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: textPrimary,
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              s.roomHostInfo(
+                                                room.hostNickname,
+                                                room.memberCount,
+                                                6,
+                                              ),
+                                              style: TextStyle(
+                                                color: textSecondary,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      ElevatedButton(
+                                        onPressed: () => _onJoinRoom(room),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isNight
+                                              ? AppTheme.nightSkyBlue
+                                              : AppTheme.dawnCoral,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 22,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              22,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          s.joinRoom,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final peer = p2pPeers[index - rooms.length];
+                                final peerTitle = peer.name.isNotEmpty
+                                    ? s.defaultWifiRoomTitle(peer.name)
+                                    : s.nearbyWifiRoom;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: cardBg,
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: isNight
+                                          ? const Color(0xFF283A52)
+                                          : const Color(0xFFDCCEC8),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              peerTitle,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: textPrimary,
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              "${s.hostTag}: ${peer.name.isNotEmpty ? peer.name : s.nearbyDevice} · ${s.nearFieldDirect}",
+                                              style: TextStyle(
+                                                color: textSecondary,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            _onJoinWifiDirectPeer(peer),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isNight
+                                              ? AppTheme.nightSkyBlue
+                                              : AppTheme.dawnCoral,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 22,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              22,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          s.joinRoom,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
               ),
             ),
 
@@ -910,10 +902,9 @@ class _HomeContentState extends State<HomeContent> {
     FocusScope.of(context).unfocus();
     final s = AppStrings.of(context);
     final nickname = _nickname;
-    final roomName =
-        _selectedMode == RoomMode.wifiFullDuplex
-            ? s.defaultWifiRoomTitle(nickname)
-            : s.defaultBleRoomTitle(nickname);
+    final roomName = _selectedMode == RoomMode.wifiFullDuplex
+        ? s.defaultWifiRoomTitle(nickname)
+        : s.defaultBleRoomTitle(nickname);
 
     final session = RoomSession(
       audioIo: widget.audioIo,
@@ -1132,8 +1123,9 @@ class _HomeContentState extends State<HomeContent> {
     }
     if (mounted) {
       setState(() => _busy = false);
-      final displayName =
-          peer.name.isNotEmpty ? s.defaultWifiRoomTitle(peer.name) : s.wifiRoom;
+      final displayName = peer.name.isNotEmpty
+          ? s.defaultWifiRoomTitle(peer.name)
+          : s.wifiRoom;
       widget.onEnterRoom(session, displayName);
     }
   }
@@ -1160,10 +1152,12 @@ class _ModeSelectChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
-    final textPrimary =
-        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final textSecondary =
-        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+    final textPrimary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isNight
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
 
     return InkWell(
       onTap: onTap,
@@ -1174,12 +1168,9 @@ class _ModeSelectChip extends StatelessWidget {
           color: isSelected ? activeColor.withValues(alpha: 0.12) : cardBg,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color:
-                isSelected
-                    ? activeColor
-                    : (isNight
-                        ? const Color(0xFF283A52)
-                        : const Color(0xFFDCCEC8)),
+            color: isSelected
+                ? activeColor
+                : (isNight ? const Color(0xFF283A52) : const Color(0xFFDCCEC8)),
             width: isSelected ? 2.0 : 1.0,
           ),
         ),

@@ -130,9 +130,8 @@ class _DebugLogPageState extends State<DebugLogPage> {
         .join('\n');
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(s.debugLogsCopied)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(s.debugLogsCopied)));
   }
 
   @override
@@ -141,14 +140,15 @@ class _DebugLogPageState extends State<DebugLogPage> {
     final isNight = widget.isNight;
     final background = isNight ? AppTheme.darkBg : AppTheme.lightBg;
     final card = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
-    final primary =
-        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final secondary =
-        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-    final border =
-        isNight
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.black.withValues(alpha: 0.08);
+    final primary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final secondary = isNight
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final border = isNight
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.08);
     final entries = _visibleEntries;
 
     return Scaffold(
@@ -158,13 +158,12 @@ class _DebugLogPageState extends State<DebugLogPage> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors:
-                isNight
-                    ? const [AppTheme.nightAbyss, AppTheme.darkBg]
-                    : [
-                      AppTheme.lightBg,
-                      AppTheme.dawnCoral.withValues(alpha: 0.10),
-                    ],
+            colors: isNight
+                ? const [AppTheme.nightAbyss, AppTheme.darkBg]
+                : [
+                    AppTheme.lightBg,
+                    AppTheme.dawnCoral.withValues(alpha: 0.10),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -173,8 +172,9 @@ class _DebugLogPageState extends State<DebugLogPage> {
               _LogHeader(
                 title: s.debugLogsTitle,
                 enabled: _enabled,
-                statusLabel:
-                    _enabled ? s.debugLoggingEnabled : s.debugLoggingDisabled,
+                statusLabel: _enabled
+                    ? s.debugLoggingEnabled
+                    : s.debugLoggingDisabled,
                 primary: primary,
                 secondary: secondary,
                 onBack: () => Navigator.pop(context),
@@ -203,10 +203,9 @@ class _DebugLogPageState extends State<DebugLogPage> {
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: (_enabled
-                                  ? const Color(0xFF4B9A8C)
-                                  : secondary)
-                              .withValues(alpha: 0.14),
+                          color:
+                              (_enabled ? const Color(0xFF4B9A8C) : secondary)
+                                  .withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(11),
                         ),
                         child: Icon(
@@ -245,7 +244,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
                       Switch.adaptive(
                         value: _enabled,
                         onChanged: _saving ? null : _setEnabled,
-                        activeColor: const Color(0xFF4B9A8C),
+                        activeThumbColor: const Color(0xFF4B9A8C),
                       ),
                     ],
                   ),
@@ -261,17 +260,13 @@ class _DebugLogPageState extends State<DebugLogPage> {
                       hintText: s.searchDebugLogs,
                       hintStyle: TextStyle(color: secondary),
                       prefixIcon: Icon(Icons.search_rounded, color: secondary),
-                      suffixIcon:
-                          _searchController.text.isEmpty
-                              ? null
-                              : IconButton(
-                                tooltip: s.clearSearch,
-                                onPressed: _searchController.clear,
-                                icon: Icon(
-                                  Icons.close_rounded,
-                                  color: secondary,
-                                ),
-                              ),
+                      suffixIcon: _searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: s.clearSearch,
+                              onPressed: _searchController.clear,
+                              icon: Icon(Icons.close_rounded, color: secondary),
+                            ),
                       filled: true,
                       fillColor: card.withValues(alpha: 0.78),
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -352,30 +347,29 @@ class _DebugLogPageState extends State<DebugLogPage> {
                 ),
               ],
               Expanded(
-                child:
-                    !_enabled
-                        ? _EmptyLogs(
-                          icon: Icons.power_settings_new_rounded,
-                          title: s.debugLoggingDisabled,
-                          detail: s.debugLogDisabledHint,
-                          primary: primary,
-                          secondary: secondary,
-                        )
-                        : entries.isEmpty
-                        ? _EmptyLogs(
-                          icon: Icons.hourglass_empty_rounded,
-                          title: s.debugLogEmpty,
-                          detail: s.debugLogEmptyHint,
-                          primary: primary,
-                          secondary: secondary,
-                        )
-                        : _ConsoleOutput(
-                          entries: entries,
-                          controller: _scrollController,
-                          isNight: isNight,
-                          secondary: secondary,
-                          border: border,
-                        ),
+                child: !_enabled
+                    ? _EmptyLogs(
+                        icon: Icons.power_settings_new_rounded,
+                        title: s.debugLoggingDisabled,
+                        detail: s.debugLogDisabledHint,
+                        primary: primary,
+                        secondary: secondary,
+                      )
+                    : entries.isEmpty
+                    ? _EmptyLogs(
+                        icon: Icons.hourglass_empty_rounded,
+                        title: s.debugLogEmpty,
+                        detail: s.debugLogEmptyHint,
+                        primary: primary,
+                        secondary: secondary,
+                      )
+                    : _ConsoleOutput(
+                        entries: entries,
+                        controller: _scrollController,
+                        isNight: isNight,
+                        secondary: secondary,
+                        border: border,
+                      ),
               ),
               if (_enabled)
                 Padding(
@@ -401,8 +395,9 @@ class _DebugLogPageState extends State<DebugLogPage> {
         label: Text(label),
         selected: selected,
         onSelected: (_) => setState(() => _level = level),
-        selectedColor:
-            widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnCoral,
+        selectedColor: widget.isNight
+            ? AppTheme.nightSkyBlue
+            : AppTheme.dawnCoral,
         backgroundColor: card,
         labelStyle: TextStyle(
           color: selected ? Colors.white : primary,
@@ -568,9 +563,8 @@ class _ConsoleOutput extends StatelessWidget {
           controller: controller,
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
           itemCount: entries.length,
-          itemBuilder:
-              (context, index) =>
-                  _ConsoleLogLine(entry: entries[index], secondary: secondary),
+          itemBuilder: (context, index) =>
+              _ConsoleLogLine(entry: entries[index], secondary: secondary),
         ),
       ),
     );
@@ -610,7 +604,10 @@ class _ConsoleLogLine extends StatelessWidget {
         TextSpan(
           style: baseStyle,
           children: [
-            TextSpan(text: '$time ', style: TextStyle(color: secondary)),
+            TextSpan(
+              text: '$time ',
+              style: TextStyle(color: secondary),
+            ),
             TextSpan(
               text: '${entry.level.name.toUpperCase().padRight(5)} ',
               style: TextStyle(color: accent, fontWeight: FontWeight.w700),
@@ -621,7 +618,10 @@ class _ConsoleLogLine extends StatelessWidget {
             ),
             TextSpan(text: entry.message),
             if (error.isNotEmpty)
-              TextSpan(text: error, style: TextStyle(color: accent)),
+              TextSpan(
+                text: error,
+                style: TextStyle(color: accent),
+              ),
           ],
         ),
       ),

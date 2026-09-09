@@ -30,6 +30,15 @@
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。额外记录 GNU_RELRO：Flutter 引擎与本项目 C++ 具备该段；Flutter 3.29.3 生成的 `libapp.so` 没有该段。未对 Flutter 预编译运行时/AOT 生成器做进一步二进制加固审计。以上均为静态包检查，**没有据此声称已在 16 KB 手机运行通过**。
 
+## 2026-09-09 依赖升级审计
+
+- Flutter SDK 已升级到 **3.47.2**，随带 Dart **3.13.2**；`pubspec.lock` 已重解并移除已停止维护的 `js` 传递依赖。
+- 直接 Dart 依赖已同步到当前稳定约束：`pointycastle 4.0.0`、`intl 0.20.3`、`ffi 2.2.0`、`flutter_lints 6.0.0`、`test 1.31.1`、`fake_async 1.3.3`。锁文件中的 7 项分析/测试传递依赖仍受 Flutter SDK 约束，不能独立升到其绝对最新版。
+- Android 构建工具已升级到 **AGP 9.2.1 + Gradle 9.4.1 + AGP 内置 Kotlin 2.4.0 + compile/targetSdk 36 + NDK 28.2.13676358**。AGP 9.2 的官方默认 NDK 为 28.2；CMake 3.22.1 保留以兼容现有 native CMake 工程。
+- 新增 `.github/dependabot.yml`，每周检查 pub、Gradle 和 GitHub Actions；Action 使用完整 commit pin，避免标签漂移。
+- 3.47.2 下 `flutter analyze` 和 Flutter 全量测试 **168 项通过**；Android Kotlin 单元测试 **22 项通过**。新版 Lint 首次发现的 11 个 MissingPermission 错误已补上运行时权限检查和异常保护。
+- 本轮最后一次 Android Lint/APK release 需要 Gradle 的本机进程锁；当前执行环境的提权审批额度在验证中耗尽，缓存构件已准备完成，需在本机终端重新执行 README 中的两条 Gradle/Flutter 命令完成最终 APK 产物更新。
+
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
 ## dev.13 本轮完成情况

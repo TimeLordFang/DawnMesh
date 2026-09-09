@@ -3,8 +3,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // The Flutter Gradle Plugin must be applied after the Android plugin.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -19,28 +18,37 @@ val keystoreProperties = Properties().apply {
         FileInputStream(keystorePropertiesFile).use { load(it) }
     }
 }
-val hasReleaseSigning = keystorePropertiesFile.exists()
+fun releaseSigningValue(propertyName: String, environmentName: String): String? =
+    keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = releaseSigningValue("storeFile", "DAWNMESH_KEYSTORE_PATH")
+val releaseStorePassword = releaseSigningValue("storePassword", "DAWNMESH_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("keyAlias", "DAWNMESH_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("keyPassword", "DAWNMESH_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
 
 android {
     // Kotlin namespace 与独立 applicationId 统一使用 DawnMesh 标识。
     namespace = "dev.dawnmesh.intercom"
-    compileSdk = 35
-    ndkVersion = "27.0.12077973"
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
         applicationId = "dev.dawnmesh.intercom"
         // 项目基线是 26；不要用 flutter.minSdkVersion，它会随 Flutter 版本漂移。
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -68,10 +76,10 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
             }
         }
     }
@@ -81,6 +89,12 @@ android {
             signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
 
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
@@ -97,11 +111,10 @@ dependencies {
 
 val verifyReleaseSigning by tasks.registering {
     doLast {
-        require(hasReleaseSigning) { "Release requires android/key.properties and your own keystore. Use --debug for testing." }
-        for (key in listOf("storeFile", "storePassword", "keyAlias", "keyPassword")) {
-            require(!keystoreProperties.getProperty(key).isNullOrBlank()) { "Missing release signing field: $key" }
+        require(hasReleaseSigning) {
+            "Release requires android/key.properties or DAWNMESH_* signing environment variables. Use --debug for testing."
         }
-        require(file(keystoreProperties.getProperty("storeFile")).isFile) { "Keystore not found" }
+        require(file(requireNotNull(releaseStoreFile)).isFile) { "Keystore not found" }
     }
 }
 tasks.matching { it.name == "validateSigningRelease" || it.name == "packageRelease" || it.name == "bundleRelease" }.configureEach {
