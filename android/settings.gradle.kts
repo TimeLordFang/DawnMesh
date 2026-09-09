@@ -27,7 +27,7 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "9.2.1" apply false
+    id("com.android.application") version "9.4.0" apply false
     // 只约束 AGP 内置 Kotlin 的版本；应用模块不再应用旧 kotlin-android 插件。
     id("org.jetbrains.kotlin.android") version "2.4.0" apply false
 }
