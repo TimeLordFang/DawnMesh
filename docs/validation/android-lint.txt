@@ -1,4 +1,4 @@
-/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:102: Warning: Attribute showWhenLocked is only used in API level 27 and higher (current min is 26) [UnusedAttribute]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:105: Warning: Attribute showWhenLocked is only used in API level 27 and higher (current min is 26) [UnusedAttribute]
             android:showWhenLocked="true"
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -19,7 +19,7 @@
    can be unused too, such as the new <tag> element in layouts introduced in
    API 21.
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:71: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/AndroidManifest.xml:74: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
     <application
     ^
 
@@ -39,16 +39,16 @@
    https://developer.android.com/about/versions/12/backup-restore#xml-changes
    https://goo.gle/DataExtractionRules
 
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:101: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:114: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
     private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:305: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:318: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:428: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:446: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:719: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
+/Users/judoon/workspace/DawnMesh/android/app/src/main/kotlin/dev/dawnmesh/intercom/PlatformAudioPlugin.kt:754: Warning: Unnecessary; SDK_INT is always >= 26 [ObsoleteSdkInt]
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /Users/judoon/workspace/DawnMesh/android/app/src/main/res/drawable-v21: Warning: This folder configuration (v21) is unnecessary; minSdkVersion is 26. Merge all the resources in this folder into drawable. [ObsoleteSdkInt]

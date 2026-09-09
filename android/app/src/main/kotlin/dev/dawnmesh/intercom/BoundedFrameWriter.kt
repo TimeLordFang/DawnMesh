@@ -12,6 +12,7 @@ internal class BoundedFrameWriter(
     capacity: Int = 64,
     private val timeoutMillis: Long = 5_000,
     private val coalesceMillis: Long = 0,
+    private val coalesceMillisProvider: (() -> Long)? = null,
     private val maxBatchBytes: Int = 4_096,
     private val write: (ByteArray) -> Unit,
     private val closeTransport: () -> Unit,
@@ -85,9 +86,11 @@ internal class BoundedFrameWriter(
         chunks.add(first.bytes)
         var total = first.bytes.size
         var barrier: Job.Barrier? = null
-        val endAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(coalesceMillis)
+        val activeCoalesceMillis =
+            (coalesceMillisProvider?.invoke() ?: coalesceMillis).coerceAtLeast(0)
+        val endAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(activeCoalesceMillis)
 
-        while (coalesceMillis > 0 && total < maxBatchBytes) {
+        while (activeCoalesceMillis > 0 && total < maxBatchBytes) {
             val remaining = endAt - System.nanoTime()
             if (remaining <= 0) break
             when (val next = jobs.poll(remaining, TimeUnit.NANOSECONDS) ?: break) {

@@ -67,4 +67,26 @@ class BoundedFrameWriterTest {
             assertArrayEquals(byteArrayOf(1, 2, 3, 4), writes.single())
         } finally { writer.close() }
     }
+
+    @Test fun readsCoalescingWindowForEachNewBatch() {
+        var dynamicWindow = 0L
+        val writes = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
+        val writer = BoundedFrameWriter(
+            coalesceMillisProvider = { dynamicWindow },
+            write = { writes.add(it) },
+            closeTransport = {},
+            onFailure = { throw AssertionError(it) },
+        )
+        try {
+            writer.send(byteArrayOf(1))
+            writer.flush().get(2, TimeUnit.SECONDS)
+            dynamicWindow = 60
+            writer.send(byteArrayOf(2))
+            writer.send(byteArrayOf(3))
+            writer.flush().get(2, TimeUnit.SECONDS)
+            assertEquals(2, writes.size)
+            assertArrayEquals(byteArrayOf(1), writes[0])
+            assertArrayEquals(byteArrayOf(2, 3), writes[1])
+        } finally { writer.close() }
+    }
 }

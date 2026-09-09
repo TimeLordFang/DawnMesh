@@ -3,7 +3,11 @@ package dev.dawnmesh.intercom.audio
 sealed class PollResult {
     object NotReady : PollResult()
     object Lost : PollResult()
-    class Packet(val data: ByteArray) : PollResult()
+    class Packet(
+        val data: ByteArray,
+        /** 为降低已累积延迟而跳过的帧；解码器仍需静默解码以推进状态。 */
+        val discardedBefore: List<ByteArray> = emptyList(),
+    ) : PollResult()
 }
 
 /** Bounded playout with re-priming after starvation and a short-utterance deadline. */
@@ -11,12 +15,14 @@ class JitterBuffer(
     private val prebufferFrames: Int = 3,
     private val maxBuffer: Int = 24,
     private val maxAdaptiveTarget: Int = minOf(maxBuffer, 12),
+    private val stableFramesBeforeDecay: Int = 250,
     private val ordered: Boolean = false,
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     init {
         require(prebufferFrames in 1..maxBuffer)
         require(maxAdaptiveTarget in prebufferFrames..maxBuffer)
+        require(stableFramesBeforeDecay > 0)
     }
     private val buf = sortedMapOf<Long, ByteArray>()
     private var highestSeen = -1L
@@ -28,12 +34,17 @@ class JitterBuffer(
     private var lastArrivalAt = Long.MIN_VALUE
     private var underruns = 0
     private var dropped = 0
+    private var stableFrames = 0
+    private var latencyTrims = 0
 
     @Synchronized
     fun put(seq16: Int, payload: ByteArray) {
         val now = clockMs()
         // Silence is intentional in both PTT and voice-activated modes.
-        if (lastArrivalAt != Long.MIN_VALUE && now - lastArrivalAt > 500) target = prebufferFrames
+        if (lastArrivalAt != Long.MIN_VALUE && now - lastArrivalAt > 500) {
+            target = prebufferFrames
+            stableFrames = 0
+        }
         lastArrivalAt = now
         // TCP and BLE L2CAP deliver ordered, reliable audio. The wire sequence is
         // shared with chat/heartbeat/control frames; its gaps are NOT lost audio.
@@ -52,6 +63,7 @@ class JitterBuffer(
                 started = false
                 underruns++
                 target = (target + 2).coerceAtMost(maxAdaptiveTarget)
+                stableFrames = 0
             }
             return PollResult.NotReady
         }
@@ -64,20 +76,37 @@ class JitterBuffer(
             next = buf.firstKey()
         }
         if (buf.firstKey() - next > maxBuffer) next = buf.firstKey()
+        var discardedBefore: List<ByteArray> = emptyList()
+        stableFrames++
+        // 目标增大后，如果链路已连续稳定 5 秒，静默解码并跳过一个 20ms
+        // 缓冲帧，把真实播放延迟逐步拉回。每次只修剪一帧，避免明显跳音。
+        if (ordered && target > prebufferFrames &&
+            stableFrames >= stableFramesBeforeDecay && buf.size >= 2) {
+            val discarded = buf.remove(next)
+            if (discarded != null) {
+                discardedBefore = listOf(discarded)
+                next++
+                target--
+                latencyTrims++
+                stableFrames = 0
+            }
+        }
         val head = buf.remove(next)
         next++
-        return if (head == null) PollResult.Lost else PollResult.Packet(head)
+        return if (head == null) PollResult.Lost else PollResult.Packet(head, discardedBefore)
     }
 
     @Synchronized
     fun reset() {
         buf.clear(); highestSeen = -1L; next = -1L; arrivalSeq = 0L
         started = false; target = prebufferFrames; lastArrivalAt = Long.MIN_VALUE
-        underruns = 0; dropped = 0
+        underruns = 0; dropped = 0; stableFrames = 0; latencyTrims = 0
     }
     @Synchronized fun hasStarted(): Boolean = started
     @Synchronized fun pendingCount(): Int = buf.size
-    @Synchronized fun diagnostics(): String = "queued=${buf.size}, target=$target, rebuffer=$underruns, dropped=$dropped"
+    @Synchronized fun diagnostics(): String =
+        "queued=${buf.size}, target=$target, rebuffer=$underruns, " +
+            "trimmed=$latencyTrims, dropped=$dropped"
 
     private fun unwrap(seq16: Int): Long {
         if (highestSeen < 0) { highestSeen = seq16.toLong(); return highestSeen }

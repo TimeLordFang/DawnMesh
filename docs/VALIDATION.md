@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.11-release.apk`，**53,899,980 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.11` / versionCode **11**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`d5b8c5ecb3d3328362ae29f8e4315e9b8e120d54c22d2685a7296fe00328febe`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.13-release.apk`，**53,900,004 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.13` / versionCode **13**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`9b42b21f70f553a2f875b003c1692f03591d8cdd1c73ef434e4e928f2b45555c`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 优先将上述 release 安装到所有测试手机，避免混用调试签名。
@@ -19,7 +19,7 @@
 | Flutter analyze | **No issues found** |
 | Flutter 全量测试（串行） | **168 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
-| `:app:testDebugUnitTest` | Kotlin **20 项通过，0 失败** |
+| `:app:testDebugUnitTest` | Kotlin **22 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -32,7 +32,24 @@
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
-## dev.11 本轮完成情况
+## dev.13 本轮完成情况
+
+- 蓝牙房接收缓冲由 300 ms 降到 **160 ms** 起播，发生欠载时仍会快速扩展，最高限制为 **400 ms**，最大队列限制为 640 ms。
+- 修复自适应缓冲只增不减的问题。连续稳定播放约 5 秒后，每次静默解码并修剪一帧 20 ms 音频，逐步把已累积的播放延迟降回 160 ms；静默解码保持 Opus 预测状态连续。
+- 蓝牙房与蓝牙耳机共用控制器时，Opus 由 12 kbps 进一步降为 **10 kbps**，降低空口载荷；保留 60 ms L2CAP 合并窗口，避免重新增加小包写入频率。没有蓝牙耳机时仍使用 16 kbps 与较短合并窗口。
+- 缓冲诊断新增 `trimmed` 计数。真机日志可同时观察 `target=8..20`、`trimmed`、`rebuffer`、`coexistence=true`、`opus=10000bps` 与 `txFrames/txWrites`，区分抖动恢复、延迟回落和蓝牙控制器拥塞。
+- 完整串行 Flutter 测试 **168 项**、Kotlin 测试 **22 项**、Android Lint（0 errors）、静态分析、release APK 构建、签名与 16 KB 对齐检查均通过。
+
+## dev.12 已保留功能
+
+- 根据真机日志确认房主关闭蓝牙会销毁 BLE 广播、L2CAP server socket 与旧动态 PSM；此前应用只记录 `adapter_disabled`/`accept 中断`，适配器恢复后没有重建房间。
+- 原生插件现在监听 `BluetoothAdapter.ACTION_STATE_CHANGED`。房主蓝牙关闭时保留房间身份、房名、人数和成员会话；回到 `STATE_ON` 后按退避策略重新申请动态 PSM、启动 accept 线程并恢复 BLE 广播。旧恢复任务使用 generation 隔离，退房后不会误重建。
+- Android 14+ 前台服务增加 `connectedDevice` 类型和对应权限，持续蓝牙连接、后台恢复广播与麦克风用途都向系统正确声明。
+- 检测到蓝牙房与蓝牙耳机同时使用时，发送 Opus 自动由 16 kbps 调整为 12 kbps，L2CAP 合并窗口由 25 ms 增至 60 ms；无耳机时恢复原参数。诊断新增 `txWrites` 和 `coexistence`，可对照 `txFrames/txWrites` 判断实际合并比例。
+- 蓝牙接收预缓冲从 200 ms 提高到 300 ms，连续欠载后最多自适应到 600 ms；最大缓存为 1 秒。音频路由日志把数字设备类型翻译为 `BT_SCO`、`BT_A2DP`、`BLE_HEADSET`、`BUILTIN_MIC` 等，并记录有效 Opus 码率。
+- 完整串行 Flutter 测试 **168 项**、Kotlin 测试 **21 项**、Android Lint（0 errors）、静态分析与 release APK 构建均通过。
+
+## dev.11 已保留功能
 
 - BLE L2CAP 每条物理链路会在最多 25 ms 内合并相邻协议帧，一次 socket 写入可携带多个完整帧；接收端仍按原有 6 字节帧头逐帧解析，协议兼容。该改动降低 20 ms 音频小包与耳机实时音频竞争蓝牙控制器的调度频率。
 - 蓝牙房接收缓冲从 120 ms 起步提高到 200 ms，发生欠载后最多自适应到 400 ms，最大缓存 800 ms。码率仍为 Opus 16 kbps，没有用进一步降低音质换取改善。

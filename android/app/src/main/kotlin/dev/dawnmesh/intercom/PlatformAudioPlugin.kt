@@ -67,10 +67,10 @@ class PlatformAudioPlugin(
     private class RemoteStream(bluetooth: Boolean) {
         val jitter = if (bluetooth) {
             // 同一控制器同时承载耳机音频和 BLE L2CAP 时，厂商调度可能让数据
-            // 成批到达。200ms 起播、最多 400ms 自适应缓冲，换取连续语音。
+            // 成批到达。160ms 起播、最多 400ms 自适应缓冲；稳定后逐步回落。
             JitterBuffer(
-                prebufferFrames = 10,
-                maxBuffer = 40,
+                prebufferFrames = 8,
+                maxBuffer = 32,
                 maxAdaptiveTarget = 20,
                 ordered = true,
             )
@@ -98,6 +98,8 @@ class PlatformAudioPlugin(
     private var gainControl: AutomaticGainControl? = null
     private var uplinkCodec: OpusCodec? = null
     private var currentBitrate = OpusCodec.DEFAULT_BITRATE
+    private var effectiveBitrate = OpusCodec.DEFAULT_BITRATE
+    private var bluetoothAudioAvailable = false
 
     // 播放
     private var audioTrack: AudioTrack? = null
@@ -221,7 +223,7 @@ class PlatformAudioPlugin(
                 val bitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
                 currentBitrate = bitrate
                 try {
-                    uplinkCodec?.setBitrate(bitrate)
+                    applyBluetoothCoexistenceTuning()
                 } catch (e: IllegalArgumentException) {
                     result.error("BAD_ARGS", "码率非法：$bitrate", null)
                     return
@@ -318,7 +320,8 @@ class PlatformAudioPlugin(
             isDeviceCallbackRegistered = true
         }
 
-        uplinkCodec = OpusCodec(currentBitrate)
+        effectiveBitrate = currentBitrate
+        uplinkCodec = OpusCodec(effectiveBitrate)
         audioRecord = record
         capturing.set(true)
 
@@ -342,7 +345,7 @@ class PlatformAudioPlugin(
             if (capturing.get()) logActiveAudioRoute("路由稳定后")
         }, 1_000)
 
-        Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${currentBitrate}bps）")
+        Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${effectiveBitrate}bps）")
         return true
     }
 
@@ -457,6 +460,8 @@ class PlatformAudioPlugin(
         captureThread = null
         releaseCapture()
         uplinkCodec = null
+        bluetoothAudioAvailable = false
+        BluetoothAudioCoexistence.setActive(false)
 
         audioManager.mode = previousAudioMode
         IntercomForegroundService.stop(context)
@@ -565,7 +570,14 @@ class PlatformAudioPlugin(
 
             for ((memberId, stream) in remotes) {
                 val pcm = when (val polled = stream.jitter.poll()) {
-                    is PollResult.Packet -> decodeSafely(stream, polled.data, memberId)
+                    is PollResult.Packet -> {
+                        // 被抖动缓冲用于降低延迟的帧仍静默解码，保持 Opus
+                        // 预测状态连续；只是不把这 20ms PCM 送入本轮混音。
+                        for (discarded in polled.discardedBefore) {
+                            decodeSafely(stream, discarded, memberId)
+                        }
+                        decodeSafely(stream, polled.data, memberId)
+                    }
                     PollResult.Lost -> decodeSafely(stream, null, memberId) // PLC 补帧
                     PollResult.NotReady -> null
                 } ?: continue
@@ -673,6 +685,8 @@ class PlatformAudioPlugin(
                 it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
                 it.type == AudioDeviceInfo.TYPE_HEARING_AID
             }
+            bluetoothAudioAvailable = btComm != null || btMediaOutput != null
+            applyBluetoothCoexistenceTuning()
 
             val builtinMic = inputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
             val externalMic = inputDevices.firstOrNull { dev ->
@@ -753,6 +767,15 @@ class PlatformAudioPlugin(
                     dev.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
                     dev.type == AudioDeviceInfo.TYPE_USB_HEADSET
                 }
+                val bluetoothInputAvailable = inputDevices.any {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+                val bluetoothOutputAvailable = outputDevices.any {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+                bluetoothAudioAvailable = bluetoothInputAvailable || bluetoothOutputAvailable
+                applyBluetoothCoexistenceTuning()
                 if (preferBuiltinMic || externalMic == null) {
                     builtinMic?.let { record?.setPreferredDevice(it) }
                 } else {
@@ -802,13 +825,37 @@ class PlatformAudioPlugin(
         fun label(device: AudioDeviceInfo?): String = if (device == null) {
             "none"
         } else {
-            "type=${device.type},name=${device.productName}"
+            "type=${device.type}(${audioDeviceTypeName(device.type)}),name=${device.productName}"
         }
         Log.i(
             TAG,
             "实际音频路由($reason): input=${label(input)}; output=${label(output)}; " +
                 "communication=${label(communication)}; mode=${audioManager.mode}; " +
-                "phoneMic=$preferBuiltinMic",
+                "phoneMic=$preferBuiltinMic; coexistence=${BluetoothAudioCoexistence.isActive()}; " +
+                "opus=${effectiveBitrate}bps",
         )
     }
+
+    /**
+     * 耳机实时音频与蓝牙房 L2CAP 共用一个控制器时，降低语音载荷并让发送端
+     * 使用更长的合并窗口。Opus 解码器可透明接收变化后的码率，无需改协议。
+     */
+    private fun applyBluetoothCoexistenceTuning() {
+        val coexistence =
+            currentBitrate <= OpusCodec.BLUETOOTH_BITRATE && bluetoothAudioAvailable
+        BluetoothAudioCoexistence.setActive(coexistence)
+        val desiredBitrate = if (coexistence) 10_000 else currentBitrate
+        if (effectiveBitrate == desiredBitrate) return
+        uplinkCodec?.setBitrate(desiredBitrate)
+        effectiveBitrate = desiredBitrate
+        Log.i(
+            TAG,
+            if (coexistence) {
+                "检测到蓝牙房与蓝牙耳机并用：Opus 调整为 10000bps，L2CAP 合并窗口 60ms"
+            } else {
+                "蓝牙耳机共存模式已退出：Opus 恢复为 ${currentBitrate}bps"
+            },
+        )
+    }
+
 }

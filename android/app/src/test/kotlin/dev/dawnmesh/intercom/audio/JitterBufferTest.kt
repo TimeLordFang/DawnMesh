@@ -56,8 +56,8 @@ class JitterBufferTest {
     }
     @Test fun bluetoothCoexistenceCanGrowToTwentyFrameTarget() {
         val b = JitterBuffer(
-            prebufferFrames = 10,
-            maxBuffer = 40,
+            prebufferFrames = 8,
+            maxBuffer = 32,
             maxAdaptiveTarget = 20,
             ordered = true,
         )
@@ -66,5 +66,27 @@ class JitterBufferTest {
             while (b.poll() is PollResult.Packet) Unit
         }
         assertTrue(b.diagnostics().contains("target=20"))
+    }
+
+    @Test fun stablePlaybackTrimsPreviouslyAccumulatedLatency() {
+        val b = JitterBuffer(
+            prebufferFrames = 2,
+            maxBuffer = 8,
+            maxAdaptiveTarget = 6,
+            stableFramesBeforeDecay = 3,
+            ordered = true,
+        )
+        repeat(2) { b.put(it, packet(it)) }
+        repeat(2) { take(b) }
+        assertSame(PollResult.NotReady, b.poll()) // target grows from 2 to 4
+
+        repeat(8) { b.put(10 + it, packet(10 + it)) }
+        assertEquals(10, take(b))
+        assertEquals(11, take(b))
+        val trimmed = b.poll() as PollResult.Packet
+        assertArrayEquals(packet(12), trimmed.discardedBefore.single())
+        assertArrayEquals(packet(13), trimmed.data)
+        assertTrue(b.diagnostics().contains("target=3"))
+        assertTrue(b.diagnostics().contains("trimmed=1"))
     }
 }

@@ -12,6 +12,9 @@
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
         tools:targetApi="34"/>
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"
+        tools:targetApi="34"/>
     <!-- Android 13+ 通知是运行时权限，没有它前台服务通知不显示 -->
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS"
@@ -104,7 +107,7 @@
         <service
             android:name=".IntercomForegroundService"
             android:exported="false"
-            android:foregroundServiceType="microphone"/>
+            android:foregroundServiceType="microphone|connectedDevice"/>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

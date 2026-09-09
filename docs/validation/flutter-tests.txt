@@ -12,3 +12,5 @@ New recovery coverage:
 - Wi-Fi Direct accepts a connection event that completed before the method returned
 - BLE reconnect rescans and uses a refreshed device address and dynamic PSM
 - Bluetooth-room microphone source toggles on compact phone layouts
+- dev.13 keeps all 168 Dart/Flutter regressions passing; host adapter recovery is native Android code covered by Kotlin compilation and Lint
+- adaptive Bluetooth playback trims one 20 ms frame after each stable interval until latency returns to the 160 ms base target

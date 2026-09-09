@@ -142,7 +142,8 @@ internal object DebugLogBridge : EventChannel.StreamHandler {
                 audio.getDevices(AudioManager.GET_DEVICES_INPUTS) +
                     audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             ).distinctBy { it.id }.joinToString(" | ") { device ->
-                "type=${device.type},name=${device.productName},source=${device.isSource},sink=${device.isSink}"
+                "type=${device.type}(${audioDeviceTypeName(device.type)}),name=${device.productName}," +
+                    "source=${device.isSource},sink=${device.isSink}"
             }
             i(SYSTEM_TAG, "audioDevices=${devices.ifEmpty { "none" }}")
 

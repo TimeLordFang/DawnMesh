@@ -1,6 +1,7 @@
 package dev.dawnmesh.intercom
 
 import android.Manifest
+import android.annotation.TargetApi
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
@@ -12,7 +13,10 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
@@ -100,6 +104,9 @@ class BleL2capPlugin(
     private var advertisedRoomName: String = ""
     private var advertisedPsm: Int = 0
     private var advertisedMemberCount: Int = 1
+    private var hostRadioRecoveryPending = false
+    private var hostRadioRecoveryGeneration = 0
+    private var receiverRegistered = false
 
     // 客户端侧
     private var hostLink: PeerLink? = null
@@ -109,6 +116,25 @@ class BleL2capPlugin(
 
     private var isHost = false
     private var scanning = false
+
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(receiverContext: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            val previous = intent.getIntExtra(
+                BluetoothAdapter.EXTRA_PREVIOUS_STATE,
+                BluetoothAdapter.ERROR,
+            )
+            Log.i(TAG, "蓝牙适配器状态变化：$previous -> $state；isHost=$isHost")
+            when (state) {
+                BluetoothAdapter.STATE_TURNING_OFF,
+                BluetoothAdapter.STATE_OFF -> if (isHost) suspendHostRadioForAdapterRestart()
+                BluetoothAdapter.STATE_ON -> if (isHost && hostRadioRecoveryPending) {
+                    scheduleHostRadioRecovery(delayMillis = 1_000)
+                }
+            }
+        }
+    }
 
     init {
         methodChannel.setMethodCallHandler(this)
@@ -130,10 +156,31 @@ class BleL2capPlugin(
                 scanSink = null
             }
         })
+        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // 蓝牙状态广播由独立的系统蓝牙进程发出，Android 官方要求此类
+            // 非 system-UID 广播使用 RECEIVER_EXPORTED 才能收到。
+            context.registerReceiver(
+                bluetoothStateReceiver,
+                filter,
+                Context.RECEIVER_EXPORTED,
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(bluetoothStateReceiver, filter)
+        }
+        receiverRegistered = true
     }
 
     fun dispose() {
         stopEverything()
+        if (receiverRegistered) {
+            try {
+                context.unregisterReceiver(bluetoothStateReceiver)
+            } catch (_: IllegalArgumentException) {
+            }
+            receiverRegistered = false
+        }
         methodChannel.setMethodCallHandler(null)
         dataChannel.setStreamHandler(null)
         scanChannel.setStreamHandler(null)
@@ -420,6 +467,144 @@ class BleL2capPlugin(
         }
     }
 
+    /**
+     * 关闭蓝牙会让系统销毁 BLE 广播和动态 PSM 对应的 L2CAP server socket。
+     * 保留房主身份、房名和人数，等适配器回到 STATE_ON 后原地重建整套资源。
+     */
+    private fun suspendHostRadioForAdapterRestart() {
+        if (!isHost || hostRadioRecoveryPending) return
+        if (pendingAdvertisingResult != null) {
+            pendingAdvertisingResult?.error("ADAPTER_DISABLED", "创建房间时蓝牙被关闭，请开启后重试", null)
+            pendingAdvertisingResult = null
+            stopEverything()
+            return
+        }
+        hostRadioRecoveryPending = true
+        hostRadioRecoveryGeneration++
+        closeHostRadioResources("adapter_disabled")
+        Log.w(TAG, "房主蓝牙已关闭；保留房间状态，蓝牙开启后将自动重建广播和 L2CAP 监听")
+    }
+
+    private fun scheduleHostRadioRecovery(delayMillis: Long, attempt: Int = 1) {
+        val generation = hostRadioRecoveryGeneration
+        mainHandler.postDelayed({
+            if (generation != hostRadioRecoveryGeneration || !isHost || !hostRadioRecoveryPending) {
+                return@postDelayed
+            }
+            recoverHostRadio(generation, attempt)
+        }, delayMillis)
+    }
+
+    @TargetApi(Build.VERSION_CODES.Q)
+    private fun recoverHostRadio(generation: Int, attempt: Int) {
+        if (generation != hostRadioRecoveryGeneration || !isHost || !hostRadioRecoveryPending) return
+        val a = adapter
+        if (a == null || a.state != BluetoothAdapter.STATE_ON) {
+            scheduleHostRadioRecovery(delayMillis = 2_000, attempt = attempt)
+            return
+        }
+
+        Log.i(TAG, "房主蓝牙恢复：第 $attempt 次重建 L2CAP 监听与 BLE 广播")
+        closeHostRadioResources("host_radio_rebuild")
+        val server = try {
+            @Suppress("MissingPermission")
+            a.listenUsingInsecureL2capChannel()
+        } catch (e: Exception) {
+            Log.w(TAG, "房主恢复时打开 L2CAP 监听失败", e)
+            scheduleHostRadioRecovery(recoveryDelay(attempt), attempt + 1)
+            return
+        }
+
+        serverSocket = server
+        advertisedPsm = server.psm
+        accepting.set(true)
+        acceptThread = Thread({ acceptLoop(server) }, "dawn-ble-accept").apply { start() }
+
+        val advertiser = a.bluetoothLeAdvertiser
+        if (advertiser == null) {
+            Log.w(TAG, "房主恢复时暂时拿不到 BLE advertiser")
+            closeHostRadioResources("advertiser_unavailable")
+            scheduleHostRadioRecovery(recoveryDelay(attempt), attempt + 1)
+            return
+        }
+
+        val callback = object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                mainHandler.post {
+                    if (generation != hostRadioRecoveryGeneration || advertiseCallback !== this) return@post
+                    hostRadioRecoveryPending = false
+                    Log.i(TAG, "房主蓝牙房已恢复广播和监听（PSM=$advertisedPsm，第 $attempt 次成功）")
+                }
+            }
+
+            override fun onStartFailure(errorCode: Int) {
+                mainHandler.post {
+                    if (generation != hostRadioRecoveryGeneration || advertiseCallback !== this) return@post
+                    Log.w(TAG, "房主恢复广播失败：errorCode=$errorCode")
+                    closeHostRadioResources("advertise_restart_failed")
+                    scheduleHostRadioRecovery(recoveryDelay(attempt), attempt + 1)
+                }
+            }
+        }
+        advertiseCallback = callback
+        try {
+            @Suppress("MissingPermission")
+            advertiser.startAdvertising(
+                buildAdvertiseSettings(),
+                buildAdvertiseData(),
+                buildScanResponse(),
+                callback,
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "房主恢复时 startAdvertising 抛异常", e)
+            closeHostRadioResources("advertise_restart_exception")
+            scheduleHostRadioRecovery(recoveryDelay(attempt), attempt + 1)
+            return
+        }
+
+        mainHandler.postDelayed({
+            if (generation == hostRadioRecoveryGeneration &&
+                hostRadioRecoveryPending && advertiseCallback === callback) {
+                Log.w(TAG, "房主恢复广播等待 8 秒仍无回调，重新尝试")
+                closeHostRadioResources("advertise_restart_timeout")
+                scheduleHostRadioRecovery(recoveryDelay(attempt), attempt + 1)
+            }
+        }, 8_000)
+    }
+
+    private fun recoveryDelay(attempt: Int): Long = when {
+        attempt <= 1 -> 1_000
+        attempt == 2 -> 2_000
+        attempt == 3 -> 4_000
+        attempt == 4 -> 8_000
+        else -> 15_000
+    }
+
+    /** 仅释放房主的射频资源，不清除房间身份与用于恢复的广播内容。 */
+    private fun closeHostRadioResources(reason: String) {
+        accepting.set(false)
+        advertiseCallback?.let { callback ->
+            try {
+                @Suppress("MissingPermission")
+                adapter?.bluetoothLeAdvertiser?.stopAdvertising(callback)
+            } catch (e: Exception) {
+                Log.d(TAG, "停止房主广播时被忽略的异常：$e")
+            }
+        }
+        advertiseCallback = null
+        try {
+            serverSocket?.close()
+        } catch (e: IOException) {
+            Log.d(TAG, "关闭房主 L2CAP 监听时被忽略的异常：$e")
+        }
+        serverSocket = null
+        acceptThread = null
+        for (link in peers.values) link.close(reason)
+        peers.clear()
+        hostLink = null
+        advertisedPsm = 0
+    }
+
     // ---------------------------------------------------------- 客户端：扫描
 
     private fun startScan(): Boolean {
@@ -554,6 +739,7 @@ class BleL2capPlugin(
         val rxBytes = AtomicLong(0)
         val txFrames = AtomicLong(0)
         val txBytes = AtomicLong(0)
+        val txWrites = AtomicLong(0)
         @Volatile var lastRxAt = openedAt
         @Volatile var lastTxAt = openedAt
         @Volatile var requestedCloseReason: String? = null
@@ -566,10 +752,12 @@ class BleL2capPlugin(
         }
         private val writer = BoundedFrameWriter(
             coalesceMillis = 25,
-            maxBatchBytes = 2_048,
+            coalesceMillisProvider = { BluetoothAudioCoexistence.l2capCoalesceMillis() },
+            maxBatchBytes = 4_096,
             write = { data ->
                 socket.outputStream.write(data)
                 socket.outputStream.flush()
+                txWrites.incrementAndGet()
                 txFrames.addAndGet(countProtocolFrames(data).toLong())
                 txBytes.addAndGet(data.size.toLong())
                 lastTxAt = SystemClock.elapsedRealtime()
@@ -595,7 +783,8 @@ class BleL2capPlugin(
         }
         fun diagnostics(now: Long = SystemClock.elapsedRealtime()): String =
             "ageMs=${now - openedAt},rxFrames=${rxFrames.get()},rxBytes=${rxBytes.get()}," +
-                "txFrames=${txFrames.get()},txBytes=${txBytes.get()}," +
+                "txFrames=${txFrames.get()},txWrites=${txWrites.get()},txBytes=${txBytes.get()}," +
+                "coexistence=${BluetoothAudioCoexistence.isActive()}," +
                 "rxIdleMs=${now - lastRxAt},txIdleMs=${now - lastTxAt}"
         fun close(reason: String = "local_stop") {
             requestedCloseReason = reason
@@ -754,6 +943,8 @@ class BleL2capPlugin(
     // ---------------------------------------------------------------- 收尾
 
     private fun stopEverything() {
+        hostRadioRecoveryGeneration++
+        hostRadioRecoveryPending = false
         connectionGeneration++
         try { pendingConnectSocket?.close() } catch (_: IOException) {}
         pendingConnectSocket = null
