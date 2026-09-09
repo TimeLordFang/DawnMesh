@@ -127,7 +127,9 @@ class SemVer implements Comparable<SemVer> {
 }
 
 class UpdateService {
-  static const String currentVersion = '0.1.0-dev.13';
+  // Keep this in sync with pubspec.yaml; the Android package version is still
+  // sourced from Flutter's generated versionName/versionCode.
+  static const String currentVersion = '0.1.0-dev.15';
 
   Future<UpdateState> checkUpdate() async {
     return const UpdateFailed('DawnMesh 独立开发版，请使用自己编译并签名的 APK 更新。');

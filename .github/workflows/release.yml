@@ -53,7 +53,34 @@ jobs:
       - name: Install Android build components
         shell: bash
         run: |
-          sdkmanager \
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "${sdk_root}" ]]; then
+            for candidate in "/usr/local/lib/android/sdk" "${HOME}/Android/Sdk"; do
+              if [[ -d "${candidate}" ]]; then
+                sdk_root="${candidate}"
+                break
+              fi
+            done
+          fi
+          [[ -n "${sdk_root}" && -d "${sdk_root}" ]] || {
+            echo "::error::Android SDK directory was not found"
+            exit 1
+          }
+          sdkmanager="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "${sdkmanager}" ]]; then
+            sdkmanager="$(find "${sdk_root}/cmdline-tools" -type f -name sdkmanager -perm -u+x -print -quit 2>/dev/null || true)"
+          fi
+          [[ -x "${sdkmanager}" ]] || {
+            echo "::error::sdkmanager was not found under ${sdk_root}/cmdline-tools"
+            exit 1
+          }
+          echo "ANDROID_SDK_ROOT=${sdk_root}" >> "${GITHUB_ENV}"
+          echo "ANDROID_HOME=${sdk_root}" >> "${GITHUB_ENV}"
+          echo "$(dirname "${sdkmanager}")" >> "${GITHUB_PATH}"
+          echo "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
+          echo "${sdk_root}/build-tools/36.1.0" >> "${GITHUB_PATH}"
+          "${sdkmanager}" \
             "platforms;android-36" \
             "build-tools;36.1.0" \
             "ndk;28.2.13676358" \
