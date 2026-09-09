@@ -496,6 +496,7 @@ class BleL2capPlugin(
         }
         isHost = false
         stopScan()
+        Log.i(TAG, "开始连接蓝牙房：$address，psm=$psm")
 
         val generation = ++connectionGeneration
         val completed = AtomicBoolean(false)
@@ -564,10 +565,12 @@ class BleL2capPlugin(
             }
         }
         private val writer = BoundedFrameWriter(
+            coalesceMillis = 25,
+            maxBatchBytes = 2_048,
             write = { data ->
                 socket.outputStream.write(data)
                 socket.outputStream.flush()
-                txFrames.incrementAndGet()
+                txFrames.addAndGet(countProtocolFrames(data).toLong())
                 txBytes.addAndGet(data.size.toLong())
                 lastTxAt = SystemClock.elapsedRealtime()
             },
@@ -599,6 +602,22 @@ class BleL2capPlugin(
             mainHandler.removeCallbacks(diagnosticsRunnable)
             writer.close()
         }
+    }
+
+    /** 返回合并写入中完整协议帧的数量，仅用于诊断计数。 */
+    private fun countProtocolFrames(data: ByteArray): Int {
+        var offset = 0
+        var count = 0
+        while (offset + FRAME_HEADER_SIZE <= data.size) {
+            val payloadLength =
+                ((data[offset + 4].toInt() and 0xFF) shl 8) or
+                    (data[offset + 5].toInt() and 0xFF)
+            val frameLength = FRAME_HEADER_SIZE + payloadLength
+            if (payloadLength > MAX_PAYLOAD || offset + frameLength > data.size) break
+            count++
+            offset += frameLength
+        }
+        return count.coerceAtLeast(1)
     }
 
     private fun registerPeer(socket: BluetoothSocket): PeerLink {
@@ -665,7 +684,9 @@ class BleL2capPlugin(
                 mainHandler.post { dataSink?.success(event) }
             }
         } catch (e: EOFException) {
-            reason = "remote_eof"
+            // InputStream EOF 只表示 L2CAP 流已结束，不能单凭它断定是远端主动
+            // 关闭。本机关闭蓝牙时 Android 也会以 EOF 唤醒阻塞的 read。
+            reason = if (adapter?.state == BluetoothAdapter.STATE_ON) "stream_eof" else "adapter_disabled"
             failure = e
         } catch (e: IOException) {
             reason = "read_error"
@@ -713,7 +734,8 @@ class BleL2capPlugin(
         link.close(reason)
         if (hostLink === link) hostLink = null
         val detail = error?.let { "${it.javaClass.simpleName}: ${it.message.orEmpty()}" }
-        val message = "蓝牙链路断开：${link.address}；reason=$reason；${link.diagnostics()}"
+        val adapterState = adapter?.state ?: BluetoothAdapter.ERROR
+        val message = "蓝牙链路断开：${link.address}；reason=$reason；adapterState=$adapterState；${link.diagnostics()}"
         if (error == null || reason == "local_stop") Log.i(TAG, message)
         else Log.w(TAG, message, error)
         if (wasHostLink && reason != "local_stop") {
@@ -722,6 +744,7 @@ class BleL2capPlugin(
                 "reason" to reason,
                 "detail" to detail,
                 "peerAddress" to link.address,
+                "adapterState" to adapterState,
                 "diagnostics" to link.diagnostics(),
             )
             mainHandler.post { dataSink?.success(event) }

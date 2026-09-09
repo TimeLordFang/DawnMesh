@@ -1203,6 +1203,7 @@ class RoomSession {
 
   void setUseBuiltinMic(bool useBuiltin) {
     audioIo.setUseBuiltinMic(useBuiltin);
+    _notifyControls();
   }
 
   /// 将未读数重置归零（面板打开或用户浏览时调用）

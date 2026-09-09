@@ -54,4 +54,17 @@ class JitterBufferTest {
         assertSame(PollResult.Lost, b.poll()); assertEquals(4, take(b))
         b.put(65535, packet(9)); assertEquals(0, b.pendingCount())
     }
+    @Test fun bluetoothCoexistenceCanGrowToTwentyFrameTarget() {
+        val b = JitterBuffer(
+            prebufferFrames = 10,
+            maxBuffer = 40,
+            maxAdaptiveTarget = 20,
+            ordered = true,
+        )
+        repeat(6) {
+            repeat(40) { n -> b.put(n, packet(n)) }
+            while (b.poll() is PollResult.Packet) Unit
+        }
+        assertTrue(b.diagnostics().contains("target=20"))
+    }
 }

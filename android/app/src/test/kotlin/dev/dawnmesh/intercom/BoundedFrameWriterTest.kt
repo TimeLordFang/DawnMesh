@@ -50,4 +50,21 @@ class BoundedFrameWriterTest {
             assertFalse(writer.send(byteArrayOf(2)))
         } finally { writer.close() }
     }
+
+    @Test fun coalescesAdjacentFramesIntoOneSocketWrite() {
+        val writes = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
+        val writer = BoundedFrameWriter(
+            coalesceMillis = 25,
+            write = { writes.add(it) },
+            closeTransport = {},
+            onFailure = { throw AssertionError(it) },
+        )
+        try {
+            assertTrue(writer.send(byteArrayOf(1, 2)))
+            assertTrue(writer.send(byteArrayOf(3, 4)))
+            writer.flush().get(2, TimeUnit.SECONDS)
+            assertEquals(1, writes.size)
+            assertArrayEquals(byteArrayOf(1, 2, 3, 4), writes.single())
+        } finally { writer.close() }
+    }
 }

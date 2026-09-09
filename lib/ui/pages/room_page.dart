@@ -129,6 +129,7 @@ class _RoomContentState extends State<RoomContent> {
               isNight: isNight,
               isMuted: widget.session.isMuted,
               isSpeakerOn: _isSpeakerOn,
+              useBuiltinMic: widget.session.useBuiltinMic,
               onToggleMute: () {
                 setState(() {
                   widget.session.toggleMute();
@@ -138,6 +139,13 @@ class _RoomContentState extends State<RoomContent> {
                 setState(() {
                   _isSpeakerOn = !_isSpeakerOn;
                   widget.session.setSpeakerphone(_isSpeakerOn);
+                });
+              },
+              onToggleMicSource: () {
+                setState(() {
+                  widget.session.setUseBuiltinMic(
+                    !widget.session.useBuiltinMic,
+                  );
                 });
               },
               onLeave: widget.onLeave,

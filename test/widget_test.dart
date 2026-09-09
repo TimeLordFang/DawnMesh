@@ -48,7 +48,7 @@ void main() {
     await tester.pumpWidget(const DawnMeshApp());
     await tester.pump(scanSettle);
 
-    // 能找到标题（DawnMesh 或 落日后残波）与输入框
+    // 能找到标题（DawnMesh 或 曙光之声）与输入框
     expect(
       find.byWidgetPredicate(
         (w) => w is Text && (w.data == '曙光之声' || w.data == 'DawnMesh'),

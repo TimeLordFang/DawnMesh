@@ -1,8 +1,8 @@
-package: name='dev.dawnmesh.intercom' versionCode='9' versionName='0.1.0-dev.9' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+package: name='dev.dawnmesh.intercom' versionCode='11' versionName='0.1.0-dev.11' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
 sdkVersion:'26'
 targetSdkVersion:'35'
-size: 53899852 bytes
-bc724ae66a30f5abff7666c203cc0775887d1435aa05f95810283860c2267761  artifacts/DawnMesh-0.1.0-dev.9-release.apk
+size: 53899980 bytes
+d5b8c5ecb3d3328362ae29f8e4315e9b8e120d54c22d2685a7296fe00328febe  artifacts/DawnMesh-0.1.0-dev.11-release.apk
 Verifies
 Verified using v1 scheme (JAR signing): false
 Verified using v2 scheme (APK Signature Scheme v2): true

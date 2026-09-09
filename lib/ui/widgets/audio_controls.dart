@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../../l10n/app_strings.dart';
 
-/// Bottom Audio Controls Bar (Mute, Speakerphone, Leave).
+/// Bottom audio controls: mute, output, microphone source, and leave.
 class AudioControlsBar extends StatelessWidget {
   final bool isNight;
   final bool isMuted;
   final bool isSpeakerOn;
+  final bool useBuiltinMic;
   final VoidCallback onToggleMute;
   final VoidCallback onToggleSpeaker;
+  final VoidCallback onToggleMicSource;
   final VoidCallback onLeave;
 
   const AudioControlsBar({
@@ -16,17 +18,21 @@ class AudioControlsBar extends StatelessWidget {
     required this.isNight,
     required this.isMuted,
     required this.isSpeakerOn,
+    required this.useBuiltinMic,
     required this.onToggleMute,
     required this.onToggleSpeaker,
+    required this.onToggleMicSource,
     required this.onLeave,
   });
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final leaveColor = isNight ? AppTheme.darkLeaveRosePink : AppTheme.lightLeaveAccent;
+    final leaveColor =
+        isNight ? AppTheme.darkLeaveRosePink : AppTheme.lightLeaveAccent;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
-    final textPrimary = isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+    final textPrimary =
+        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 18),
@@ -54,7 +60,19 @@ class AudioControlsBar extends StatelessWidget {
             textColor: textPrimary,
           ),
 
-          // 3. 离开房间 (高对比度月夜玫瑰粉)
+          // 3. 耳机麦 / 手机麦。手机麦模式让蓝牙耳机保持媒体输出，
+          // 可避开经典蓝牙 SCO 上行与 BLE 房间链路的时隙竞争。
+          _ActionButton(
+            icon: useBuiltinMic ? Icons.phone_android : Icons.headset_mic,
+            label: useBuiltinMic ? s.phoneMic : s.headsetMic,
+            isActive: !useBuiltinMic,
+            isNight: isNight,
+            onTap: onToggleMicSource,
+            bgColor: cardBg,
+            textColor: textPrimary,
+          ),
+
+          // 4. 离开房间 (高对比度月夜玫瑰粉)
           _ActionButton(
             icon: Icons.call_end,
             label: s.leave,
@@ -94,7 +112,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 三个按钮均分底部宽度：放大字号后，360dp 的窄屏上原来的自适应宽度会挤爆。
+    // 四个按钮均分底部宽度：放大字号后，360dp 的窄屏上原来的自适应宽度会挤爆。
     // 均分之后再套一层 FittedBox，更窄的屏上是整体缩小而不是溢出。
     return Expanded(
       child: Padding(
@@ -108,7 +126,11 @@ class _ActionButton extends StatelessWidget {
               color: bgColor,
               borderRadius: BorderRadius.circular(26),
               border: Border.all(
-                color: borderColor ?? (isNight ? const Color(0xFF283A52) : const Color(0xFFDCCEC8)),
+                color:
+                    borderColor ??
+                    (isNight
+                        ? const Color(0xFF283A52)
+                        : const Color(0xFFDCCEC8)),
                 width: 1.4,
               ),
             ),

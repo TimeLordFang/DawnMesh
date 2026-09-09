@@ -1,7 +1,7 @@
 Command: ./scripts/flutter.sh test --concurrency=1
-Date: 2026-09-08
+Date: 2026-09-09
 Exit code: 0
-Result: All tests passed (167)
+Result: All tests passed (168)
 
 New recovery coverage:
 - retry delays continue until the 10-minute recovery window expires
@@ -10,3 +10,5 @@ New recovery coverage:
 - invitation PAKE can run again after rebuilding the physical link
 - hosts reserve disconnected member identity and capacity for 10 minutes
 - Wi-Fi Direct accepts a connection event that completed before the method returned
+- BLE reconnect rescans and uses a refreshed device address and dynamic PSM
+- Bluetooth-room microphone source toggles on compact phone layouts

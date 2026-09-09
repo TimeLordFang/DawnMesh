@@ -82,6 +82,21 @@ void main() {
         ),
         findsOneWidget,
       );
+      final headsetMic = find.byWidgetPredicate(
+        (w) =>
+            w is Text && (w.data == '耳机麦克风' || w.data == 'Headset microphone'),
+      );
+      expect(headsetMic, findsOneWidget);
+      await tester.tap(headsetMic);
+      await tester.pump();
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text && (w.data == '手机麦克风' || w.data == 'Phone microphone'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('${entry.key} 首页整场（背景+标题+前景）不溢出', (tester) async {

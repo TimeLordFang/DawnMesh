@@ -1,10 +1,10 @@
-# 验证记录（2026-09-08）
+# 验证记录（2026-09-09）
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.9-release.apk`，**53,899,852 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.9` / versionCode **9**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`bc724ae66a30f5abff7666c203cc0775887d1435aa05f95810283860c2267761`。
+- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.11-release.apk`，**53,899,980 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.11` / versionCode **11**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`d5b8c5ecb3d3328362ae29f8e4315e9b8e120d54c22d2685a7296fe00328febe`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
 - 优先将上述 release 安装到所有测试手机，避免混用调试签名。
@@ -17,9 +17,9 @@
 | --- | --- |
 | `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **167 项通过，0 失败** |
+| Flutter 全量测试（串行） | **168 项通过，0 失败** |
 | C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
-| `:app:testDebugUnitTest` | Kotlin **18 项通过，0 失败** |
+| `:app:testDebugUnitTest` | Kotlin **20 项通过，0 失败** |
 | `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -32,7 +32,22 @@
 
 日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
 
-## dev.9 本轮完成情况
+## dev.11 本轮完成情况
+
+- BLE L2CAP 每条物理链路会在最多 25 ms 内合并相邻协议帧，一次 socket 写入可携带多个完整帧；接收端仍按原有 6 字节帧头逐帧解析，协议兼容。该改动降低 20 ms 音频小包与耳机实时音频竞争蓝牙控制器的调度频率。
+- 蓝牙房接收缓冲从 120 ms 起步提高到 200 ms，发生欠载后最多自适应到 400 ms，最大缓存 800 ms。码率仍为 Opus 16 kbps，没有用进一步降低音质换取改善。
+- Android 12 及以上使用 `setCommunicationDevice` 统一绑定耳机双向通信设备，清理可能冲突的单流偏好；日志每 10 秒记录 AudioRecord、AudioTrack 和通信设备的实际路由。
+- 房间底部新增“耳机麦克风/手机麦克风”切换。手机麦克风模式继续把对讲声音送到蓝牙耳机，并优先使用 A2DP/BLE 媒体输出，以避开经典耳机 SCO 上行并改善同时播放音乐的兼容性。
+- 新增 L2CAP 合并写入、400 ms 自适应缓冲和三种手机尺寸下麦克风切换回归。完整串行 Flutter 测试 **168 项**、Kotlin 测试 **20 项**、Android Lint、静态分析与 release APK 构建均通过。
+
+## dev.10 已保留功能
+
+- 修复客户端关闭再开启蓝牙后仍复用旧扫描结果的问题。每次恢复现在先重新扫描原房间，再使用广播中的最新设备地址和动态 PSM 建立 L2CAP。
+- 修复重连时 Flutter `EventChannel` 的取消/重新订阅竞态。现在会等待旧订阅的原生 `onCancel` 完成后再建立新订阅，避免新链路的数据 sink 被旧取消操作清空。
+- 恢复日志新增重新扫描、发现房主、地址/PSM 刷新、开始建立 L2CAP，以及系统错误码和失败阶段。断开时同时记录蓝牙适配器状态；本机关闭蓝牙产生的 EOF 会标记为 `adapter_disabled`，避免误报成远端主动关闭。关闭蓝牙时重试会快速返回，开启后下一轮扫描自动继续。
+- 新增“地址和 PSM 改变后重新扫描并连接”的回归测试。该版完整串行 Flutter 测试 **168 项**、Kotlin 测试 **18 项**、Android Lint、静态分析与 release APK 构建均通过。
+
+## dev.9 已保留功能
 
 - BLE L2CAP 原生层不再吞掉 EOF 和 `IOException`；客户端会立即收到结构化断链原因。断开日志带收发帧/字节数、链路存活时间和收发空闲时间；连接期间每 10 秒输出同类快照。
 - Wi-Fi TCP 与蓝牙客户端都会重建物理链路、重新执行邀请码 PAKE 和入房，退避重试总窗口为 10 分钟。恢复期间不关闭音频前台服务与锁屏控件，成功后自动回到通话状态。

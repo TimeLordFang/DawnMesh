@@ -214,7 +214,7 @@ void main() {
       test(
         'Frame with FrameType.chat encode and decode roundtrip within 512 bytes limit',
         () {
-          const chatPayload = ChatMessagePayload(text: '落日后残波近场聊天测试');
+          const chatPayload = ChatMessagePayload(text: '曙光之声近场聊天测试');
           final rawPayload = chatPayload.encode();
           expect(rawPayload.length, lessThanOrEqualTo(Frame.maxPayloadSize));
 
@@ -236,7 +236,7 @@ void main() {
 
           final decodedChat = ChatMessagePayload.decode(decodedFrame.payload);
           expect(decodedChat, isNotNull);
-          expect(decodedChat!.text, '落日后残波近场聊天测试');
+          expect(decodedChat!.text, '曙光之声近场聊天测试');
         },
       );
     });

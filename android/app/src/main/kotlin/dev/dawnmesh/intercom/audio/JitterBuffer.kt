@@ -10,10 +10,14 @@ sealed class PollResult {
 class JitterBuffer(
     private val prebufferFrames: Int = 3,
     private val maxBuffer: Int = 24,
+    private val maxAdaptiveTarget: Int = minOf(maxBuffer, 12),
     private val ordered: Boolean = false,
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
-    init { require(prebufferFrames in 1..maxBuffer) }
+    init {
+        require(prebufferFrames in 1..maxBuffer)
+        require(maxAdaptiveTarget in prebufferFrames..maxBuffer)
+    }
     private val buf = sortedMapOf<Long, ByteArray>()
     private var highestSeen = -1L
     private var next = -1L
@@ -47,7 +51,7 @@ class JitterBuffer(
             if (started) {
                 started = false
                 underruns++
-                target = (target + 2).coerceAtMost(minOf(maxBuffer, 12))
+                target = (target + 2).coerceAtMost(maxAdaptiveTarget)
             }
             return PollResult.NotReady
         }

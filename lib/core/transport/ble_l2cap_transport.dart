@@ -128,7 +128,7 @@ class BleL2capTransport implements RoomTransport {
     if (!await _ensurePermissions()) return false;
     _role = BleRole.hostPeripheral;
     _sendErrorReported = false;
-    _listenIncomingData();
+    await _listenIncomingData();
 
     try {
       final ok = await _channel.invokeMethod<bool>('startAdvertising', {
@@ -167,14 +167,18 @@ class BleL2capTransport implements RoomTransport {
 
   // ---------------------------------------------------------------- 客户端
 
-  Future<bool> startScan() async {
+  Future<bool> startScan({bool recovering = false}) async {
     if (!await _ensurePermissions()) return false;
     _listenScanResults();
 
     try {
       final ok = await _channel.invokeMethod<bool>('startScan');
       if (ok != true) {
-        AppLog.error(_tag, '蓝牙扫描未能启动，搜不到附近的蓝牙房');
+        if (recovering) {
+          AppLog.warn('重连', '蓝牙扫描未能启动，等待系统蓝牙恢复');
+        } else {
+          AppLog.error(_tag, '蓝牙扫描未能启动，搜不到附近的蓝牙房');
+        }
         return false;
       }
       _pruneTimer ??= Timer.periodic(
@@ -183,7 +187,11 @@ class BleL2capTransport implements RoomTransport {
       );
       return true;
     } on PlatformException catch (e) {
-      AppLog.error(_tag, e.message ?? '蓝牙扫描失败', e);
+      if (recovering) {
+        AppLog.warn('重连', '重新扫描房主失败：${e.code} ${e.message ?? '未知系统错误'}');
+      } else {
+        AppLog.error(_tag, e.message ?? '蓝牙扫描失败', e);
+      }
       return false;
     } on MissingPluginException catch (e) {
       AppLog.error(_tag, '当前平台没有实现蓝牙通道', e);
@@ -212,7 +220,7 @@ class BleL2capTransport implements RoomTransport {
     if (!await _ensurePermissions()) return false;
     _role = BleRole.clientCentral;
     _sendErrorReported = false;
-    _listenIncomingData();
+    await _listenIncomingData();
 
     try {
       final ok = await _channel.invokeMethod<bool>('connectL2cap', {
@@ -229,7 +237,11 @@ class BleL2capTransport implements RoomTransport {
       AppLog.info(_tag, '已连接蓝牙房「${room.roomName}」');
       return true;
     } on PlatformException catch (e) {
-      if (!silent) AppLog.error(_tag, e.message ?? '连接蓝牙房主失败', e);
+      if (silent) {
+        AppLog.warn('重连', 'L2CAP 连接失败：${e.code} ${e.message ?? '未知系统错误'}');
+      } else {
+        AppLog.error(_tag, e.message ?? '连接蓝牙房主失败', e);
+      }
       _role = BleRole.idle;
       return false;
     } on MissingPluginException catch (e) {
@@ -239,13 +251,52 @@ class BleL2capTransport implements RoomTransport {
     }
   }
 
-  /// 使用上次扫描得到的地址与 PSM 恢复 L2CAP。房主进程仍在时 PSM 保持
-  /// 有效；恢复窗口内反复失败时由上层退避，而不是频繁扫描耗尽 BLE 资源。
+  /// 重新扫描原房间并使用最新地址与 PSM 恢复 L2CAP。
+  ///
+  /// Android 在蓝牙适配器关闭再开启后可能丢弃旧的 [BluetoothDevice] 状态，
+  /// 隐私地址也可能变化。PSM 又是房主动态分配的，因此恢复时不能只复用首次
+  /// 入房缓存。邀请码 PAKE 会在上层重新执行，即使附近出现同名房也无法冒充。
   Future<bool> reconnect() async {
-    final room = _lastConnectedRoom;
-    if (room == null) return false;
+    final previous = _lastConnectedRoom;
+    if (previous == null) return false;
     await stop();
-    return connectToHost(room, silent: true);
+
+    AppLog.info('重连', '正在重新扫描蓝牙房主广播');
+    final completer = Completer<DiscoveredBleRoom>();
+    late final StreamSubscription<List<DiscoveredBleRoom>> subscription;
+    subscription = roomsStream.listen((rooms) {
+      for (final room in rooms) {
+        if (room.address == previous.address ||
+            room.roomName == previous.roomName) {
+          if (!completer.isCompleted) completer.complete(room);
+          return;
+        }
+      }
+    });
+
+    if (!await startScan(recovering: true)) {
+      await subscription.cancel();
+      return false;
+    }
+
+    DiscoveredBleRoom? refreshed;
+    try {
+      refreshed = await completer.future.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      AppLog.warn('重连', '5 秒内未重新发现原蓝牙房，稍后继续扫描');
+    } finally {
+      await subscription.cancel();
+      await stopScan();
+    }
+    if (refreshed == null) return false;
+
+    if (refreshed.address != previous.address ||
+        refreshed.psm != previous.psm) {
+      AppLog.info('重连', '已刷新房主广播参数（地址或 PSM 已变化），开始建立 L2CAP');
+    } else {
+      AppLog.info('重连', '已重新发现原蓝牙房，开始建立 L2CAP');
+    }
+    return connectToHost(refreshed, silent: true);
   }
 
   // ------------------------------------------------------------ RoomTransport
@@ -344,8 +395,11 @@ class BleL2capTransport implements RoomTransport {
 
   // -------------------------------------------------------------------- 内部
 
-  void _listenIncomingData() {
-    _dataSubscription?.cancel();
+  Future<void> _listenIncomingData() async {
+    // EventChannel 原生端只有一个 sink。必须等旧订阅的 onCancel 完成后再
+    // onListen；否则断线重连时旧 cancel 可能晚到，把新连接的 sink 清空，
+    // 随后的 PAKE / roster 帧便永远到不了 Dart。
+    await _dataSubscription?.cancel();
     _dataSubscription = _dataChannel.receiveBroadcastStream().listen((
       dynamic event,
     ) {

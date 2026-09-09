@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 /**
- * 「落日后残波」的平台音频通道实现。
+ * DawnMesh 平台音频通道实现。
  *
  * 整条音频管线都在原生侧，Dart 只负责搬运 Opus 包：
  *
@@ -65,7 +65,18 @@ class PlatformAudioPlugin(
 
     /** 一路远端音频流：抖动缓冲 + 它专属的解码器（Opus 解码器有状态，不能共用）。 */
     private class RemoteStream(bluetooth: Boolean) {
-        val jitter = JitterBuffer(prebufferFrames = if (bluetooth) 6 else 3, ordered = true)
+        val jitter = if (bluetooth) {
+            // 同一控制器同时承载耳机音频和 BLE L2CAP 时，厂商调度可能让数据
+            // 成批到达。200ms 起播、最多 400ms 自适应缓冲，换取连续语音。
+            JitterBuffer(
+                prebufferFrames = 10,
+                maxBuffer = 40,
+                maxAdaptiveTarget = 20,
+                ordered = true,
+            )
+        } else {
+            JitterBuffer(prebufferFrames = 3, ordered = true)
+        }
         val codec = OpusCodec()
     }
 
@@ -327,6 +338,10 @@ class PlatformAudioPlugin(
             start()
         }
 
+        mainHandler.postDelayed({
+            if (capturing.get()) logActiveAudioRoute("路由稳定后")
+        }, 1_000)
+
         Log.i(TAG, "麦克风已开启（16kHz/mono/20ms，Opus ${currentBitrate}bps）")
         return true
     }
@@ -542,6 +557,7 @@ class PlatformAudioPlugin(
         while (playing.get()) {
             if (System.nanoTime() - lastReport > 10_000_000_000L) {
                 for ((id, stream) in remotes) Log.d(TAG, "音频缓冲 #$id: ${stream.jitter.diagnostics()}; trackUnderruns=${track.underrunCount}")
+                logActiveAudioRoute("播放中")
                 lastReport = System.nanoTime()
             }
             java.util.Arrays.fill(mix, 0)
@@ -633,9 +649,15 @@ class PlatformAudioPlugin(
             val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
             val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
 
-            val btComm = commDevices.firstOrNull {
+            val currentComm = audioManager.communicationDevice
+            val currentBluetoothComm = currentComm?.takeIf {
                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                 it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_HEARING_AID
+            }
+            val btComm = currentBluetoothComm ?: commDevices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                 it.type == AudioDeviceInfo.TYPE_HEARING_AID
             }
             val wiredComm = commDevices.firstOrNull {
@@ -646,6 +668,11 @@ class PlatformAudioPlugin(
             }
             val speakerComm = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             val earpieceComm = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+            val btMediaOutput = outputDevices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_HEARING_AID
+            }
 
             val builtinMic = inputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
             val externalMic = inputDevices.firstOrNull { dev ->
@@ -662,10 +689,15 @@ class PlatformAudioPlugin(
             // 1. 系统级通信设备与模式调度
             if (!preferBuiltinMic && btComm != null) {
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                audioManager.setCommunicationDevice(btComm)
-                track?.setPreferredDevice(btComm)
-                record?.setPreferredDevice(externalMic ?: btComm)
-                Log.i(TAG, "音频路由: 蓝牙通信设备双向绑定 (${btComm.productName})")
+                val selected = audioManager.setCommunicationDevice(btComm)
+                // setCommunicationDevice 会由系统自动选择匹配的输入端。清除之前
+                // “手机麦 + A2DP”模式留下的单流偏好，避免两个路由策略互相冲突。
+                track?.setPreferredDevice(null)
+                record?.setPreferredDevice(null)
+                Log.i(
+                    TAG,
+                    "音频路由: 蓝牙通信设备双向绑定 (${btComm.productName}); selected=$selected",
+                )
             } else if (wiredComm != null) {
                 audioManager.mode = AudioManager.MODE_NORMAL
                 audioManager.setCommunicationDevice(wiredComm)
@@ -677,22 +709,18 @@ class PlatformAudioPlugin(
                     record?.setPreferredDevice(externalMic ?: wiredComm)
                     Log.i(TAG, "音频路由: 有线/USB耳机双向绑定 (${wiredComm.productName})")
                 }
-            } else if (btComm != null) {
-                // 蓝牙耳机已连接，但用户选择使用手机麦拾音
+            } else if (btMediaOutput != null) {
+                // 用户选择手机麦，或者耳机暂时只暴露 A2DP 输出而没有通信输入。
                 audioManager.mode = AudioManager.MODE_NORMAL
                 audioManager.clearCommunicationDevice()
-                val btOutput = outputDevices.firstOrNull {
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                    it.type == AudioDeviceInfo.TYPE_HEARING_AID
-                }
-                track?.setPreferredDevice(btOutput)
+                track?.setPreferredDevice(btMediaOutput)
                 if (builtinMic != null) {
                     record?.setPreferredDevice(builtinMic)
                 } else {
                     record?.setPreferredDevice(null)
                 }
-                Log.i(TAG, "音频路由: 蓝牙媒体通道输出 (A2DP/BLE) + 手机麦拾音")
+                val fallback = if (preferBuiltinMic) "用户选择" else "耳机无通信输入，自动回退"
+                Log.i(TAG, "音频路由: 蓝牙媒体通道输出 (A2DP/BLE) + 手机麦拾音；$fallback")
             } else if (userWantsSpeaker) {
                 audioManager.mode = AudioManager.MODE_NORMAL
                 if (speakerComm != null) {
@@ -763,5 +791,24 @@ class PlatformAudioPlugin(
                 audioManager.isSpeakerphoneOn = false
             }
         }
+    }
+
+    private fun logActiveAudioRoute(reason: String) {
+        val input = audioRecord?.routedDevice
+        val output = audioTrack?.routedDevice
+        val communication = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.communicationDevice
+        } else null
+        fun label(device: AudioDeviceInfo?): String = if (device == null) {
+            "none"
+        } else {
+            "type=${device.type},name=${device.productName}"
+        }
+        Log.i(
+            TAG,
+            "实际音频路由($reason): input=${label(input)}; output=${label(output)}; " +
+                "communication=${label(communication)}; mode=${audioManager.mode}; " +
+                "phoneMic=$preferBuiltinMic",
+        )
     }
 }
