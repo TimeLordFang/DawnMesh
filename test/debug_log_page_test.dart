@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/diagnostics/app_log.dart';
 import 'package:dawn_mesh/core/platform/native_debug_log_channel.dart';
+import 'package:dawn_mesh/core/preferences/audio_tuning_settings_store.dart';
 import 'package:dawn_mesh/core/preferences/debug_log_settings_store.dart';
 import 'package:dawn_mesh/ui/pages/debug_log_page.dart';
 
@@ -24,6 +25,7 @@ void main() {
   ) async {
     final calls = <MethodCall>[];
     final controlCalls = <MethodCall>[];
+    final audioCalls = <MethodCall>[];
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(DebugLogSettingsStore.channel, (
@@ -50,6 +52,18 @@ void main() {
         null,
       ),
     );
+    messenger.setMockMethodCallHandler(AudioTuningSettingsStore.audioChannel, (
+      call,
+    ) async {
+      audioCalls.add(call);
+      return true;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        AudioTuningSettingsStore.audioChannel,
+        null,
+      ),
+    );
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -59,12 +73,26 @@ void main() {
     );
     expect(find.text('Debug logs'), findsOneWidget);
     expect(find.text('Off'), findsWidgets);
+    expect(find.text('Fast'), findsOneWidget);
+    expect(find.text('Balanced'), findsOneWidget);
+    expect(find.text('Stable'), findsOneWidget);
     expect(AppLog.isEnabled, isFalse);
+
+    await tester.tap(find.text('Fast'));
+    await tester.pumpAndSettle();
+    expect(
+      calls.where((call) => call.method == 'setAudioTuningProfile').single.arguments,
+      {'profile': 'low'},
+    );
+    expect(audioCalls.single.arguments, {'profile': 'low'});
 
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(AppLog.isEnabled, isTrue);
-    expect(calls.single.method, 'setDebugLoggingEnabled');
+    expect(
+      calls.where((call) => call.method == 'setDebugLoggingEnabled').single.method,
+      'setDebugLoggingEnabled',
+    );
     expect(controlCalls.single.method, 'captureSystemSnapshot');
 
     await tester.tap(find.byIcon(Icons.memory_rounded));

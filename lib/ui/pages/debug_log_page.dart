@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/diagnostics/app_log.dart';
 import '../../core/diagnostics/diagnostic_report.dart';
 import '../../core/platform/native_debug_log_channel.dart';
+import '../../core/preferences/audio_tuning_settings_store.dart';
 import '../../core/preferences/debug_log_settings_store.dart';
 import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
@@ -21,11 +22,14 @@ class DebugLogPage extends StatefulWidget {
 
 class _DebugLogPageState extends State<DebugLogPage> {
   final _settings = DebugLogSettingsStore();
+  final _audioSettings = AudioTuningSettingsStore();
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   StreamSubscription<LogEntry>? _subscription;
   late bool _enabled;
   bool _saving = false;
+  bool _audioProfileSaving = false;
+  AudioTuningProfile _audioProfile = AudioTuningProfile.balanced;
   LogLevel? _level;
   late List<LogEntry> _entries;
 
@@ -45,6 +49,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
       _scrollToEnd();
     });
     _searchController.addListener(_refreshSearch);
+    _loadAudioProfile();
     if (_enabled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NativeDebugLogChannel.captureSystemSnapshot();
@@ -63,6 +68,37 @@ class _DebugLogPageState extends State<DebugLogPage> {
   }
 
   void _refreshSearch() => setState(() {});
+
+  Future<void> _loadAudioProfile() async {
+    final profile = await _audioSettings.load();
+    if (mounted) setState(() => _audioProfile = profile);
+  }
+
+  Future<void> _setAudioProfile(AudioTuningProfile profile) async {
+    if (_audioProfileSaving || profile == _audioProfile) return;
+    final previous = _audioProfile;
+    setState(() {
+      _audioProfile = profile;
+      _audioProfileSaving = true;
+    });
+    final saved = await _audioSettings.save(profile);
+    if (!mounted) return;
+    setState(() {
+      if (!saved) _audioProfile = previous;
+      _audioProfileSaving = false;
+    });
+    final s = AppStrings.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          saved ? s.audioTuningApplied : s.audioTuningSaveFailed,
+        ),
+      ),
+    );
+    if (saved) {
+      AppLog.info('音频', '调优档位切换为 ${profile.wireName}');
+    }
+  }
 
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -245,6 +281,101 @@ class _DebugLogPageState extends State<DebugLogPage> {
                         value: _enabled,
                         onChanged: _saving ? null : _setEnabled,
                         activeThumbColor: const Color(0xFF4B9A8C),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
+                  decoration: BoxDecoration(
+                    color: card.withValues(alpha: isNight ? 0.88 : 0.94),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 18,
+                            color: const Color(0xFF4B9A8C),
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            s.audioTuningTitle,
+                            style: TextStyle(
+                              color: primary,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<AudioTuningProfile>(
+                          segments: [
+                            ButtonSegment(
+                              value: AudioTuningProfile.lowLatency,
+                              label: Text(s.audioTuningLow),
+                              icon: const Icon(Icons.bolt_rounded, size: 16),
+                            ),
+                            ButtonSegment(
+                              value: AudioTuningProfile.balanced,
+                              label: Text(s.audioTuningBalanced),
+                              icon: const Icon(
+                                Icons.balance_rounded,
+                                size: 16,
+                              ),
+                            ),
+                            ButtonSegment(
+                              value: AudioTuningProfile.stable,
+                              label: Text(s.audioTuningStable),
+                              icon: const Icon(Icons.shield_rounded, size: 16),
+                            ),
+                          ],
+                          selected: {_audioProfile},
+                          showSelectedIcon: false,
+                          onSelectionChanged: _audioProfileSaving
+                              ? null
+                              : (selection) =>
+                                    _setAudioProfile(selection.single),
+                          style: ButtonStyle(
+                            visualDensity: const VisualDensity(
+                              horizontal: -2,
+                              vertical: -2,
+                            ),
+                            textStyle: const WidgetStatePropertyAll(
+                              TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        switch (_audioProfile) {
+                          AudioTuningProfile.lowLatency =>
+                            s.audioTuningLowDescription,
+                          AudioTuningProfile.balanced =>
+                            s.audioTuningBalancedDescription,
+                          AudioTuningProfile.stable =>
+                            s.audioTuningStableDescription,
+                        },
+                        style: TextStyle(
+                          color: secondary,
+                          fontSize: 10.5,
+                          height: 1.25,
+                        ),
                       ),
                     ],
                   ),
@@ -504,29 +635,44 @@ class _EmptyLogs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 42, color: secondary.withValues(alpha: 0.65)),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(
-                color: primary,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 36,
+                    color: secondary.withValues(alpha: 0.65),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: primary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    detail,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: secondary,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 7),
-            Text(
-              detail,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: secondary, fontSize: 13, height: 1.4),
-            ),
-          ],
+          ),
         ),
       ),
     );

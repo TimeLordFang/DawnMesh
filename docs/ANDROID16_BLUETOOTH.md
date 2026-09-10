@@ -59,6 +59,8 @@ adb -s SERIAL logcat -v time DawnBle:I DawnMain:I DawnAudio:I flutter:I '*:S'
 
 顺序判断：没出现“开始扫描蓝牙房” → 扫描/权限入口；房主没“BLE 广播已开启” → 广播/权限/硬件；双方都有但列表为空 → 扫描结果/广播解析；列表有而连接失败 → PSM、L2CAP、超时；连接成功没声音 → 麦克风、PTT、音频路由，与搜房分开定位。
 
-K50 Ultra 的 Snapdragon 8+ Gen 1 足以完成 16 kHz 单声道 Opus，且同桌双向都断续不能直接归因于蓝牙硬件损坏。dev.5 修复了可靠流上把聊天/心跳序号间隔误判为音频丢包的问题；缓冲耗尽后会重新攒帧，蓝牙初始缓冲从 60 ms 提升到 120 ms，发送、采集和播放线程提高调度优先级，并降低纯 JVM Opus 复杂度。代价是断流恢复时最多增加约 120–240 ms 延迟。如果 dev.5 仍断续，以上日志可以区分编码超时、播放欠载和 L2CAP 链路突发。
+K50 Ultra 的 Snapdragon 8+ Gen 1 足以完成 16 kHz 单声道 Opus，且同桌双向都断续不能直接归因于蓝牙硬件损坏。手机同时维持耳麦双向通话音频与 DawnMesh BLE L2CAP 链路时，两类业务共用蓝牙控制器和 2.4 GHz 空口；经典 HFP/SCO、LE Audio、手机厂商固件与耳麦实现会产生不同的并发调度结果。Android 的公开 `BluetoothSocket` L2CAP API 不提供连接间隔、PHY 或链路优先级控制，因此应用能直接优化的是语音负载、socket 写入节奏和播放缓存。
+
+dev.17 在不改变协议格式的前提下使用 8 kbps Opus voice/DTX、50 ms 合并写入、120–280 ms 接收缓冲与最多 40 ms PLC。AudioTrack 应用缓冲目标为 80 ms，真实欠载时自动增加。日志中的 `concealed` 增长且 `rebuffer` 很少，说明短突发已被隐藏；`rebuffer` 持续增长而 `trackUnderruns=0`，说明主要瓶颈仍在蓝牙数据到达；`trackUnderruns` 增长则说明本机音频播放调度也参与了断续。若用户可以接受手机麦克风，切换到“手机麦克风 + 耳机输出”通常能避开经典耳麦的双向通信上行，但实际是否走 A2DP 或 LE Audio仍由系统和耳麦决定。
 
 资料：[蓝牙权限](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)、[Android 16 面向 target 36 的行为变化](https://developer.android.com/about/versions/16/behavior-changes-16)。DawnMesh 当前 target 35；“运行在 Android 16”与“targetSdk 36”不是同一条件。

@@ -2,7 +2,7 @@ import 'dart:collection';
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Local level-based voice activation: 100 ms pre-roll, 400 ms hangover.
+/// Local level-based voice activation: 100 ms pre-roll, 240 ms hangover.
 /// Sound above the adaptive noise floor opens it; no speech is sent to a server.
 class VoiceActivityGate {
   final _preRoll = ListQueue<Uint8List>();
@@ -14,7 +14,9 @@ class VoiceActivityGate {
     if (!level.isFinite) level = 0;
     final threshold = max(0.008, min(0.04, _noise * 3));
     final triggered = level >= threshold;
-    if (triggered) _openUntil = nowMs + 400;
+    // 240ms 足以保住自然语句中的短停顿，配合 100ms 预录也不会吞掉下一句
+    // 开头；相比原来的 400ms，可少发送背景声，缓解蓝牙耳麦共存时的争用。
+    if (triggered) _openUntil = nowMs + 240;
     if (triggered || nowMs < _openUntil) {
       isOpen = true;
       final result = [..._preRoll, packet];

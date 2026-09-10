@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**57,857,617 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.16` / versionCode **16**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`90faef6ec9bec1664fb9d593a68fb0d55e6b08a651ec8d1dc1ba574b0b418d6d`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**58,054,705 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.18` / versionCode **18**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`05f0e4a727f5a19352e73c1a9d37145fe442c210dd2186f02986554ab3a21345`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,8 +15,8 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 原全量 **170 项通过**；新增版本同步测试后，相关测试文件 **9 项通过** |
-| `:app:testDebugUnitTest` | Kotlin **22 项通过，0 失败** |
+| Flutter 测试 | 全量 **172 项通过** |
+| `:app:testDebugUnitTest` | Kotlin **25 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -25,6 +25,23 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.18 可切换音频档位
+
+- 调试日志页新增“低延迟 / 平衡 / 稳定”三个档位；选择后立即同步到原生音频管线并持久化，重启应用后继续使用。通话中切换会清空旧抖动队列，并按新目标进行一次短暂重新蓄水。
+- **低延迟**：蓝牙起播 80 ms、自适应上限 200 ms、AudioTrack 目标 40 ms、L2CAP 合并 35 ms、耳麦共存 Opus 8 kbps。适合近距离、干扰较少且延迟优先的场景。
+- **平衡（默认）**：蓝牙起播 120 ms、自适应上限 280 ms、AudioTrack 目标 80 ms、L2CAP 合并 50 ms、耳麦共存 Opus 8 kbps。
+- **稳定**：蓝牙起播 200 ms、自适应上限 480 ms、AudioTrack 目标 120 ms、L2CAP 合并 60 ms、耳麦共存 Opus 10 kbps，并允许最多 60 ms PLC。适合控制器突发阻塞明显的手机或耳麦组合。
+- AudioTrack 若出现真实 underrun，三个档位都会继续以每次 20 ms 自动扩容，避免低延迟设置把本机播放线程推入持续欠载。
+
+## dev.17 蓝牙耳麦共存优化
+
+- 蓝牙房与蓝牙耳麦并用时，Opus 从 10 kbps 调整为 **8 kbps**，固定采用 VOIP/voice、受限 VBR 与 DTX；16 kHz 单声道、20 ms 帧和传输格式不变，新旧版本可以继续互通。
+- L2CAP 合并窗口从 60 ms 缩短到 **50 ms**。仍可把相邻 20 ms 帧成批写入，减少控制器调度次数，同时少一段固定等待。
+- 蓝牙接收缓冲从 160 ms / 400 ms 调整为 **120 ms 起播 / 280 ms 自适应上限**。短暂 20–40 ms 断粮先用 Opus PLC 平滑补偿，并丢弃迟到旧帧，避免一个小阻塞触发长时间重新蓄水；稳定约 2 秒后开始回收累积延迟。
+- AudioTrack 的应用侧有效缓冲请求限制为 **80 ms**；Android 若因设备路由返回更大值则尊重系统结果。运行中若真实 `underrunCount` 增加，每次自动扩容 20 ms，直到设备允许的容量。
+- 自动通话尾音由 400 ms 缩到 **240 ms**，保留 100 ms 预录，减少环境底噪占用蓝牙链路。
+- 日志新增 `concealed` 与 `trackBuffer`。真机重点比较 `rebuffer`、`concealed`、`dropped`、`trackUnderruns`、`trackBuffer` 和 BLE `txFrames/txWrites`；仅凭手机支持“蓝牙 5.x”不能断定耳麦音频与 LE L2CAP 并发调度能力。
 
 ## 2026-09-10 工具链与依赖整理
 

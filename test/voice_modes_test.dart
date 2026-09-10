@@ -18,9 +18,10 @@ void main() {
     final onset = gate.process(Uint8List.fromList([10]), 0.1, 200);
     expect(onset.map((p) => p.single), [5, 6, 7, 8, 9, 10]);
     expect(gate.process(Uint8List.fromList([11]), 0, 220), hasLength(1));
-    expect(gate.process(Uint8List.fromList([12]), 0, 601), isEmpty);
+    expect(gate.process(Uint8List.fromList([12]), 0, 439), hasLength(1));
+    expect(gate.process(Uint8List.fromList([13]), 0, 441), isEmpty);
     gate.reset();
-    expect(gate.process(Uint8List.fromList([13]), 0, 602), isEmpty);
+    expect(gate.process(Uint8List.fromList([14]), 0, 442), isEmpty);
     expect(gate.isOpen, isFalse);
   });
 

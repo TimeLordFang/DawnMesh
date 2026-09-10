@@ -24,6 +24,10 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                     val enabled = preferences.getBoolean("debug_logging_enabled", false)
                     main.post { result.success(enabled) }
                 }
+                "getAudioTuningProfile" -> worker.execute {
+                    val profile = preferences.getString("audio_tuning_profile", "balanced")
+                    main.post { result.success(profile) }
+                }
                 "setNickname" -> {
                     val name = call.argument<String>("nickname")
                     if (name == null || name.toByteArray(Charsets.UTF_8).size > 256) {
@@ -51,6 +55,20 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                             } else {
                                 result.error("SAVE_FAILED", "调试日志开关未写入存储", null)
                             }
+                        }
+                    }
+                }
+                "setAudioTuningProfile" -> {
+                    val profile = call.argument<String>("profile")
+                    if (profile !in setOf("low", "balanced", "stable")) {
+                        result.error("BAD_AUDIO_PROFILE", "音频调优档位无效", null)
+                    } else worker.execute {
+                        val saved = preferences.edit()
+                            .putString("audio_tuning_profile", profile)
+                            .commit()
+                        main.post {
+                            if (saved) result.success(null)
+                            else result.error("SAVE_FAILED", "音频调优档位未写入存储", null)
                         }
                     }
                 }

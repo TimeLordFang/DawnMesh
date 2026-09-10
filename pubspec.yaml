@@ -3,8 +3,8 @@ description: "DawnMesh - decentralized near-field voice intercom for Android."
 publish_to: 'none'
 
 # versionName 取 `+` 前半段，versionCode 取后半段。
-# DawnMesh 0.1.0-dev.16 / versionCode 16
-version: 0.1.0-dev.16+16
+# DawnMesh 0.1.0-dev.18 / versionCode 18
+version: 0.1.0-dev.18+18
 
 environment:
   sdk: '>=3.13.0 <4.0.0'

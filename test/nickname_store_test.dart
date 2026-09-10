@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dawn_mesh/core/preferences/audio_tuning_settings_store.dart';
 import 'package:dawn_mesh/core/preferences/debug_log_settings_store.dart';
 import 'package:dawn_mesh/core/preferences/nickname_store.dart';
 
@@ -47,5 +48,40 @@ void main() {
     expect(await store.load(), isFalse);
     expect(await store.save(true), isTrue);
     expect(await store.load(), isTrue);
+  });
+
+  test('audio tuning profile is saved, restored and applied to native audio', () async {
+    String? saved;
+    final audioCalls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setAudioTuningProfile') {
+        saved = (call.arguments as Map)['profile'] as String;
+        return null;
+      }
+      if (call.method == 'getAudioTuningProfile') return saved;
+      return null;
+    });
+    messenger.setMockMethodCallHandler(AudioTuningSettingsStore.audioChannel, (
+      call,
+    ) async {
+      audioCalls.add(call);
+      return true;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      messenger.setMockMethodCallHandler(
+        AudioTuningSettingsStore.audioChannel,
+        null,
+      );
+    });
+
+    final store = AudioTuningSettingsStore();
+    expect(await store.load(), AudioTuningProfile.balanced);
+    expect(await store.save(AudioTuningProfile.lowLatency), isTrue);
+    expect(await store.load(), AudioTuningProfile.lowLatency);
+    expect(audioCalls.single.method, 'setAudioTuningProfile');
+    expect(audioCalls.single.arguments, {'profile': 'low'});
   });
 }

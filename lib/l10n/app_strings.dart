@@ -102,6 +102,28 @@ class AppStrings {
   String get debugLogWarning => 'WARN';
   String get debugLogError => 'ERROR';
   String debugLogCount(int count) => isEn ? '$count entries' : '$count 条日志';
+  String get audioTuningTitle => isEn ? 'Audio latency' : '音频延迟';
+  String get audioTuningLow => isEn ? 'Fast' : '低延迟';
+  String get audioTuningBalanced => isEn ? 'Balanced' : '平衡';
+  String get audioTuningStable => isEn ? 'Stable' : '稳定';
+  String get audioTuningLowDescription =>
+      isEn
+          ? 'About 80 ms Bluetooth prebuffer and 40 ms app playback buffer. Lowest delay; weak links may sound rougher.'
+          : '蓝牙预缓冲约 80 ms、应用播放缓冲约 40 ms；延迟最低，弱链路可能更容易出现音质波动。';
+  String get audioTuningBalancedDescription =>
+      isEn
+          ? 'About 120 ms Bluetooth prebuffer and 80 ms app playback buffer. Recommended for most devices.'
+          : '蓝牙预缓冲约 120 ms、应用播放缓冲约 80 ms；适合大多数设备，建议优先使用。';
+  String get audioTuningStableDescription =>
+      isEn
+          ? 'About 200 ms Bluetooth prebuffer and 120 ms app playback buffer. Better resistance to radio bursts.'
+          : '蓝牙预缓冲约 200 ms、应用播放缓冲约 120 ms；更能抵抗无线突发阻塞。';
+  String get audioTuningApplied =>
+      isEn
+          ? 'Audio profile applied. Active audio may rebuffer briefly.'
+          : '音频档位已应用，当前通话可能会短暂重新缓冲。';
+  String get audioTuningSaveFailed =>
+      isEn ? 'Could not save the audio profile' : '无法保存音频档位';
 
   // Host Election & Transfer
   String get transferHost => isEn ? 'Change host' : '更换房主';
@@ -163,8 +185,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.16\nUpdate checks now use this project’s GitHub Releases page and include prereleases.\nThe Android build runs on Java 25 LTS with Gradle 9.7.1.\nUnused Dart dependencies were removed and the open-source documentation was refreshed.'
-          : '0.1.0-dev.16\n更新检查已改用本项目的 GitHub Releases，并支持开发预发布版本。\nAndroid 构建环境升级到 Java 25 LTS 与 Gradle 9.7.1。\n移除未使用的 Dart 依赖并更新开源项目文档。';
+          ? '0.1.0-dev.18\nThe debug page now offers Fast, Balanced, and Stable audio profiles.\nProfiles apply immediately and persist across app restarts.\nFast mode further reduces Bluetooth and playback buffering.'
+          : '0.1.0-dev.18\n调试页新增低延迟、平衡和稳定三个音频档位。\n档位立即生效，并在应用重启后继续保留。\n低延迟档进一步缩短蓝牙与播放缓冲。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

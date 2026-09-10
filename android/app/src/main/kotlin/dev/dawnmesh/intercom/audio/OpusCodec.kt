@@ -3,6 +3,7 @@ package dev.dawnmesh.intercom.audio
 import io.github.jaredmdobson.concentus.OpusApplication
 import io.github.jaredmdobson.concentus.OpusDecoder
 import io.github.jaredmdobson.concentus.OpusEncoder
+import io.github.jaredmdobson.concentus.OpusSignal
 
 /**
  * Opus 编解码封装（Concentus 纯 JVM 实现，VoIP 模式）。
@@ -34,6 +35,12 @@ class OpusCodec(bitrateBps: Int = DEFAULT_BITRATE) {
         it.bitrate = bitrateBps
         // Concentus is JVM code: moderate complexity leaves headroom on older CPUs.
         it.complexity = 5
+        // 明确按人声优化。DTX 会把 PTT 中没有说话的片段压成极小包；自动
+        // 通话还有 Dart 侧 VAD，两层配合可减少耳机与 L2CAP 并用时的空口负载。
+        it.signalType = OpusSignal.OPUS_SIGNAL_VOICE
+        it.useVBR = true
+        it.useConstrainedVBR = true
+        it.useDTX = true
     }
 
     private val decoder = OpusDecoder(SAMPLE_RATE, 1)

@@ -54,18 +54,37 @@ class JitterBufferTest {
         assertSame(PollResult.Lost, b.poll()); assertEquals(4, take(b))
         b.put(65535, packet(9)); assertEquals(0, b.pendingCount())
     }
-    @Test fun bluetoothCoexistenceCanGrowToTwentyFrameTarget() {
+    @Test fun bluetoothCoexistenceCanGrowToFourteenFrameTarget() {
         val b = JitterBuffer(
-            prebufferFrames = 8,
-            maxBuffer = 32,
-            maxAdaptiveTarget = 20,
+            prebufferFrames = 6,
+            maxBuffer = 24,
+            maxAdaptiveTarget = 14,
             ordered = true,
         )
         repeat(6) {
             repeat(40) { n -> b.put(n, packet(n)) }
             while (b.poll() is PollResult.Packet) Unit
         }
-        assertTrue(b.diagnostics().contains("target=20"))
+        assertTrue(b.diagnostics().contains("target=14"))
+    }
+
+    @Test fun shortOrderedGapUsesPlcThenDropsLateAudio() {
+        val b = JitterBuffer(
+            prebufferFrames = 2,
+            maxBuffer = 8,
+            maxConcealmentFrames = 2,
+            ordered = true,
+        )
+        b.put(0, packet(0)); b.put(1, packet(1))
+        assertEquals(0, take(b)); assertEquals(1, take(b))
+
+        assertSame(PollResult.Lost, b.poll())
+        assertSame(PollResult.Lost, b.poll())
+        b.put(2, packet(2)); b.put(3, packet(3)); b.put(4, packet(4))
+
+        assertEquals(4, take(b))
+        assertTrue(b.diagnostics().contains("concealed=2"))
+        assertTrue(b.diagnostics().contains("dropped=2"))
     }
 
     @Test fun stablePlaybackTrimsPreviouslyAccumulatedLatency() {

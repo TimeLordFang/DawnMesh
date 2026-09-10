@@ -16,6 +16,7 @@ class JitterBuffer(
     private val maxBuffer: Int = 24,
     private val maxAdaptiveTarget: Int = minOf(maxBuffer, 12),
     private val stableFramesBeforeDecay: Int = 250,
+    private val maxConcealmentFrames: Int = 0,
     private val ordered: Boolean = false,
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
@@ -23,6 +24,7 @@ class JitterBuffer(
         require(prebufferFrames in 1..maxBuffer)
         require(maxAdaptiveTarget in prebufferFrames..maxBuffer)
         require(stableFramesBeforeDecay > 0)
+        require(maxConcealmentFrames >= 0)
     }
     private val buf = sortedMapOf<Long, ByteArray>()
     private var highestSeen = -1L
@@ -36,6 +38,8 @@ class JitterBuffer(
     private var dropped = 0
     private var stableFrames = 0
     private var latencyTrims = 0
+    private var consecutiveConcealments = 0
+    private var concealed = 0
 
     @Synchronized
     fun put(seq16: Int, payload: ByteArray) {
@@ -60,10 +64,20 @@ class JitterBuffer(
     fun poll(): PollResult {
         if (buf.isEmpty()) {
             if (started) {
+                // L2CAP 虽然可靠，但耳机音频与数据链路争用控制器时，协议帧常会
+                // 晚 20~40ms 成批到达。短缺口直接用 Opus PLC 跨过，并丢弃随后
+                // 到达的旧帧，避免为一个小阻塞重新积累整段起播缓冲。
+                if (consecutiveConcealments < maxConcealmentFrames) {
+                    consecutiveConcealments++
+                    concealed++
+                    next++
+                    return PollResult.Lost
+                }
                 started = false
                 underruns++
                 target = (target + 2).coerceAtMost(maxAdaptiveTarget)
                 stableFrames = 0
+                consecutiveConcealments = 0
             }
             return PollResult.NotReady
         }
@@ -93,7 +107,12 @@ class JitterBuffer(
         }
         val head = buf.remove(next)
         next++
-        return if (head == null) PollResult.Lost else PollResult.Packet(head, discardedBefore)
+        return if (head == null) {
+            PollResult.Lost
+        } else {
+            consecutiveConcealments = 0
+            PollResult.Packet(head, discardedBefore)
+        }
     }
 
     @Synchronized
@@ -101,12 +120,13 @@ class JitterBuffer(
         buf.clear(); highestSeen = -1L; next = -1L; arrivalSeq = 0L
         started = false; target = prebufferFrames; lastArrivalAt = Long.MIN_VALUE
         underruns = 0; dropped = 0; stableFrames = 0; latencyTrims = 0
+        consecutiveConcealments = 0; concealed = 0
     }
     @Synchronized fun hasStarted(): Boolean = started
     @Synchronized fun pendingCount(): Int = buf.size
     @Synchronized fun diagnostics(): String =
         "queued=${buf.size}, target=$target, rebuffer=$underruns, " +
-            "trimmed=$latencyTrims, dropped=$dropped"
+            "concealed=$concealed, trimmed=$latencyTrims, dropped=$dropped"
 
     private fun unwrap(seq16: Int): Long {
         if (highestSeen < 0) { highestSeen = seq16.toLong(); return highestSeen }
