@@ -71,6 +71,7 @@ class PlatformAudioPlugin(
                 prebufferFrames = profile.bluetoothPrebufferFrames,
                 maxBuffer = profile.bluetoothMaxBufferFrames,
                 maxAdaptiveTarget = profile.bluetoothMaxAdaptiveFrames,
+                maxPlayoutQueueFrames = profile.maxPlayoutQueueFrames,
                 stableFramesBeforeDecay = profile.stableFramesBeforeDecay,
                 maxConcealmentFrames = profile.maxConcealmentFrames,
                 ordered = true,
@@ -602,7 +603,8 @@ class PlatformAudioPlugin(
         while (playing.get()) {
             if (System.nanoTime() - lastReport > 10_000_000_000L) {
                 val trackUnderruns = track.underrunCount
-                if (trackUnderruns > lastTrackUnderruns) {
+                if (trackUnderruns > lastTrackUnderruns &&
+                    tuningProfile != AudioTuningProfile.LOW_LATENCY) {
                     val currentFrames = track.bufferSizeInFrames
                     val capacityFrames = track.bufferCapacityInFrames
                     if (currentFrames < capacityFrames) {
@@ -931,6 +933,7 @@ class PlatformAudioPlugin(
             TAG,
             "音频调优档位切换为 ${profile.wireName}：jitter=" +
                 "${profile.bluetoothPrebufferFrames * 20}-${profile.bluetoothMaxAdaptiveFrames * 20}ms，" +
+                "liveCap=${profile.maxPlayoutQueueFrames * 20}ms，" +
                 "track=${actualFrames ?: requestedFrames}帧，L2CAP=${profile.l2capCoalesceMillis}ms",
         )
     }

@@ -33,8 +33,9 @@ abstract class RoomTransport {
   /// 当前连接上的对端数量。
   int get peerCount;
 
-  /// `RoomSession.onSendFrame` 挂到这里。
-  void send(Frame frame);
+  /// `RoomSession.onSendFrame` 挂到这里。[realtime] 只是一条本机队列提示：
+  /// 语音过时后可以丢弃，聊天、握手与房间控制帧仍必须可靠发送。
+  void send(Frame frame, {bool realtime = false});
 
   /// 把还没写出的待发帧推到底层链路。
   ///

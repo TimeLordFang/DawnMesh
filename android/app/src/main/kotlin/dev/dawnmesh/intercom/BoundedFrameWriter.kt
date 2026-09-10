@@ -6,6 +6,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** One bounded writer per physical peer. Socket I/O never runs on the UI thread. */
 internal class BoundedFrameWriter(
@@ -13,6 +14,9 @@ internal class BoundedFrameWriter(
     private val timeoutMillis: Long = 5_000,
     private val coalesceMillis: Long = 0,
     private val coalesceMillisProvider: (() -> Long)? = null,
+    private val dropStaleRealtimeProvider: (() -> Boolean)? = null,
+    private val maxRealtimeAgeMillisProvider: (() -> Long)? = null,
+    private val nanoTimeProvider: () -> Long = System::nanoTime,
     private val maxBatchBytes: Int = 4_096,
     private val write: (ByteArray) -> Unit,
     private val closeTransport: () -> Unit,
@@ -24,7 +28,11 @@ internal class BoundedFrameWriter(
     }
 
     private sealed class Job {
-        class Frame(val bytes: ByteArray) : Job()
+        class Frame(
+            val bytes: ByteArray,
+            val realtime: Boolean,
+            val enqueuedAtNanos: Long,
+        ) : Job()
         class Barrier(val completion: CompletableFuture<Unit>) : Job()
     }
 
@@ -35,6 +43,7 @@ internal class BoundedFrameWriter(
     }
 
     private val open = AtomicBoolean(true)
+    private val droppedRealtime = AtomicLong(0)
     private val jobs = ArrayBlockingQueue<Job>(capacity)
     private val worker = Thread({ run() }, "dawnmesh-peer-writer").apply {
         isDaemon = true
@@ -43,12 +52,26 @@ internal class BoundedFrameWriter(
     }
 
     @Synchronized
-    fun send(bytes: ByteArray): Boolean {
+    fun send(bytes: ByteArray, realtime: Boolean = false): Boolean {
         if (!open.get()) return false
-        if (jobs.offer(Job.Frame(bytes.copyOf()))) return true
+        if (realtime && shouldDropStaleRealtime()) {
+            // 可靠 L2CAP 会把旧数据完整补发。低延迟档只保留最新一帧待发
+            // 语音，Barrier 与控制帧不动；当前已经写入 socket 的帧无法撤回。
+            val iterator = jobs.iterator()
+            while (iterator.hasNext()) {
+                val queued = iterator.next()
+                if (queued is Job.Frame && queued.realtime) {
+                    iterator.remove()
+                    droppedRealtime.incrementAndGet()
+                }
+            }
+        }
+        if (jobs.offer(Job.Frame(bytes.copyOf(), realtime, nanoTimeProvider()))) return true
         fail(IOException("Peer send queue full"))
         return false
     }
+
+    fun droppedRealtimeFrames(): Long = droppedRealtime.get()
 
     @Synchronized
     fun flush(): CompletableFuture<Unit> {
@@ -64,7 +87,13 @@ internal class BoundedFrameWriter(
             while (open.get()) {
                 when (val job = jobs.take()) {
                     is Job.Barrier -> job.completion.complete(Unit)
-                    is Job.Frame -> writeCoalesced(job)
+                    is Job.Frame -> {
+                        if (isExpired(job)) {
+                            droppedRealtime.incrementAndGet()
+                        } else {
+                            writeCoalesced(job)
+                        }
+                    }
                 }
             }
         } catch (e: InterruptedException) {
@@ -99,6 +128,10 @@ internal class BoundedFrameWriter(
                     break
                 }
                 is Job.Frame -> {
+                    if (isExpired(next)) {
+                        droppedRealtime.incrementAndGet()
+                        continue
+                    }
                     if (total + next.bytes.size > maxBatchBytes) {
                         writeWithTimeout(join(chunks, total))
                         chunks.clear()
@@ -112,6 +145,16 @@ internal class BoundedFrameWriter(
 
         if (total > 0) writeWithTimeout(join(chunks, total))
         barrier?.completion?.complete(Unit)
+    }
+
+    private fun shouldDropStaleRealtime(): Boolean =
+        dropStaleRealtimeProvider?.invoke() == true
+
+    private fun isExpired(frame: Job.Frame): Boolean {
+        if (!frame.realtime || !shouldDropStaleRealtime()) return false
+        val maxAgeMillis = (maxRealtimeAgeMillisProvider?.invoke() ?: 60L).coerceAtLeast(0L)
+        return nanoTimeProvider() - frame.enqueuedAtNanos >
+            TimeUnit.MILLISECONDS.toNanos(maxAgeMillis)
     }
 
     private fun join(chunks: List<ByteArray>, size: Int): ByteArray {

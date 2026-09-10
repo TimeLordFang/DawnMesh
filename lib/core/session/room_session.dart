@@ -100,13 +100,15 @@ class RoomSession {
   Future<void> _outgoingQueue = Future.value();
   int _pendingIncoming = 0;
   int _pendingOutgoing = 0;
+  int _pendingAudioOutgoing = 0;
+  void Function(Frame frame, {bool realtime})? _transportSend;
 
   Future<void> protectWithInvite(RoomInvite invite) async {
     roomInvite = invite;
     _admission = RoomAdmission(
       passwordScalar: await invite.passwordScalar(),
       token: sessionToken,
-      send: (frame) => onSendFrame?.call(frame),
+      send: (frame) => _emitFrame(frame),
       onReady: (codec) async {
         if (_closed) return;
         secureCodec = codec;
@@ -224,7 +226,8 @@ class RoomSession {
     _transportIncomingSubscription?.cancel();
     _transportDisconnectSubscription?.cancel();
     transport = value;
-    onSendFrame = value.send;
+    _transportSend = value.send;
+    onSendFrame = (frame) => value.send(frame);
     _reconnectTransport = reconnect;
     _transportIncomingSubscription = value.incoming.listen(handleIncomingFrame);
     _transportDisconnectSubscription = value.disconnections.listen(
@@ -1136,13 +1139,22 @@ class RoomSession {
       return Future.value();
     }
     if (secureCodec == null) return _sendFrame(frame);
+    final realtime = frame.type == FrameType.audio;
+    // 加密在单队列内保持协议顺序。设备瞬时繁忙时如果语音已积压超过
+    // 约 40ms，继续加密和发送只会让用户听见过去的声音；控制与聊天帧
+    // 不受此限制。接收端会用短 PLC 掩盖这里主动丢掉的语音。
+    if (realtime && _pendingAudioOutgoing >= 2) return Future.value();
     if (_pendingOutgoing >= 256) return Future.value();
     _pendingOutgoing++;
+    if (realtime) _pendingAudioOutgoing++;
     final next = _outgoingQueue
         .then((_) async {
           if (!_closed) await _sendFrame(frame);
         })
-        .whenComplete(() => _pendingOutgoing--);
+        .whenComplete(() {
+          _pendingOutgoing--;
+          if (realtime) _pendingAudioOutgoing--;
+        });
     _outgoingQueue = next.catchError((Object _) {});
     return next;
   }
@@ -1157,7 +1169,16 @@ class RoomSession {
         return;
       }
     }
-    onSendFrame?.call(outFrame);
+    _emitFrame(outFrame, realtime: frame.type == FrameType.audio);
+  }
+
+  void _emitFrame(Frame frame, {bool realtime = false}) {
+    final transportSend = _transportSend;
+    if (transportSend != null) {
+      transportSend(frame, realtime: realtime);
+    } else {
+      onSendFrame?.call(frame);
+    }
   }
 
   /// 房主主动把房主身份转移给目标成员。
@@ -1650,6 +1671,7 @@ class RoomSession {
     await transport?.dispose();
     await _controlsController.close();
     transport = null;
+    _transportSend = null;
     _chatMessages.clear();
     _seenChatKeys.clear();
     _seenChatKeyOrder.clear();

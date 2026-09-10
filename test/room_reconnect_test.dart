@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dawn_mesh/core/audio/audio_io.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
@@ -9,6 +10,25 @@ import 'package:dawn_mesh/core/transport/room_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('transport is told that audio may be dropped while control stays reliable', () async {
+    final transport = _FakeTransport();
+    final session = RoomSession(audioIo: MockAudioIo(), selfNickname: '实时成员');
+    session.attachTransport(transport, reconnect: () async => false);
+    addTearDown(() async {
+      await session.dispose();
+      await transport.dispose();
+    });
+
+    await session.sendFrame(
+      Frame(type: FrameType.audio, senderId: 1, seq: 1, payload: Uint8List(8)),
+    );
+    await session.sendFrame(
+      Frame(type: FrameType.heartbeat, senderId: 1, seq: 2, payload: Uint8List(0)),
+    );
+
+    expect(transport.sentRealtime, [true, false]);
+  });
+
   test(
     'a physical disconnect rebuilds the link and rejoins the room',
     () async {
@@ -89,6 +109,7 @@ class _FakeTransport implements RoomTransport {
     sync: true,
   );
   final List<Frame> sent = [];
+  final List<bool> sentRealtime = [];
 
   @override
   Stream<Frame> get incoming => _incoming.stream;
@@ -105,7 +126,10 @@ class _FakeTransport implements RoomTransport {
       _disconnections.add(TransportDisconnection(reason: reason));
 
   @override
-  void send(Frame frame) => sent.add(frame);
+  void send(Frame frame, {bool realtime = false}) {
+    sent.add(frame);
+    sentRealtime.add(realtime);
+  }
 
   @override
   Future<void> flush() async {}

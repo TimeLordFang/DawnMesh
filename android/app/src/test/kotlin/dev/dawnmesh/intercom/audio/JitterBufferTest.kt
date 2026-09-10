@@ -108,4 +108,21 @@ class JitterBufferTest {
         assertTrue(b.diagnostics().contains("target=3"))
         assertTrue(b.diagnostics().contains("trimmed=1"))
     }
+
+    @Test fun lowLatencyDropsBacklogAndPlaysNewestWindow() {
+        val b = JitterBuffer(
+            prebufferFrames = 2,
+            maxBuffer = 8,
+            maxAdaptiveTarget = 4,
+            maxPlayoutQueueFrames = 3,
+            ordered = true,
+        )
+        repeat(8) { b.put(it, packet(it)) }
+
+        val result = b.poll() as PollResult.Packet
+        assertEquals(listOf(0, 1, 2, 3, 4), result.discardedBefore.map { it[0].toInt() })
+        assertEquals(5, result.data[0].toInt())
+        assertEquals(2, b.pendingCount())
+        assertTrue(b.diagnostics().contains("trimmed=5"))
+    }
 }

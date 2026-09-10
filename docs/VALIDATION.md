@@ -3,8 +3,8 @@
 ## 本次交付
 
 - 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**58,054,705 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.18` / versionCode **18**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`05f0e4a727f5a19352e73c1a9d37145fe442c210dd2186f02986554ab3a21345`。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.19` / versionCode **19**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`4bf38d4a73285d41d441346b413abb6825637ba1b60dcc94988f39010837b86e`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,8 +15,8 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 全量 **172 项通过** |
-| `:app:testDebugUnitTest` | Kotlin **25 项通过，0 失败** |
+| Flutter 测试 | 全量 **173 项通过** |
+| `:app:testDebugUnitTest` | Kotlin **28 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -25,6 +25,14 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.19 实时优先的低延迟档
+
+- “低延迟”蓝牙起播从 80 ms 降到 **40 ms**，自适应目标上限为 80 ms；待播语音超过 **60 ms** 时静默推进 Opus 解码状态并跳到最新窗口，不再完整追播可靠 L2CAP 补到的旧声音。
+- AudioTrack 应用缓冲目标从 40 ms 降到 **20 ms**。该档发生 underrun 时不再自动扩容到稳定档容量，用户选择的实时优先语义会保持到切换档位。
+- L2CAP 合并等待从 35 ms 降到 **0 ms**。加密前的语音排队限制约 40 ms；原生待发队列只保留最新一帧可丢弃语音，并淘汰排队超过 60 ms 的语音。聊天、邀请码握手、心跳、成员状态和房间控制帧不参与淘汰。
+- 协议帧和加密格式没有变化；可丢弃标记只在本机 Dart 到 Android 原生发送链路中使用。已经交给系统蓝牙栈的可靠数据无法撤回，接收端的 60 ms 播放窗口负责在这类突发补发后恢复实时位置。
+- BLE 链路诊断新增 `txDroppedRealtime`，接收缓冲继续通过 `trimmed` 记录跳过的旧语音。新增传输优先级、发送队列保留控制帧和接收端跳到最新窗口的回归测试。
 
 ## dev.18 可切换音频档位
 

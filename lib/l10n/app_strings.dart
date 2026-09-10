@@ -108,8 +108,8 @@ class AppStrings {
   String get audioTuningStable => isEn ? 'Stable' : '稳定';
   String get audioTuningLowDescription =>
       isEn
-          ? 'About 80 ms Bluetooth prebuffer and 40 ms app playback buffer. Lowest delay; weak links may sound rougher.'
-          : '蓝牙预缓冲约 80 ms、应用播放缓冲约 40 ms；延迟最低，弱链路可能更容易出现音质波动。';
+          ? 'About 40 ms Bluetooth prebuffer and 20 ms app playback buffer. Stale voice is dropped to stay live; speech may skip on weak links.'
+          : '蓝牙预缓冲约 40 ms、应用播放缓冲约 20 ms；积压语音会被丢弃以追上实时，弱链路下可能跳音。';
   String get audioTuningBalancedDescription =>
       isEn
           ? 'About 120 ms Bluetooth prebuffer and 80 ms app playback buffer. Recommended for most devices.'
@@ -185,8 +185,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.18\nThe debug page now offers Fast, Balanced, and Stable audio profiles.\nProfiles apply immediately and persist across app restarts.\nFast mode further reduces Bluetooth and playback buffering.'
-          : '0.1.0-dev.18\n调试页新增低延迟、平衡和稳定三个音频档位。\n档位立即生效，并在应用重启后继续保留。\n低延迟档进一步缩短蓝牙与播放缓冲。';
+          ? '0.1.0-dev.19\nFast mode now prioritizes live speech over completeness.\nIt starts with less buffering and drops stale encrypted audio from send and playback queues.\nChat, admission, heartbeat, and room control frames remain reliable.'
+          : '0.1.0-dev.19\n低延迟档改为实时优先。\n减少起播缓冲，并丢弃发送和播放队列中已经过时的加密语音。\n聊天、邀请码验证、心跳和房间控制帧仍保持可靠传输。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

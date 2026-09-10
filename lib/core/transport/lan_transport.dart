@@ -483,7 +483,7 @@ class LanTransport implements RoomTransport {
 
   /// [RoomSession.onSendFrame] 挂到这里。
   @override
-  void send(Frame frame) {
+  void send(Frame frame, {bool realtime = false}) {
     switch (_role) {
       case TransportRole.host:
         if (frame.type == FrameType.audio) {

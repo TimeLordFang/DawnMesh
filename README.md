@@ -7,7 +7,7 @@
 
 一款面向近距离场景的去中心化局域语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接建房和加入，不依赖中心服务器；日常对讲不需要互联网。
 
-> 当前开发版本：`0.1.0-dev.18`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前开发版本：`0.1.0-dev.19`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -30,7 +30,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.18-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.19-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 

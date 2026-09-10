@@ -15,6 +15,7 @@ class JitterBuffer(
     private val prebufferFrames: Int = 3,
     private val maxBuffer: Int = 24,
     private val maxAdaptiveTarget: Int = minOf(maxBuffer, 12),
+    private val maxPlayoutQueueFrames: Int = maxBuffer,
     private val stableFramesBeforeDecay: Int = 250,
     private val maxConcealmentFrames: Int = 0,
     private val ordered: Boolean = false,
@@ -23,6 +24,7 @@ class JitterBuffer(
     init {
         require(prebufferFrames in 1..maxBuffer)
         require(maxAdaptiveTarget in prebufferFrames..maxBuffer)
+        require(maxPlayoutQueueFrames in 1..maxBuffer)
         require(stableFramesBeforeDecay > 0)
         require(maxConcealmentFrames >= 0)
     }
@@ -90,7 +92,18 @@ class JitterBuffer(
             next = buf.firstKey()
         }
         if (buf.firstKey() - next > maxBuffer) next = buf.firstKey()
-        var discardedBefore: List<ByteArray> = emptyList()
+        val discardedBefore = ArrayList<ByteArray>()
+        // 可靠链路可能在无线阻塞解除后一次送来一大段旧语音。低延迟档不追播
+        // 这段历史，静默解码后直接跳到靠近队尾的位置，让耳朵尽快回到“现在”。
+        // 解码仍推进 Opus 状态，避免跳转后的第一帧爆音。
+        if (ordered) {
+            while (buf.size > maxPlayoutQueueFrames) {
+                val key = buf.firstKey()
+                buf.remove(key)?.let { discardedBefore.add(it) }
+                next = key + 1
+                latencyTrims++
+            }
+        }
         stableFrames++
         // 目标增大后，如果链路已连续稳定 5 秒，静默解码并跳过一个 20ms
         // 缓冲帧，把真实播放延迟逐步拉回。每次只修剪一帧，避免明显跳音。
@@ -98,7 +111,7 @@ class JitterBuffer(
             stableFrames >= stableFramesBeforeDecay && buf.size >= 2) {
             val discarded = buf.remove(next)
             if (discarded != null) {
-                discardedBefore = listOf(discarded)
+                discardedBefore.add(discarded)
                 next++
                 target--
                 latencyTrims++

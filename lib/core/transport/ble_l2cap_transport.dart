@@ -302,13 +302,16 @@ class BleL2capTransport implements RoomTransport {
   // ------------------------------------------------------------ RoomTransport
 
   @override
-  void send(Frame frame) {
+  void send(Frame frame, {bool realtime = false}) {
     if (_role == BleRole.idle) {
       AppLog.warn(_tag, '蓝牙通道未建立，${frame.type.name} 帧没有发出去');
       return;
     }
 
-    _channel.invokeMethod('sendL2capData', {'data': frame.encode()}).catchError(
+    _channel.invokeMethod('sendL2capData', {
+      'data': frame.encode(),
+      'realtime': realtime,
+    }).catchError(
       (Object e) {
         // 发送是高频路径，只报第一次。
         if (!_sendErrorReported) {

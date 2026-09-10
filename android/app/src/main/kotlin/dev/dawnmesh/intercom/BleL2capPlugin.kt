@@ -243,11 +243,12 @@ class BleL2capPlugin(
 
             "sendL2capData" -> {
                 val data = call.argument<ByteArray>("data")
+                val realtime = call.argument<Boolean>("realtime") ?: false
                 if (data == null) {
                     result.error("BAD_ARGS", "sendL2capData 缺少 data", null)
                     return
                 }
-                result.success(sendData(data, excludeAddress = null))
+                result.success(sendData(data, excludeAddress = null, realtime = realtime))
             }
 
             "flush" -> {
@@ -753,6 +754,8 @@ class BleL2capPlugin(
         private val writer = BoundedFrameWriter(
             coalesceMillis = 25,
             coalesceMillisProvider = { BluetoothAudioCoexistence.l2capCoalesceMillis() },
+            dropStaleRealtimeProvider = { BluetoothAudioCoexistence.dropStaleRealtime() },
+            maxRealtimeAgeMillisProvider = { BluetoothAudioCoexistence.maxRealtimeAgeMillis() },
             maxBatchBytes = 4_096,
             write = { data ->
                 socket.outputStream.write(data)
@@ -771,7 +774,7 @@ class BleL2capPlugin(
             },
         )
 
-        fun write(data: ByteArray): Boolean = writer.send(data)
+        fun write(data: ByteArray, realtime: Boolean = false): Boolean = writer.send(data, realtime)
         fun flush() = writer.flush()
         fun startDiagnostics() {
             mainHandler.postDelayed(diagnosticsRunnable, 10_000)
@@ -785,6 +788,7 @@ class BleL2capPlugin(
             "ageMs=${now - openedAt},rxFrames=${rxFrames.get()},rxBytes=${rxBytes.get()}," +
                 "txFrames=${txFrames.get()},txWrites=${txWrites.get()},txBytes=${txBytes.get()}," +
                 "coexistence=${BluetoothAudioCoexistence.isActive()}," +
+                "txDroppedRealtime=${writer.droppedRealtimeFrames()}," +
                 "rxIdleMs=${now - lastRxAt},txIdleMs=${now - lastTxAt}"
         fun close(reason: String = "local_stop") {
             requestedCloseReason = reason
@@ -899,7 +903,11 @@ class BleL2capPlugin(
         }
     }
 
-    private fun sendData(data: ByteArray, excludeAddress: String?): Boolean {
+    private fun sendData(
+        data: ByteArray,
+        excludeAddress: String?,
+        realtime: Boolean = false,
+    ): Boolean {
         if (peers.isEmpty()) return false
         var anySent = false
 
@@ -907,7 +915,7 @@ class BleL2capPlugin(
             if (address == excludeAddress) continue
             if (!link.alive.get()) continue
             try {
-                if (link.write(data)) anySent = true
+                if (link.write(data, realtime)) anySent = true
             } catch (e: IOException) {
                 Log.w(TAG, "向 $address 发送失败，断开该链路", e)
                 removePeer(link, "write_error", e)
