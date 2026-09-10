@@ -150,6 +150,10 @@ class AppStrings {
   String get updateCurrent => isEn ? 'You are up to date' : '已经是最新版本了';
   String updateAvailable(String ver) =>
       isEn ? 'A new version is here: $ver' : '新版本来了：$ver';
+  String get openGithubRelease =>
+      isEn ? 'Open GitHub Releases' : '前往 GitHub 下载';
+  String get openReleaseFailed =>
+      isEn ? 'Could not open GitHub Releases' : '无法打开 GitHub Releases';
   String updateFailed(String msg) =>
       isEn ? 'Could not check for updates: $msg' : '这次没查到更新：$msg';
   String get updateCheckFailed =>
@@ -159,8 +163,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-alpha.11\nIn-room text messaging added: memory-only, cleared on leave.\nWi-Fi Direct plugin registration fixed; LAN spoofing defenses hardened.\nRoom enter/exit animations are much smoother on low-end devices.\nLauncher name now follows the system language.'
-          : '0.1.0-alpha.11\n新增房内文字消息：纯内存存储，退房即毁。\n修复 Wi-Fi Direct 插件注册，加固局域网防伪造与越权。\n进出房转场动画在中低端机上明显更流畅。\n桌面应用名随系统语言切换。';
+          ? '0.1.0-dev.16\nUpdate checks now use this project’s GitHub Releases page and include prereleases.\nThe Android build runs on Java 25 LTS with Gradle 9.7.1.\nUnused Dart dependencies were removed and the open-source documentation was refreshed.'
+          : '0.1.0-dev.16\n更新检查已改用本项目的 GitHub Releases，并支持开发预发布版本。\nAndroid 构建环境升级到 Java 25 LTS 与 Gradle 9.7.1。\n移除未使用的 Dart 依赖并更新开源项目文档。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

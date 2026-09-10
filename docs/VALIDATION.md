@@ -1,45 +1,38 @@
-# 验证记录（2026-09-09）
+# 验证记录（2026-09-10）
 
 ## 本次交付
 
-- 发布 APK：`artifacts/DawnMesh-0.1.0-dev.13-release.apk`，**53,900,004 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.13` / versionCode **13**，minSdk **26**、targetSdk **35**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`9b42b21f70f553a2f875b003c1692f03591d8cdd1c73ef434e4e928f2b45555c`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**57,857,617 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.16` / versionCode **16**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`90faef6ec9bec1664fb9d593a68fb0d55e6b08a651ec8d1dc1ba574b0b418d6d`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
-- APK Signature Scheme v2 校验通过；没有使用原作者或 Android debug 签名。release Manifest 未开启 debuggable，allowBackup=false。
-- 优先将上述 release 安装到所有测试手机，避免混用调试签名。
+- APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
 ## 已执行
 
-工具链位于本项目 `.tools/`：Flutter **3.29.3 / Dart 3.7.2**、Temurin **JDK 17.0.20.1**、Android SDK Platform **35**、Build-Tools **35.0.0 / 34.0.0**、NDK **27.0.12077973**、CMake **3.22.1**、Gradle **8.12**。Apple Silicon 主机补装 Rosetta 后，Flutter Intel AOT 编译器可正常执行。
+工具链位于本项目 `.tools/`：Flutter **3.47.2 / Dart 3.13.2**、Temurin **JDK 25.0.4.1 LTS**、Android SDK Platform **36**、Build-Tools **36.1.0 / 36.0.0**、NDK **28.2.13676358**、CMake **3.22.1**、Gradle **9.7.1 bin**、AGP **9.4.0**、Kotlin **2.4.10**。
 
 | 检查 | 结果 |
 | --- | --- |
-| `./scripts/check.sh` | 退出码 0，包含以下 Dart/Flutter 与 C++ 检查 |
 | Flutter analyze | **No issues found** |
-| Flutter 全量测试（串行） | **168 项通过，0 失败** |
-| C++ ASan / UBSan | 帧边界、环形缓冲测试通过，无 sanitizer 报错 |
+| Flutter 测试 | 原全量 **170 项通过**；新增版本同步测试后，相关测试文件 **9 项通过** |
 | `:app:testDebugUnitTest` | Kotlin **22 项通过，0 失败** |
-| `:app:lintDebug` | 成功；**0 errors、10 warnings**（旧版 API 冗余判断、备份配置建议、图标资源、锁屏属性版本提示等），没有关闭 Lint 或加入忽略基线 |
+| `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
 | `zipalign -c -P 16 -v 4` | Verification successful |
-| ELF PT_LOAD 对齐 | 全部 **6 个 arm64-v8a / x86_64** 库均 ≥ 16384；包括 Flutter 引擎、Dart AOT、本项目 C++ |
+| ELF PT_LOAD 对齐 | 全部 arm64-v8a / x86_64 库均 ≥ 16384 |
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
-| 原 sunsetripple 目录 | `git status --short` 为空，未修改原工程 |
 
-按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。额外记录 GNU_RELRO：Flutter 引擎与本项目 C++ 具备该段；Flutter 3.29.3 生成的 `libapp.so` 没有该段。未对 Flutter 预编译运行时/AOT 生成器做进一步二进制加固审计。以上均为静态包检查，**没有据此声称已在 16 KB 手机运行通过**。
+按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
 
-## 2026-09-09 依赖升级审计
+## 2026-09-10 工具链与依赖整理
 
-- Flutter SDK 已升级到 **3.47.2**，随带 Dart **3.13.2**；`pubspec.lock` 已重解并移除已停止维护的 `js` 传递依赖。
-- 直接 Dart 依赖已同步到当前稳定约束：`pointycastle 4.0.0`、`intl 0.20.3`、`ffi 2.2.0`、`flutter_lints 6.0.0`、`test 1.31.1`、`fake_async 1.3.3`。锁文件中的 7 项分析/测试传递依赖仍受 Flutter SDK 约束，不能独立升到其绝对最新版。
-- Android 构建工具已升级到 **AGP 9.2.1 + Gradle 9.4.1 + AGP 内置 Kotlin 2.4.0 + compile/targetSdk 36 + NDK 28.2.13676358**。AGP 9.2 的官方默认 NDK 为 28.2；CMake 3.22.1 保留以兼容现有 native CMake 工程。
-- 新增 `.github/dependabot.yml`，每周检查 pub、Gradle 和 GitHub Actions；Action 使用完整 commit pin，避免标签漂移。
-- 3.47.2 下 `flutter analyze` 和 Flutter 全量测试 **168 项通过**；Android Kotlin 单元测试 **22 项通过**。新版 Lint 首次发现的 11 个 MissingPermission 错误已补上运行时权限检查和异常保护。
-- 本轮最后一次 Android Lint/APK release 需要 Gradle 的本机进程锁；当前执行环境的提权审批额度在验证中耗尽，缓存构件已准备完成，需在本机终端重新执行 README 中的两条 Gradle/Flutter 命令完成最终 APK 产物更新。
-
-日志：[静态分析](validation/flutter-analyze.txt)、[Flutter 测试](validation/flutter-tests.txt)、[完整代码检查](validation/final-checks.txt)、[Android 构建检查](validation/android-checks.txt)、[Android Lint](validation/android-lint.txt)、[发布构建](validation/release-build.txt)、[APK 校验](validation/apk-verification.txt)。测试日志中的地址、昵称和故意触发的认证失败均为测试样例。
+- Gradle 运行时和 GitHub Actions 升级为 **Java 25 LTS**；Android Java/Kotlin 编译目标仍为 Java 17。
+- Wrapper 从 `gradle-9.7.1-all.zip` 改为经过官方 SHA-256 校验的 `bin.zip`，本机单份缓存从 574 MB 降到 164 MB。
+- 移除未被源码引用的直接依赖 `intl`、`ffi` 和 `test`；前两者仍由 Flutter SDK 按需传递引入，锁文件共移除 33 个不再需要的测试传递包。
+- `.tools` 从约 **21 GB** 降到 **8.8 GB**，移除旧 JDK、旧 Gradle 8.12/9.3.1/9.4.1、旧 Android 35/NDK 27、下载日志、Flutter 源备份和非 Android 引擎缓存。另清理约 2.2 GB 构建中间文件，并保留已签名 release APK。
+- 更新检查连接 `TimeLordFang/DawnMesh` 的 GitHub Releases API，支持 prerelease，且下载入口限制为本仓库 HTTPS Release 页面。真实 API 检查返回正常。
 
 ## dev.13 本轮完成情况
 

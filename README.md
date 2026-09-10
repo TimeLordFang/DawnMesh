@@ -1,123 +1,141 @@
-# 曙光之声 · DawnMesh（Android 独立开发版）
+# 曙光之声 · DawnMesh
 
-从 SunsetRipple 当前 Flutter 主线复制的 Android 工程，包含 Kotlin 宿主、Dart 界面与会话逻辑、C++ 核心及测试。原作者 Apache-2.0 许可和版权保留，来源提交见 [UPSTREAM.md](docs/UPSTREAM.md)。原目录不作修改。
+[![Android release](https://github.com/TimeLordFang/DawnMesh/actions/workflows/release.yml/badge.svg)](https://github.com/TimeLordFang/DawnMesh/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/TimeLordFang/DawnMesh?include_prereleases)](https://github.com/TimeLordFang/DawnMesh/releases)
+[![License](https://img.shields.io/github/license/TimeLordFang/DawnMesh)](LICENSE)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#兼容性)
 
-**所有应用建房/入房入口默认启用邀请码加密（AES-256-GCM）。** 每次建房生成随机 **6 位数字邀请码**（可包含前导零），当面口述即可。短码通过 PAKE 验证后下发独立随机房间密钥，语音、聊天与成员控制消息使用 AES-GCM 加密。邀请码代表可信小组的访问权，不能防范持码成员冒名；仍需你完成真机验证。
+一款面向近距离场景的去中心化局域语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接建房和加入，不依赖中心服务器；日常对讲不需要互联网。
 
-- 安装包 ID：`dev.dawnmesh.intercom`，可以与原版并存。
-- 版本：`0.1.0-dev.14+14`。
-- Kotlin namespace、Dart 包、平台通道、原生库和日志 tag 已统一为 DawnMesh 标识。
-- 中文名：曙光之声；英文名：DawnMesh。原作者许可与来源说明保留。
-- 不包含旧版根目录 `app/`（纯 Kotlin alpha.7）及 iOS、桌面、Web、HarmonyOS。
-- 更新检查不再访问原作者 GitHub；仅通过自己签名的 APK 更新。
+> 当前开发版本：`0.1.0-dev.16`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
-## 本机直接构建与使用
+## 功能
 
-GitHub 标签自动发布及签名 Secret 配置见 [GitHub 自动发布](docs/GITHUB_RELEASES.md)。
+- **三种近场链路**：同一局域网、Wi-Fi Direct、BLE 发现 + L2CAP 数据通道。
+- **两种发言方式**：按住对讲，或检测到语音后自动发送；Wi-Fi 房和蓝牙房均支持。
+- **邀请码加密**：建房生成随机 6 位数字，使用 PAKE 验证后分发独立随机房间密钥；语音、消息和控制帧使用 AES-256-GCM。
+- **断线恢复**：链路意外中断后最多自动重试 10 分钟，蓝牙房主重新开启蓝牙后会重建广播、监听端口和动态 PSM。
+- **蓝牙耳机共存**：可选择耳机或手机麦克风；蓝牙互联和耳机同时工作时自动降低 Opus 码率并调整发送与播放缓冲。
+- **锁屏通话**：前台服务、常驻通知和锁屏对讲面板支持后台收发。
+- **本机调试日志**：可开关、筛选、搜索、复制日志，并查看音频路由、BLE、Wi-Fi、内存和权限状态。
+- **中英文界面**：中文名为“曙光之声”，英文名为 DawnMesh。
 
-本次已在项目 `.tools/` 安装 Flutter 3.47.2、JDK 17、Android SDK/NDK/CMake；无需再次配置全局 PATH：
+## 安全与隐私
 
-```sh
-cd /Users/judoon/workspace/DawnMesh
-./scripts/check.sh
-./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
-./scripts/flutter.sh build apk --release
-```
+房间邀请码仅保存在当前会话内存中，文字聊天退出后从本机内存清除。应用没有账号、云端服务或遥测上传；只有用户主动检查更新时会连接 GitHub。
 
-工具链约占 7.6 GB，不提交 Git。当前电脑的发布签名位于 `android/keystore/dawnmesh.jks`，口令保存在 `android/key.properties`，两者均设为仅本人可读写并忽略提交。**请自行安全备份这两个文件；后续覆盖升级必须保留同一签名。** 本次生成的是 DawnMesh 独立签名，与原版无关。
+6 位邀请码适合当面口述和临时小组访问控制。它不能抵御持码成员冒名，也不等同于长期高强度密码。请只把邀请码告诉可信成员。
 
-两台手机安装同一个 DawnMesh APK。在应用内创建房间后，聊天室信息下方直接显示 6 位数字，10 秒后自动隐藏。点击小眼睛可随时显示或隐藏，每次显示 10 秒后再次隐藏；切到后台立即隐藏。将数字口述给另一台手机；对方搜索房间、点“加入房间”并输入数字，无需联网或发送文本。错误邀请码不能进入房间。邀请码只在当前会话内存中保存；请仅分享给信任的人。加入者默认隐藏邀请码，可点击眼睛查看。
+详细设计和已知边界见 [安全审查](docs/SECURITY_REVIEW.md)。发现安全问题时，请避免在公开 Issue 中附带邀请码、设备地址、签名材料或完整原始日志。
 
-当前加密 Wi-Fi 房的语音与控制都走 TCP，不使用旧版未认证的 UDP 语音端点登记。弱网丢包可能增加语音延迟。**本版房主退出后房间结束，不支持房主自动迁移**。单条加密聊天限制为 320 UTF-8 字节，保证多人昵称和历史同步的信封不超过传输帧上限。**dev.8 已统一发现标识、平台通道和加密上下文，不能与 dev.7 及更早版本互通；参与房间的手机必须全部更新到 dev.8。**
+## 下载与更新
 
-昵称保存在 Android 应用私有设置中，关闭并重新打开应用后自动恢复；清除应用数据或卸载会删除。Wi-Fi 和蓝牙房现在都可在“按住对讲”与“自动通话”之间切换。Android 10 及以上的 Wi-Fi Direct 使用邀请码派生的临时 SSID/口令连接，避免房主侧旧式 WPS 确认；部分厂商若额外强制系统确认，应用没有权限代替用户操作。普通同一局域网房仍直接通过 TCP 加入。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.16-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
 
-dev.14 在蓝牙 L2CAP 和 Wi-Fi TCP 客户端发现物理断链后，会按 1、2、4、8、15、30 秒退避重建链路，之后每 30 秒重试，总恢复窗口为 10 分钟。蓝牙客户端每次恢复会重新扫描房主广播，刷新可能变化的设备地址和动态 PSM，并在重新订阅数据通道前等待旧订阅完全关闭。房主关闭蓝牙时会保留房间状态；适配器重新到达 `STATE_ON` 后，应用重新申请动态 PSM、重开 L2CAP 监听并恢复 BLE 广播。链路恢复后会重新做邀请码 PAKE 验证并自动进房；房主在同一窗口内保留成员号和名额。Wi-Fi Direct 房主也会监测并重建意外消失的系统群组。恢复期间音频前台服务与锁屏控件保持运行，Android 14+ 前台服务同时声明麦克风与连接设备用途。
+应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
-蓝牙房与蓝牙耳机同时使用时，dev.14 自动把 Opus 从 16 kbps 调整为 10 kbps，并把相邻协议帧最多 60 ms 合并为一次 L2CAP socket 写入；接收端改为 160 ms 起步、最高 400 ms 的自适应缓冲。发生欠载时缓冲快速增加，连续稳定 5 秒后每次平滑修剪 20 ms，逐步回到低延迟。没有耳机时仍使用 16 kbps 与 25 ms 合并窗口。房间底部可切换“耳机麦克风”和“手机麦克风”；选择手机麦克风后仍从蓝牙耳机播放，经典耳机可保持 A2DP 媒体输出，更适合同时播放音乐。调试日志会记录具名的 AudioRecord、AudioTrack 与通信设备路由、共存模式、实际 Opus 码率，以及缓冲 `trimmed` 和 L2CAP `txFrames/txWrites`。
+## 从源码构建
 
-## 发言模式与锁屏使用
+项目只提交源码和 Gradle Wrapper。以下组合已用于当前 Android 构建：
 
-创建入口为“创建 Wi-Fi 房间”/“创建蓝牙房间”。进入任一房间后，都可随时切换本机的发言模式，不必退房重连：
-
-- **按住对讲**：按住发送，松开收听。切换模式、静音或应用失去前台焦点时释放按住状态。
-- **自动通话**：无需按键，检测到声音后发送，静音环境暂停发送。保留约 100 ms 前置音频和 400 ms 尾音。它是本地响度/噪声门限检测，不是语义识别人声；环境噪声也可能触发。Wi-Fi 自动通话使用相同声音触发逻辑。
-
-每台手机独立选择自己的发言方式，两种方式均可接收其他人的声音。dev.6 将模式选择改为带图标、状态说明和滑动高亮的胶囊控件，自动适配矮屏与大字号。蓝牙房通常使用 16 kbps；检测到蓝牙耳机并用时，dev.14 自动切换为 10 kbps 共存参数。实际延迟和音质仍需在目标设备复测。
-
-**先在应用前台进入房间，允许麦克风、附近设备和通知，再锁屏。** 自动模式继续收发。按住模式下唤醒屏幕后，点击常驻的“曙光之声 · 房间通话”通知进入锁屏通话面板，使用中央圆形按钮按住说话、松手停止。面板采用深色渐变、图标化胶囊模式切换和独立静音卡片，选中项带色彩、缩放与轻震反馈；滑出圆环即停止发送，滑回不会重新开麦。面板不会解锁手机，不显示邀请码或聊天记录。再次熄屏或切走会释放对讲按钮。
-
-通话期间运行 microphone 前台服务并持有 CPU 部分唤醒锁，Wi-Fi 房另持有 Wi-Fi 锁；退房释放。Xiaomi/OnePlus 的锁屏通知隐藏或电池冻结设置仍可能影响使用：请允许锁屏显示该通话通知，并按系统提供的选项允许应用在后台运行。**已完成代码和构建检查，没有把未执行的两品牌锁屏实测描述为通过。**
-
-## 手机内调试日志
-
-主页和房间页右上角的终端图标可打开“调试日志”。记录默认关闭；打开后会记住开关状态，并同时收集 Dart 会话、Flutter 未捕获异常及 Android 原生音频、BLE、Wi-Fi Direct 日志。日志在一块连续的等宽控制台中按时间从上到下紧凑显示，支持按级别筛选、关键字搜索、复制、清空和刷新系统快照，最多保留最近 400 条。
-
-系统快照包含设备型号、Android/API/安全补丁、ABI、CPU/内存、低内存状态、电池优化、音频采样参数与路由设备、当前网络、Wi-Fi/BLE 硬件能力和关键权限。Android 不允许普通应用读取完整系统 Logcat，因此其他应用、内核和受保护系统服务的日志无法展示。日志内容只保存在当前进程内存中，关闭记录会立即清空，重启应用也不会恢复旧内容；复制时会自动隐藏 IP、MAC 和随机长令牌，但保留安全补丁日期等系统字段。dev.9 的 `DawnBle` 还会每 10 秒记录 L2CAP 收发帧数、字节数和空闲时间，并在断开时区分 EOF、读写异常、队列超时与帧错位。旧红米语音断续复测时，可同时查看 `DawnAudio` 的音频缓冲 / `trackUnderruns` 和 `DawnBle` 链路计数。
-
-## 在其他电脑安装构建依赖
-
-首次复现建议使用以下固定组合，避免直接装最新版后混入工具链迁移问题：
-
-| 依赖 | 版本 / 用途 |
+| 工具 | 版本 |
 | --- | --- |
-| Flutter | **3.47.2**（随带 Dart 3.13.2），当前 stable |
-| JDK | **17**，运行 Gradle；只安装 JRE 不够 |
-| Android SDK Platform | **36**，本项目固定 compileSdk/targetSdk 36；可在 Android 16 运行 |
-| Android SDK Build-Tools | **36.1.0**（AGP 运行时也会使用 36.0.0） |
-| Command-line Tools | SDK Manager 安装与许可证管理 |
-| Platform-Tools | 包含 adb，用于安装、日志和连接真机 |
-| NDK Side by side | **28.2.13676358**，构建 native/ 下 C++ |
+| Flutter / Dart | Flutter **3.47.2** / Dart **3.13.2** |
+| JDK | Temurin **25 LTS**，用于运行 Gradle |
+| Gradle / Android Gradle Plugin | **9.7.1** / **9.4.0** |
+| Kotlin | **2.4.10** |
+| Android SDK | compileSdk / targetSdk **36** |
+| Android Build-Tools | **36.1.0** |
+| Android NDK | **28.2.13676358** |
 | CMake | **3.22.1** |
-| Git | 获取 Flutter 和管理源码 |
 
-Gradle **9.4.1** 和 AGP **9.2.1** 由项目 Wrapper/构建脚本固定，Kotlin 使用 AGP 9 的内置实现（顶层版本约束 **2.4.0**），不需要全局安装 Gradle 或 Kotlin。无需 Node.js、Python 或 iOS 的完整 Xcode 来构建 APK；macOS 获取 Git/本机 C++ 检查可安装 Xcode Command Line Tools。Android Studio 可用于安装和管理 SDK，但不是强制依赖。
+Gradle 使用 JDK 25 运行，但 Android Java/Kotlin 字节码目标保持为 Java 17，JDK 版本不会提高应用的 Android 系统要求。
 
-安装 Flutter 后将 `flutter/bin` 加入 PATH。Android Studio 中打开 SDK Manager，安装表中的组件；或配置好 `sdkmanager` 后执行：
+安装 Android SDK 组件：
 
 ```sh
-sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.1.0" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+sdkmanager \
+  "platform-tools" \
+  "platforms;android-36" \
+  "build-tools;36.1.0" \
+  "ndk;28.2.13676358" \
+  "cmake;3.22.1"
 flutter doctor --android-licenses
-flutter doctor -v
 ```
 
-如果 Android Studio 自带 Java 版本与 JDK 17 不同，可用 `flutter config --jdk-dir=/你的/JDK17/Contents/Home` 指定。`android/local.properties` 由 Flutter 本机生成，不应提交。
-
-在 **DawnMesh 根目录**执行（不是 android/ 下，也不是原仓库旧 `app/` 下）：
+在项目根目录执行：
 
 ```sh
 flutter pub get
 flutter analyze
-# 回环网络测试共享端口 8988/8989，串行避免争用
 flutter test --concurrency=1
 flutter build apk --debug
 ```
 
-调试 APK：`build/app/outputs/flutter-apk/app-debug.apk`。两台手机都安装同一种构建 APK，再在应用内选择蓝牙对讲、扫描/创建并使用邀请码；不用先在系统蓝牙设置里配对。
+仓库中的 `scripts/flutter.sh`、`scripts/gradle.sh` 和 `scripts/check.sh` 会自动使用 `.tools/` 下的本地工具链：
 
 ```sh
-adb devices
-adb -s 手机序列号 install -r build/app/outputs/flutter-apk/app-debug.apk
+./scripts/check.sh
+./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
+./scripts/flutter.sh build apk --debug
 ```
 
-发布包必须使用自己的密钥。可交互生成（口令不写在命令行中）：
+调试 APK 位于 `build/app/outputs/flutter-apk/app-debug.apk`。
+
+## 发布签名
+
+发布构建必须提供自己的 JKS，缺少完整配置时构建会失败，不会回退为 debug 签名：
 
 ```sh
 mkdir -p android/keystore
-keytool -genkeypair -v -keystore android/keystore/dawnmesh.jks -alias dawnmesh -keyalg RSA -keysize 3072 -validity 10000
+keytool -genkeypair -v \
+  -keystore android/keystore/dawnmesh.jks \
+  -alias dawnmesh \
+  -keyalg RSA \
+  -keysize 3072 \
+  -validity 10000
 cp android/key.properties.example android/key.properties
-# 编辑 key.properties 的口令；妥善备份 keystore，后续升级必须使用同一签名
+# 编辑 android/key.properties 后执行：
 flutter build apk --release
 ```
 
-发布 APK：`build/app/outputs/flutter-apk/app-release.apk`。开发版与发布版签名不同，直接覆盖可能失败；可先卸载调试版，再装自己的发布版。缺少签名配置会阻止 release 打包，不会再自动退回 debug 签名。
+签名发生在 Android Gradle 的 `packageRelease` 任务内。配置位于 [`android/app/build.gradle.kts`](android/app/build.gradle.kts)：它从未提交的 `android/key.properties` 读取本地密钥信息，或从 `DAWNMESH_KEYSTORE_PATH`、`DAWNMESH_STORE_PASSWORD`、`DAWNMESH_KEY_ALIAS`、`DAWNMESH_KEY_PASSWORD` 环境变量读取 CI 配置。Gradle 完成资源打包、zipalign 和 APK Signature Scheme 签名后，才写出 `build/app/outputs/flutter-apk/app-release.apk`。
 
-默认使用官方 Maven / pub.dev。若网络无法连接，可自行选择镜像：`DAWNMESH_USE_MIRROR=1 flutter build apk --debug` 为 Gradle 启用原有阿里云镜像；Dart 的源由 `PUB_HOSTED_URL` 控制。镜像是另一条供应链，不能代替构件校验；仓库未完成完整依赖锁定、SBOM 或 CVE 审计。
+GitHub Actions 在 [`.github/workflows/release.yml`](.github/workflows/release.yml) 中把 JKS Secret 临时还原到 Runner，调用 `flutter build apk --release`，随后用 `apksigner verify` 做只读校验，再复制并重命名到 `dist/` 上传 Release。复制和重命名不会再次签名。配置方法见 [GitHub 自动发布](docs/GITHUB_RELEASES.md)。
 
-NDK 28.2 已开启 `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`。最终 APK 的 ELF 段与 ZIP 对齐检查结果见验证记录；对齐检查不能替代 Android 16 真机运行测试。
+请永久备份 keystore 和密码。Android 要求后续升级包继续使用同一签名；密钥丢失后，现有安装通常无法直接覆盖升级。
 
-## 修复与验证
+## 项目结构
 
-见 [安全审查](docs/SECURITY_REVIEW.md)、[蓝牙复测步骤](docs/ANDROID16_BLUETOOTH.md)、[验证记录](docs/VALIDATION.md)。
+```text
+android/   Android 宿主、BLE/L2CAP、Wi-Fi Direct、音频与前台服务
+lib/       Flutter 界面、会话、发现、传输、加密和调试日志
+native/    C++ 帧协议、环形缓冲和 PCM 处理
+test/      Dart/Flutter 回归测试
+docs/      安全审查、兼容性、验证记录和发布说明
+scripts/   本机工具链与校验脚本
+```
 
-官方资料：[Flutter Android 环境](https://docs.flutter.dev/platform-integration/android/setup)、[Flutter 内置 Kotlin 迁移](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers)、[AGP 9.2 兼容表](https://developer.android.com/build/releases/agp-9-2-0-release-notes)、[Android 蓝牙权限](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions)、[16 KB 页面](https://developer.android.com/guide/practices/page-sizes)。
+## 兼容性
+
+- minSdk 26（Android 8.0）；BLE L2CAP 房需要 Android 10 / API 29 或更高版本。
+- Android 14 及以上声明麦克风与连接设备前台服务类型。
+- Xiaomi、OnePlus 等系统可能需要手动允许后台运行、锁屏通知和电池优化豁免。
+- 蓝牙互联与蓝牙耳机共用同一控制器时，实际延迟和稳定性仍受手机射频、厂商蓝牙栈及现场 2.4 GHz 干扰影响。
+
+蓝牙复测建议见 [Android 蓝牙测试](docs/ANDROID16_BLUETOOTH.md)，已执行的自动化和 APK 校验见 [验证记录](docs/VALIDATION.md)。
+
+## 参与开发
+
+欢迎提交 Issue 和 Pull Request。改动前请先运行：
+
+```sh
+./scripts/check.sh
+./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
+```
+
+涉及传输协议、邀请码或加密格式的修改，请同时补充互操作和失败路径测试，并在 PR 中说明是否与旧版兼容。
+
+## 许可与来源
+
+DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。

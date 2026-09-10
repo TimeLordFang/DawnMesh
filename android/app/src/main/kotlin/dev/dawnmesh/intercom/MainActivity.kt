@@ -1,7 +1,10 @@
 package dev.dawnmesh.intercom
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.content.Context
@@ -18,6 +21,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private var permissionChannel: MethodChannel? = null
+    private var externalLinkChannel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     private var permissionsInFlight = false
     private var nicknamePreferences: NicknamePreferencesPlugin? = null
@@ -48,6 +52,34 @@ class MainActivity : FlutterActivity() {
                     permissionResult = result
                     permissionsInFlight = true
                     requestPermissions(missing.toTypedArray(), REQUEST_CODE_RUNTIME_PERMISSIONS)
+                }
+            }
+        }
+        externalLinkChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "dev.dawnmesh.intercom/external_links",
+        ).apply {
+            setMethodCallHandler { call, result ->
+                if (call.method != "openUrl") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val rawUrl = call.argument<String>("url")
+                val uri = rawUrl?.let(Uri::parse)
+                val valid = uri != null && uri.scheme == "https" &&
+                    uri.host.equals("github.com", ignoreCase = true) &&
+                    uri.path.orEmpty().startsWith("/TimeLordFang/DawnMesh/releases")
+                if (!valid) {
+                    result.error("INVALID_URL", "只允许打开 DawnMesh GitHub Releases", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    result.success(true)
+                } catch (error: ActivityNotFoundException) {
+                    result.error("NO_BROWSER", "没有可打开链接的浏览器", null)
+                } catch (error: SecurityException) {
+                    result.error("OPEN_DENIED", "系统拒绝打开链接", null)
                 }
             }
         }
@@ -95,6 +127,8 @@ class MainActivity : FlutterActivity() {
         permissionResult = null
         permissionChannel?.setMethodCallHandler(null)
         permissionChannel = null
+        externalLinkChannel?.setMethodCallHandler(null)
+        externalLinkChannel = null
         audioPlugin?.dispose()
         audioPlugin = null
         blePlugin?.dispose()

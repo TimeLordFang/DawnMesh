@@ -19,7 +19,7 @@
 | 高：UDP 信任边界不足 | 原 UDP 收包不限定帧类型；客户端仅核对房主 IP，房主通过自报 senderId + 首包学习端点。可注入控制帧/抢占成员身份。 | 底层兼容路径已限定 audio/heartbeat 并核对来源端口；**生产应用改为全 TCP 加密传输，不启用旧 UDP 语音/端点注册**。LAN 房间发现广播仍公开。 |
 | 高：开放入房、缺少可信身份验证 | joinReq 自动分配成员号，无房主批准/口令；现有 ECDH hello 自签名只验证对方掌握其声明密钥，没有预先信任绑定或用户核对。房主会同步已有文字历史给新成员。 | 已要求邀请码，错误码无法解密和完成入房，客户端等待最长 8 秒认证名单。受信任新成员仍获得历史；持码者有加入权，退出不自动轮换组密钥，需新建房间撤销旧码。 |
 | 中：资源耗尽/阻塞 | BLE `sendL2capData` 在 MethodChannel 主线程同步写 socket；单个慢链路可能阻塞 UI。已接入但不完成应用入房的连接可占连接名额；缺少全链路速率/读写超时。 | BLE 每物理连接 64 帧后台发送队列，满队列/单次写入超过 5 秒断开，flush 有序等待；Dart 加解密队列各上限 256。广播/建链/客户端入房有超时。**房主端未认证连接仍可占满物理连接名额；全链路速率限制、TCP 背压、真机压力测试仍待完成**。 |
-| 中：发布签名和更新混淆 | Flutter `android/app/build.gradle.kts` 缺密钥时 release 回退 debug 签名；更新 URL 指向上游，版本常量 alpha.10 与 pubspec alpha.11 不一致。 | 独立 applicationId，发布必须配置自己签名；移除上游更新联网，统一开发版本号。 |
+| 中：发布签名和更新混淆 | Flutter `android/app/build.gradle.kts` 缺密钥时 release 回退 debug 签名；更新 URL 指向上游，版本常量 alpha.10 与 pubspec alpha.11 不一致。 | 独立 applicationId，发布必须配置自己签名；更新仅访问本仓库 GitHub Releases，并用测试约束应用版本、pubspec 和更新日志一致。 |
 | 中：供应链与复现性 | 本地优先第三方 Maven 镜像；pub lock 指向镜像；Flutter compile/target/NDK 随 SDK 漂移，wrapper 有两个 distributionUrl；旧根 gradle.properties 硬编码 Windows JDK。 | 默认官方源、镜像显式 opt-in；固定 Android/NDK/CMake，去掉重复 URL；未复制旧 Windows 配置。未完成所有 Maven 构件校验/CVE 扫描。 |
 | 中：日志和备份 | Dart AppLog print、Kotlin Log 可能包含 MAC/IP/昵称。诊断导出虽过滤地址和长 token，昵称和其他上下文不一定消失；Manifest 未明确关闭备份。 | 禁用应用备份；完整 logcat 分享前仍需人工脱敏。 |
 | 中：本机 C++ 边界/对象生命周期 | `sunset_frame_encode` 在非零长度且 payload=null 时返回成功，输出缓冲载荷未初始化；超长载荷静默截断。ring buffer 用 malloc 分配含 std::atomic 的 C++ 对象。 | 拒绝非法输入/超长帧，改为构造/析构 C++ 对象；新增 ASan/UBSan 回归测试。未发现当前 Dart 调用把空指针远程暴露的证据。 |

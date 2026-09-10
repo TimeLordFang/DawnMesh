@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/diagnostics/app_log.dart';
 import '../../core/diagnostics/diagnostic_report.dart';
+import '../../core/platform/external_link_launcher.dart';
 import '../../core/update/update_service.dart';
 import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
@@ -31,6 +32,14 @@ class _AboutPageState extends State<AboutPage> {
     setState(() {
       _updateState = result;
     });
+  }
+
+  Future<void> _openRelease(String url) async {
+    final opened = await ExternalLinkLauncher.openGithubRelease(url);
+    if (!mounted || opened) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppStrings.of(context).openReleaseFailed)),
+    );
   }
 
   void _showDiagnostics() {
@@ -424,11 +433,22 @@ class _AboutPageState extends State<AboutPage> {
       );
     } else if (_updateState is UpdateAvailable) {
       final avail = _updateState as UpdateAvailable;
-      return Center(
-        child: Text(
-          s.updateAvailable(avail.versionName),
-          style: const TextStyle(fontSize: 13, color: AppTheme.sunWarmYellow),
-        ),
+      return Column(
+        children: [
+          Text(
+            s.updateAvailable(avail.versionName),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppTheme.sunWarmYellow,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () => _openRelease(avail.downloadUrl),
+            icon: const Icon(Icons.open_in_new, size: 17),
+            label: Text(s.openGithubRelease),
+          ),
+        ],
       );
     } else if (_updateState is UpdateFailed) {
       return Center(
