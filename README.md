@@ -7,7 +7,7 @@
 
 一款面向近距离场景的去中心化局域语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接建房和加入，不依赖中心服务器；日常对讲不需要互联网。
 
-> 当前开发版本：`0.1.0-dev.19`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前开发版本：`0.1.0-dev.20`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -17,7 +17,7 @@
 - **断线恢复**：链路意外中断后最多自动重试 10 分钟，蓝牙房主重新开启蓝牙后会重建广播、监听端口和动态 PSM。
 - **蓝牙耳机共存**：可选择耳机或手机麦克风；蓝牙互联和耳机同时工作时自动降低 Opus 码率并调整发送与播放缓冲。
 - **锁屏通话**：前台服务、常驻通知和锁屏对讲面板支持后台收发。
-- **本机调试日志**：可开关、筛选、搜索、复制日志，并查看音频路由、BLE、Wi-Fi、内存和权限状态。
+- **本机调试与调参**：可开关、筛选、搜索、复制全链路时延日志，并在运行中调整蓝牙码率、写入策略、抖动缓冲和播放缓冲。
 - **中英文界面**：中文名为“曙光之声”，英文名为 DawnMesh。
 
 ## 安全与隐私
@@ -30,7 +30,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.19-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.20-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 

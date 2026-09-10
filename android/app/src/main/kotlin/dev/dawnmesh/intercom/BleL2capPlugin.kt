@@ -741,6 +741,14 @@ class BleL2capPlugin(
         val txFrames = AtomicLong(0)
         val txBytes = AtomicLong(0)
         val txWrites = AtomicLong(0)
+        private val batchFrames = MetricWindow()
+        private val batchBytes = MetricWindow()
+        private val writerQueueAgeUs = MetricWindow()
+        private val socketWriteUs = MetricWindow()
+        private val socketFlushUs = MetricWindow()
+        private val rxGapUs = MetricWindow()
+        private val eventDispatchUs = MetricWindow()
+        @Volatile private var lastRxNanos = 0L
         @Volatile var lastRxAt = openedAt
         @Volatile var lastTxAt = openedAt
         @Volatile var requestedCloseReason: String? = null
@@ -757,9 +765,20 @@ class BleL2capPlugin(
             dropStaleRealtimeProvider = { BluetoothAudioCoexistence.dropStaleRealtime() },
             maxRealtimeAgeMillisProvider = { BluetoothAudioCoexistence.maxRealtimeAgeMillis() },
             maxBatchBytes = 4_096,
+            onBatchPrepared = { frames, bytes, oldestAgeMicros ->
+                batchFrames.add(frames.toLong())
+                batchBytes.add(bytes.toLong())
+                writerQueueAgeUs.add(oldestAgeMicros)
+            },
             write = { data ->
+                val writeStarted = System.nanoTime()
                 socket.outputStream.write(data)
-                socket.outputStream.flush()
+                socketWriteUs.add((System.nanoTime() - writeStarted) / 1_000)
+                if (BluetoothAudioCoexistence.flushEveryWrite()) {
+                    val flushStarted = System.nanoTime()
+                    socket.outputStream.flush()
+                    socketFlushUs.add((System.nanoTime() - flushStarted) / 1_000)
+                }
                 txWrites.incrementAndGet()
                 txFrames.addAndGet(countProtocolFrames(data).toLong())
                 txBytes.addAndGet(data.size.toLong())
@@ -775,21 +794,38 @@ class BleL2capPlugin(
         )
 
         fun write(data: ByteArray, realtime: Boolean = false): Boolean = writer.send(data, realtime)
-        fun flush() = writer.flush()
+        fun flush() = writer.flush().thenRun {
+            if (!BluetoothAudioCoexistence.flushEveryWrite()) {
+                val flushStarted = System.nanoTime()
+                socket.outputStream.flush()
+                socketFlushUs.add((System.nanoTime() - flushStarted) / 1_000)
+            }
+        }
         fun startDiagnostics() {
             mainHandler.postDelayed(diagnosticsRunnable, 10_000)
         }
         fun recordRx(bytes: Int) {
+            val nowNanos = System.nanoTime()
+            if (lastRxNanos != 0L) rxGapUs.add((nowNanos - lastRxNanos) / 1_000)
+            lastRxNanos = nowNanos
             rxFrames.incrementAndGet()
             rxBytes.addAndGet(bytes.toLong())
             lastRxAt = SystemClock.elapsedRealtime()
         }
+        fun recordEventDispatch(startedNanos: Long) {
+            eventDispatchUs.add((System.nanoTime() - startedNanos) / 1_000)
+        }
         fun diagnostics(now: Long = SystemClock.elapsedRealtime()): String =
             "ageMs=${now - openedAt},rxFrames=${rxFrames.get()},rxBytes=${rxBytes.get()}," +
                 "txFrames=${txFrames.get()},txWrites=${txWrites.get()},txBytes=${txBytes.get()}," +
-                "coexistence=${BluetoothAudioCoexistence.isActive()}," +
+                "socketType=${socket.connectionType},maxTx=${socket.maxTransmitPacketSize},maxRx=${socket.maxReceivePacketSize}," +
+                "pending=${writer.pendingJobs()},coexistence=${BluetoothAudioCoexistence.isActive()}," +
                 "txDroppedRealtime=${writer.droppedRealtimeFrames()}," +
-                "rxIdleMs=${now - lastRxAt},txIdleMs=${now - lastTxAt}"
+                "rxIdleMs=${now - lastRxAt},txIdleMs=${now - lastTxAt}; " +
+                "batchFrames[${batchFrames.summary("f")}],batchBytes[${batchBytes.summary("B")}]," +
+                "queueAge[${writerQueueAgeUs.summary()}],write[${socketWriteUs.summary()}]," +
+                "flush[${socketFlushUs.summary()}],rxGap[${rxGapUs.summary()}]," +
+                "eventDispatch[${eventDispatchUs.summary()}]; ${BluetoothAudioCoexistence.diagnostics()}"
         fun close(reason: String = "local_stop") {
             requestedCloseReason = reason
             mainHandler.removeCallbacks(diagnosticsRunnable)
@@ -874,7 +910,11 @@ class BleL2capPlugin(
                     "data" to full,
                     "peerAddress" to link.address,
                 )
-                mainHandler.post { dataSink?.success(event) }
+                val dispatchStarted = System.nanoTime()
+                mainHandler.post {
+                    link.recordEventDispatch(dispatchStarted)
+                    dataSink?.success(event)
+                }
             }
         } catch (e: EOFException) {
             // InputStream EOF 只表示 L2CAP 流已结束，不能单凭它断定是远端主动

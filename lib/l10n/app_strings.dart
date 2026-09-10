@@ -124,6 +124,45 @@ class AppStrings {
           : '音频档位已应用，当前通话可能会短暂重新缓冲。';
   String get audioTuningSaveFailed =>
       isEn ? 'Could not save the audio profile' : '无法保存音频档位';
+  String get audioAdvancedButton => isEn ? 'Advanced controls' : '高级参数控制';
+  String get audioAdvancedTitle => isEn ? 'Bluetooth audio lab' : '蓝牙音频实验室';
+  String get audioAdvancedDescription =>
+      isEn
+          ? 'Saved on this phone and applied to an active room immediately. Change one variable at a time for comparable logs.'
+          : '参数保存在本机，并立即应用到当前房间。建议每次只改一项，方便对比日志。';
+  String get audioHeadsetBitrate =>
+      isEn ? 'Headset coexistence bitrate' : '耳机共存码率';
+  String get audioL2capCoalesce =>
+      isEn ? 'L2CAP batching window' : 'L2CAP 合并窗口';
+  String get audioFlushEveryWrite =>
+      isEn ? 'Flush every socket write' : '每次写入后刷新';
+  String get audioFlushEveryWriteHint =>
+      isEn
+          ? 'Legacy behavior. Disable it to test asynchronous batched writes.'
+          : '旧版行为；关闭后可测试异步批量写入。';
+  String get audioDropStale => isEn ? 'Drop stale outgoing voice' : '丢弃过期待发语音';
+  String get audioDropStaleHint =>
+      isEn
+          ? 'Keeps current speech when the local writer queue grows.'
+          : '本机发送队列拥塞时优先保留最新话音。';
+  String get audioStaleDeadline =>
+      isEn ? 'Outgoing voice deadline' : '待发语音截止时间';
+  String get audioPrebuffer => isEn ? 'Jitter prebuffer' : '接收预缓冲';
+  String get audioMaximumBuffer => isEn ? 'Jitter hard limit' : '接收缓冲硬上限';
+  String get audioAdaptiveBuffer =>
+      isEn ? 'Adaptive jitter ceiling' : '自适应缓冲上限';
+  String get audioStableDecay =>
+      isEn ? 'Adaptive decay interval' : '自适应缓冲回落周期';
+  String get audioLiveQueue => isEn ? 'Maximum playout backlog' : '最大待播积压';
+  String get audioPlcLimit => isEn ? 'Packet-loss concealment limit' : '丢包隐藏上限';
+  String get audioTrackBuffer =>
+      isEn ? 'AudioTrack buffer request' : 'AudioTrack 缓冲请求';
+  String get audioResetProfile => isEn ? 'Reset preset' : '恢复当前档默认值';
+  String get audioApplyParameters => isEn ? 'Save and apply' : '保存并应用';
+  String get audioParametersApplied =>
+      isEn
+          ? 'Parameters saved and applied to the active pipeline.'
+          : '参数已保存，并应用到当前音频管线。';
 
   // Host Election & Transfer
   String get transferHost => isEn ? 'Change host' : '更换房主';
@@ -185,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.19\nFast mode now prioritizes live speech over completeness.\nIt starts with less buffering and drops stale encrypted audio from send and playback queues.\nChat, admission, heartbeat, and room control frames remain reliable.'
-          : '0.1.0-dev.19\n低延迟档改为实时优先。\n减少起播缓冲，并丢弃发送和播放队列中已经过时的加密语音。\n聊天、邀请码验证、心跳和房间控制帧仍保持可靠传输。';
+          ? '0.1.0-dev.20\nAdded Bluetooth audio pipeline measurements and persistent advanced controls.\nThe debug console now reports capture, encryption, platform-channel, socket, jitter, and playback timing.'
+          : '0.1.0-dev.20\n新增蓝牙音频全链路测量和可持久化的高级参数控制。\n调试控制台会显示采集、加密、平台通道、Socket、抖动缓冲及播放阶段的耗时。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

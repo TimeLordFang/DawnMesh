@@ -18,6 +18,7 @@ internal class BoundedFrameWriter(
     private val maxRealtimeAgeMillisProvider: (() -> Long)? = null,
     private val nanoTimeProvider: () -> Long = System::nanoTime,
     private val maxBatchBytes: Int = 4_096,
+    private val onBatchPrepared: (frameCount: Int, byteCount: Int, oldestAgeMicros: Long) -> Unit = { _, _, _ -> },
     private val write: (ByteArray) -> Unit,
     private val closeTransport: () -> Unit,
     private val onFailure: (Throwable) -> Unit,
@@ -72,6 +73,8 @@ internal class BoundedFrameWriter(
     }
 
     fun droppedRealtimeFrames(): Long = droppedRealtime.get()
+
+    fun pendingJobs(): Int = jobs.size
 
     @Synchronized
     fun flush(): CompletableFuture<Unit> {
@@ -143,7 +146,13 @@ internal class BoundedFrameWriter(
             }
         }
 
-        if (total > 0) writeWithTimeout(join(chunks, total))
+        if (total > 0) {
+            val oldestAgeMicros = TimeUnit.NANOSECONDS.toMicros(
+                (nanoTimeProvider() - first.enqueuedAtNanos).coerceAtLeast(0),
+            )
+            onBatchPrepared(chunks.size, total, oldestAgeMicros)
+            writeWithTimeout(join(chunks, total))
+        }
         barrier?.completion?.complete(Unit)
     }
 

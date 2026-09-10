@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**58,054,705 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.19` / versionCode **19**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`4bf38d4a73285d41d441346b413abb6825637ba1b60dcc94988f39010837b86e`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**58,480,761 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.20` / versionCode **20**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`57271ae4449a732a99940b0015c35ca04e67506950b01bd111b822a44128cf5b`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,8 +15,8 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 全量 **173 项通过** |
-| `:app:testDebugUnitTest` | Kotlin **28 项通过，0 失败** |
+| Flutter 测试 | 全量 **174 项通过** |
+| `:app:testDebugUnitTest` | Kotlin **31 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
 | `apksigner verify --verbose --print-certs` | 通过，1 个签名者 |
@@ -25,6 +25,20 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.20 蓝牙音频测量与运行时调参
+
+- 调试页可直接调整耳机共存码率、L2CAP 合并窗口、逐写刷新、过期语音截止时间、抖动缓冲起播/自适应/硬上限/回落周期、待播积压、PLC 和 AudioTrack 缓冲；保存后立即应用并持久化。
+- 原生蓝牙链路每 10 秒输出批量大小、队列年龄、Socket `write/flush`、接收间隔和主线程分发延迟的最近 512 次滚动统计。
+- 原生音频输出采集间隔、Opus 编码、EventChannel 分发、远端入队和 AudioTrack 写入统计；Dart 输出加解密队列及平台通道统计。
+- 测量版默认保持 dev.19 参数，便于在同一 APK 内做逐项 A/B 对照。
+
+### 建议的真机 A/B 顺序
+
+1. 两台手机都开启调试日志、连接蓝牙耳机，使用同一房间和同一说话方式；每组连续说话至少 2 分钟。
+2. 先用“平衡”默认值记录基线；随后每次只改一项，依次测试“每次写入后刷新=关”、“L2CAP 合并窗口=20 ms”、“耳机共存码率=6 kbps”。每组之间恢复上一项，避免多个变量同时变化。
+3. 保存参数后先等待 15 秒再开始记录，让最近 512 次滚动窗口替换旧样本。每组结束立即复制日志，并在文本开头注明手机、耳机、距离和参数。
+4. `captureGap` 异常而 Socket 指标平稳，优先怀疑耳机路由或系统音频调度；`write/flush` 与 `rxGap` 同时出现尖峰，优先怀疑蓝牙控制器共存调度；`queueAge` 持续上升说明应用待发积压；`rebuffer/trackUnderruns` 增长说明接收或播放端断粮。
 
 ## dev.19 实时优先的低延迟档
 

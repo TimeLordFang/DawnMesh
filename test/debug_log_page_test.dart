@@ -78,19 +78,43 @@ void main() {
     expect(find.text('Stable'), findsOneWidget);
     expect(AppLog.isEnabled, isFalse);
 
-    await tester.tap(find.text('Fast'));
+    await tester.tap(find.text('Stable'));
     await tester.pumpAndSettle();
     expect(
-      calls.where((call) => call.method == 'setAudioTuningProfile').single.arguments,
-      {'profile': 'low'},
+      calls
+          .where((call) => call.method == 'setAudioTuningProfile')
+          .single
+          .arguments,
+      {'profile': 'stable'},
     );
-    expect(audioCalls.single.arguments, {'profile': 'low'});
+    expect(audioCalls.single.arguments, {'profile': 'stable'});
+
+    await tester.tap(find.byTooltip('Advanced controls'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bluetooth audio lab'), findsOneWidget);
+    expect(find.text('Flush every socket write'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.widgetWithText(FilledButton, 'Save and apply'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(
+      find.byType(Scrollable).last,
+      const Offset(0, -180),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save and apply'));
+    await tester.pumpAndSettle();
+    expect(audioCalls.last.method, 'setAudioTuningParameters');
 
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(AppLog.isEnabled, isTrue);
     expect(
-      calls.where((call) => call.method == 'setDebugLoggingEnabled').single.method,
+      calls
+          .where((call) => call.method == 'setDebugLoggingEnabled')
+          .single
+          .method,
       'setDebugLoggingEnabled',
     );
     expect(controlCalls.single.method, 'captureSystemSnapshot');

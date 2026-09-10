@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
@@ -146,6 +147,13 @@ internal object DebugLogBridge : EventChannel.StreamHandler {
                     "source=${device.isSource},sink=${device.isSink}"
             }
             i(SYSTEM_TAG, "audioDevices=${devices.ifEmpty { "none" }}")
+            val tuning = AudioTuningParameters.load(
+                context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE),
+            )
+            i(
+                SYSTEM_TAG,
+                "audioTuning=${tuning.toMap().entries.joinToString(",") { "${it.key}=${it.value}" }}",
+            )
 
             val wifiDetails = buildString {
                 append("wifiEnabled=${wifi.isWifiEnabled}; 5GHz=${wifi.is5GHzBandSupported}")
@@ -190,7 +198,13 @@ internal object DebugLogBridge : EventChannel.StreamHandler {
                             "offloadedFilter=${adapter.isOffloadedFilteringSupported}; " +
                             "offloadedBatch=${adapter.isOffloadedScanBatchingSupported}; " +
                             "le2M=${adapter.isLe2MPhySupported}; leCoded=${adapter.isLeCodedPhySupported}; " +
-                            "extendedAdv=${adapter.isLeExtendedAdvertisingSupported}; maxAdvBytes=${adapter.leMaximumAdvertisingDataLength}",
+                            "extendedAdv=${adapter.isLeExtendedAdvertisingSupported}; maxAdvBytes=${adapter.leMaximumAdvertisingDataLength}; " +
+                            "profiles headset=${adapter.getProfileConnectionState(BluetoothProfile.HEADSET)}," +
+                            "a2dp=${adapter.getProfileConnectionState(BluetoothProfile.A2DP)}" +
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                ",leAudio=${adapter.getProfileConnectionState(BluetoothProfile.LE_AUDIO)}," +
+                                    "leAudioSupport=${adapter.isLeAudioSupported}"
+                            } else "",
                     )
                 }
             } else {

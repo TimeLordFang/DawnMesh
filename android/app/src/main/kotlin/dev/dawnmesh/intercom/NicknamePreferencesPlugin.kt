@@ -28,6 +28,10 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                     val profile = preferences.getString("audio_tuning_profile", "balanced")
                     main.post { result.success(profile) }
                 }
+                "getAudioTuningParameters" -> worker.execute {
+                    val parameters = AudioTuningParameters.load(preferences).toMap()
+                    main.post { result.success(parameters) }
+                }
                 "setNickname" -> {
                     val name = call.argument<String>("nickname")
                     if (name == null || name.toByteArray(Charsets.UTF_8).size > 256) {
@@ -63,12 +67,25 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                     if (profile !in setOf("low", "balanced", "stable")) {
                         result.error("BAD_AUDIO_PROFILE", "音频调优档位无效", null)
                     } else worker.execute {
-                        val saved = preferences.edit()
-                            .putString("audio_tuning_profile", profile)
-                            .commit()
+                        val parsed = AudioTuningProfile.fromWireName(profile)
+                        val saved = AudioTuningParameters.resetToProfile(preferences.edit(), parsed).commit()
                         main.post {
                             if (saved) result.success(null)
                             else result.error("SAVE_FAILED", "音频调优档位未写入存储", null)
+                        }
+                    }
+                }
+                "setAudioTuningParameters" -> {
+                    val raw = call.arguments as? Map<*, *>
+                    if (raw == null) {
+                        result.error("BAD_AUDIO_PARAMETERS", "音频调优参数无效", null)
+                    } else worker.execute {
+                        val current = AudioTuningParameters.load(preferences)
+                        val parameters = AudioTuningParameters.fromMap(raw, current)
+                        val saved = parameters.persist(preferences.edit()).commit()
+                        main.post {
+                            if (saved) result.success(parameters.toMap())
+                            else result.error("SAVE_FAILED", "音频调优参数未写入存储", null)
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../diagnostics/app_log.dart';
+import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
 import 'room_transport.dart';
 
@@ -94,9 +95,8 @@ class BleL2capTransport implements RoomTransport {
     if (!Platform.isAndroid) return true;
     try {
       final granted =
-          await const MethodChannel(
-            'dev.dawnmesh.intercom/permissions',
-          ).invokeMethod<bool>('ensureBluetooth') ==
+          await const MethodChannel('dev.dawnmesh.intercom/permissions')
+              .invokeMethod<bool>('ensureBluetooth') ==
           true;
       if (!granted) AppLog.error(_tag, '需要附近设备权限；如已永久拒绝，请在系统应用设置中允许。');
       return granted;
@@ -308,19 +308,30 @@ class BleL2capTransport implements RoomTransport {
       return;
     }
 
-    _channel.invokeMethod('sendL2capData', {
-      'data': frame.encode(),
-      'realtime': realtime,
-    }).catchError(
-      (Object e) {
-        // 发送是高频路径，只报第一次。
-        if (!_sendErrorReported) {
-          _sendErrorReported = true;
-          AppLog.error(_tag, '蓝牙数据发送失败，对方收不到语音', e);
-        }
-        return null;
-      },
-    );
+    final started = PipelineProbe.nowMicros();
+    _channel
+        .invokeMethod('sendL2capData', {
+          'data': frame.encode(),
+          'realtime': realtime,
+        })
+        .then((_) {
+          PipelineProbe.record(
+            realtime ? 'bleAudioMethod' : 'bleControlMethod',
+            PipelineProbe.nowMicros() - started,
+          );
+        })
+        .catchError((Object e) {
+          PipelineProbe.record(
+            realtime ? 'bleAudioMethodError' : 'bleControlMethodError',
+            PipelineProbe.nowMicros() - started,
+          );
+          // 发送是高频路径，只报第一次。
+          if (!_sendErrorReported) {
+            _sendErrorReported = true;
+            AppLog.error(_tag, '蓝牙数据发送失败，对方收不到语音', e);
+          }
+          return null;
+        });
   }
 
   /// 转发在原生侧按链路地址完成，不需要成员号映射。
@@ -436,7 +447,12 @@ class BleL2capTransport implements RoomTransport {
       if (data == null) return;
 
       // 原生侧已经按帧头补齐成整帧了，这里直接解码即可。
+      final decodeStarted = PipelineProbe.nowMicros();
       final frame = Frame.decode(data);
+      PipelineProbe.record(
+        'bleDartDecode',
+        PipelineProbe.nowMicros() - decodeStarted,
+      );
       if (frame == null) {
         AppLog.warn(_tag, '收到无法解析的蓝牙帧（${data.length} 字节），来自 $peerAddress');
         return;
@@ -457,10 +473,9 @@ class BleL2capTransport implements RoomTransport {
 
         _rooms[address] = DiscoveredBleRoom(
           address: address,
-          roomName:
-              (event['roomName'] as String?) == '蓝牙房'
-                  ? (_rooms[address]?.roomName ?? '蓝牙房')
-                  : (event['roomName'] as String? ?? '蓝牙房'),
+          roomName: (event['roomName'] as String?) == '蓝牙房'
+              ? (_rooms[address]?.roomName ?? '蓝牙房')
+              : (event['roomName'] as String? ?? '蓝牙房'),
           psm: psm,
           memberCount: event['memberCount'] as int? ?? 1,
           rssi: event['rssi'] as int? ?? 0,

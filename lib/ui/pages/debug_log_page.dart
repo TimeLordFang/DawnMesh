@@ -30,6 +30,9 @@ class _DebugLogPageState extends State<DebugLogPage> {
   bool _saving = false;
   bool _audioProfileSaving = false;
   AudioTuningProfile _audioProfile = AudioTuningProfile.balanced;
+  AudioTuningParameters _audioParameters = AudioTuningParameters.defaults(
+    AudioTuningProfile.balanced,
+  );
   LogLevel? _level;
   late List<LogEntry> _entries;
 
@@ -70,8 +73,13 @@ class _DebugLogPageState extends State<DebugLogPage> {
   void _refreshSearch() => setState(() {});
 
   Future<void> _loadAudioProfile() async {
-    final profile = await _audioSettings.load();
-    if (mounted) setState(() => _audioProfile = profile);
+    final parameters = await _audioSettings.loadParameters();
+    if (mounted) {
+      setState(() {
+        _audioProfile = parameters.profile;
+        _audioParameters = parameters;
+      });
+    }
   }
 
   Future<void> _setAudioProfile(AudioTuningProfile profile) async {
@@ -85,19 +93,253 @@ class _DebugLogPageState extends State<DebugLogPage> {
     if (!mounted) return;
     setState(() {
       if (!saved) _audioProfile = previous;
+      if (saved) _audioParameters = AudioTuningParameters.defaults(profile);
+      _audioProfileSaving = false;
+    });
+    final s = AppStrings.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saved ? s.audioTuningApplied : s.audioTuningSaveFailed),
+      ),
+    );
+    if (saved) {
+      AppLog.info('音频', '调优档位切换为 ${profile.wireName}');
+    }
+  }
+
+  Future<bool> _setAudioParameters(AudioTuningParameters parameters) async {
+    if (_audioProfileSaving) return false;
+    setState(() => _audioProfileSaving = true);
+    final saved = await _audioSettings.saveParameters(parameters);
+    if (!mounted) return saved;
+    setState(() {
+      if (saved) {
+        _audioParameters = parameters;
+        _audioProfile = parameters.profile;
+      }
       _audioProfileSaving = false;
     });
     final s = AppStrings.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          saved ? s.audioTuningApplied : s.audioTuningSaveFailed,
+          saved ? s.audioParametersApplied : s.audioTuningSaveFailed,
         ),
       ),
     );
-    if (saved) {
-      AppLog.info('音频', '调优档位切换为 ${profile.wireName}');
-    }
+    if (saved) AppLog.info('音频', '高级调优参数已即时应用：${parameters.toMap()}');
+    return saved;
+  }
+
+  Future<void> _showAdvancedTuning() async {
+    final s = AppStrings.of(context);
+    var draft = _audioParameters;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: widget.isNight
+          ? AppTheme.darkCardBg
+          : AppTheme.lightCardBg,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          void update(AudioTuningParameters value) =>
+              setSheetState(() => draft = value);
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.88,
+            minChildSize: 0.55,
+            maxChildSize: 0.96,
+            builder: (_, controller) => ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  s.audioAdvancedTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  s.audioAdvancedDescription,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 14),
+                _TuningSlider(
+                  label: s.audioHeadsetBitrate,
+                  valueLabel: '${draft.headsetBitrate ~/ 1000} kbps',
+                  value: draft.headsetBitrate.toDouble(),
+                  min: 6000,
+                  max: 16000,
+                  divisions: 10,
+                  onChanged: (v) =>
+                      update(draft.copyWith(headsetBitrate: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioL2capCoalesce,
+                  valueLabel: '${draft.l2capCoalesceMillis} ms',
+                  value: draft.l2capCoalesceMillis.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  onChanged: (v) =>
+                      update(draft.copyWith(l2capCoalesceMillis: v.round())),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(s.audioFlushEveryWrite),
+                  subtitle: Text(s.audioFlushEveryWriteHint),
+                  value: draft.flushEveryWrite,
+                  onChanged: (v) => update(draft.copyWith(flushEveryWrite: v)),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(s.audioDropStale),
+                  subtitle: Text(s.audioDropStaleHint),
+                  value: draft.dropStaleRealtime,
+                  onChanged: (v) =>
+                      update(draft.copyWith(dropStaleRealtime: v)),
+                ),
+                _TuningSlider(
+                  label: s.audioStaleDeadline,
+                  valueLabel: '${draft.maxRealtimeAgeMillis} ms',
+                  value: draft.maxRealtimeAgeMillis.toDouble(),
+                  min: 20,
+                  max: 300,
+                  divisions: 14,
+                  enabled: draft.dropStaleRealtime,
+                  onChanged: (v) =>
+                      update(draft.copyWith(maxRealtimeAgeMillis: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioPrebuffer,
+                  valueLabel: '${draft.prebufferFrames * 20} ms',
+                  value: draft.prebufferFrames.toDouble(),
+                  min: 1,
+                  max: 15,
+                  divisions: 14,
+                  onChanged: (v) {
+                    final frames = v.round();
+                    update(
+                      draft.copyWith(
+                        prebufferFrames: frames,
+                        maxAdaptiveFrames: draft.maxAdaptiveFrames < frames
+                            ? frames
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+                _TuningSlider(
+                  label: s.audioMaximumBuffer,
+                  valueLabel: '${draft.maxBufferFrames * 20} ms',
+                  value: draft.maxBufferFrames.toDouble(),
+                  min: [
+                    draft.prebufferFrames,
+                    draft.maxAdaptiveFrames,
+                    draft.maxPlayoutQueueFrames,
+                  ].reduce((a, b) => a > b ? a : b).toDouble(),
+                  max: 32,
+                  divisions: 32 - [
+                    draft.prebufferFrames,
+                    draft.maxAdaptiveFrames,
+                    draft.maxPlayoutQueueFrames,
+                  ].reduce((a, b) => a > b ? a : b),
+                  onChanged: (v) =>
+                      update(draft.copyWith(maxBufferFrames: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioAdaptiveBuffer,
+                  valueLabel: '${draft.maxAdaptiveFrames * 20} ms',
+                  value: draft.maxAdaptiveFrames.toDouble(),
+                  min: draft.prebufferFrames.toDouble(),
+                  max: 32,
+                  divisions: 32 - draft.prebufferFrames,
+                  onChanged: (v) =>
+                      update(draft.copyWith(maxAdaptiveFrames: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioLiveQueue,
+                  valueLabel: '${draft.maxPlayoutQueueFrames * 20} ms',
+                  value: draft.maxPlayoutQueueFrames.toDouble(),
+                  min: 1,
+                  max: draft.maxBufferFrames.toDouble(),
+                  divisions: draft.maxBufferFrames - 1,
+                  onChanged: (v) =>
+                      update(draft.copyWith(maxPlayoutQueueFrames: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioStableDecay,
+                  valueLabel:
+                      '${(draft.stableFramesBeforeDecay * 20 / 1000).toStringAsFixed(1)} s',
+                  value: draft.stableFramesBeforeDecay.toDouble(),
+                  min: 10,
+                  max: 500,
+                  divisions: 49,
+                  onChanged: (v) => update(
+                    draft.copyWith(stableFramesBeforeDecay: v.round()),
+                  ),
+                ),
+                _TuningSlider(
+                  label: s.audioPlcLimit,
+                  valueLabel: '${draft.maxConcealmentFrames * 20} ms',
+                  value: draft.maxConcealmentFrames.toDouble(),
+                  min: 0,
+                  max: 5,
+                  divisions: 5,
+                  onChanged: (v) =>
+                      update(draft.copyWith(maxConcealmentFrames: v.round())),
+                ),
+                _TuningSlider(
+                  label: s.audioTrackBuffer,
+                  valueLabel: '${draft.audioTrackBufferFrames * 20} ms',
+                  value: draft.audioTrackBufferFrames.toDouble(),
+                  min: 1,
+                  max: 12,
+                  divisions: 11,
+                  onChanged: (v) =>
+                      update(draft.copyWith(audioTrackBufferFrames: v.round())),
+                ),
+                const SizedBox(height: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () =>
+                          update(AudioTuningParameters.defaults(draft.profile)),
+                      child: Text(s.audioResetProfile),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _audioProfileSaving
+                          ? null
+                          : () async {
+                              final saved = await _setAudioParameters(draft);
+                              if (saved && sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(s.audioApplyParameters),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _scrollToEnd() {
@@ -315,6 +557,15 @@ class _DebugLogPageState extends State<DebugLogPage> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: _audioProfileSaving
+                                ? null
+                                : _showAdvancedTuning,
+                            tooltip: s.audioAdvancedButton,
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.tune_rounded, size: 18),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -330,10 +581,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
                             ButtonSegment(
                               value: AudioTuningProfile.balanced,
                               label: Text(s.audioTuningBalanced),
-                              icon: const Icon(
-                                Icons.balance_rounded,
-                                size: 16,
-                              ),
+                              icon: const Icon(Icons.balance_rounded, size: 16),
                             ),
                             ButtonSegment(
                               value: AudioTuningProfile.stable,
@@ -770,6 +1018,57 @@ class _ConsoleLogLine extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TuningSlider extends StatelessWidget {
+  const _TuningSlider({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label)),
+              Text(
+                valueLabel,
+                style: const TextStyle(
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions > 0 ? divisions : null,
+            onChanged: enabled ? onChanged : null,
+          ),
+        ],
       ),
     );
   }

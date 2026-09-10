@@ -84,4 +84,50 @@ void main() {
     expect(audioCalls.single.method, 'setAudioTuningProfile');
     expect(audioCalls.single.arguments, {'profile': 'low'});
   });
+
+  test('advanced audio parameters round-trip and apply without a rebuild', () async {
+    Map<Object?, Object?>? saved;
+    final audioCalls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setAudioTuningParameters') {
+        saved = Map<Object?, Object?>.from(call.arguments as Map);
+        return saved;
+      }
+      if (call.method == 'getAudioTuningParameters') return saved;
+      return null;
+    });
+    messenger.setMockMethodCallHandler(AudioTuningSettingsStore.audioChannel, (
+      call,
+    ) async {
+      audioCalls.add(call);
+      return true;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      messenger.setMockMethodCallHandler(
+        AudioTuningSettingsStore.audioChannel,
+        null,
+      );
+    });
+
+    final store = AudioTuningSettingsStore();
+    final custom = AudioTuningParameters.defaults(AudioTuningProfile.balanced)
+        .copyWith(
+          headsetBitrate: 6000,
+          l2capCoalesceMillis: 20,
+          flushEveryWrite: false,
+          dropStaleRealtime: true,
+          maxRealtimeAgeMillis: 40,
+        );
+    expect(await store.saveParameters(custom), isTrue);
+    final restored = await store.loadParameters();
+
+    expect(restored.headsetBitrate, 6000);
+    expect(restored.l2capCoalesceMillis, 20);
+    expect(restored.flushEveryWrite, isFalse);
+    expect(restored.dropStaleRealtime, isTrue);
+    expect(audioCalls.single.method, 'setAudioTuningParameters');
+  });
 }

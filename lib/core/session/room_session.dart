@@ -7,6 +7,7 @@ import '../audio/voice_activity_gate.dart';
 import '../platform/background_call_controls.dart';
 import '../platform/platform_audio_channel.dart';
 import '../diagnostics/app_log.dart';
+import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
 import '../protocol/frame_type.dart';
 import '../protocol/payloads/chat_delete.dart';
@@ -358,10 +359,19 @@ class RoomSession {
     }
     // Keep async cryptography in wire order and bound unauthenticated work.
     if (_pendingIncoming >= 256) return Future.value();
+    final queuedAt = PipelineProbe.nowMicros();
     _pendingIncoming++;
     final next = _incomingQueue
         .then((_) async {
-          if (!_closed) await _handleIncomingFrame(frame);
+          if (!_closed) {
+            PipelineProbe.record(
+              frame.type == FrameType.sealed
+                  ? 'incomingQueueWait'
+                  : 'incomingControlQueueWait',
+              PipelineProbe.nowMicros() - queuedAt,
+            );
+            await _handleIncomingFrame(frame);
+          }
         })
         .whenComplete(() => _pendingIncoming--);
     _incomingQueue = next.catchError((Object _) {});
@@ -386,7 +396,12 @@ class RoomSession {
         return;
       }
       try {
+        final openStarted = PipelineProbe.nowMicros();
         final opened = await secureCodec!.open(frame);
+        PipelineProbe.record(
+          'openFrame',
+          PipelineProbe.nowMicros() - openStarted,
+        );
         if (opened.type == FrameType.sealed ||
             opened.type == FrameType.handshakeHello ||
             opened.type == FrameType.handshakeConfirm) {
@@ -496,7 +511,15 @@ class RoomSession {
 
     // 整帧原样交给原生播放管线：那边从帧头解析发送方与序号，
     // 分流进各自的抖动缓冲，再解码混音。
-    audioIo.submitRemoteFrame(frame.encode());
+    final submitStarted = PipelineProbe.nowMicros();
+    unawaited(
+      audioIo.submitRemoteFrame(frame.encode()).whenComplete(() {
+        PipelineProbe.record(
+          'audioSubmitMethod',
+          PipelineProbe.nowMicros() - submitStarted,
+        );
+      }),
+    );
 
     _lastAudioAt[frame.senderId] = DateTime.now();
     if (!sender.isSpeaking) {
@@ -929,6 +952,7 @@ class RoomSession {
         _waveController.add(packets.isEmpty ? 0 : level);
       }
       for (final packet in packets) {
+        final audioStarted = PipelineProbe.nowMicros();
         sendFrame(
           Frame(
             type: FrameType.audio,
@@ -936,6 +960,7 @@ class RoomSession {
             seq: _nextSeq(),
             payload: packet,
           ),
+          diagnosticStartedAtMicros: audioStarted,
         );
       }
     }, bitrateBps: isBluetooth ? _bluetoothBitrate : _wifiBitrate);
@@ -1134,7 +1159,7 @@ class RoomSession {
   /// Hook for network transmission
   void Function(Frame frame)? onSendFrame;
 
-  Future<void> sendFrame(Frame frame) {
+  Future<void> sendFrame(Frame frame, {int? diagnosticStartedAtMicros}) {
     if (_closed || (roomInvite != null && secureCodec == null)) {
       return Future.value();
     }
@@ -1149,7 +1174,18 @@ class RoomSession {
     if (realtime) _pendingAudioOutgoing++;
     final next = _outgoingQueue
         .then((_) async {
-          if (!_closed) await _sendFrame(frame);
+          if (!_closed) {
+            if (diagnosticStartedAtMicros != null) {
+              PipelineProbe.record(
+                'outgoingQueueWait',
+                PipelineProbe.nowMicros() - diagnosticStartedAtMicros,
+              );
+            }
+            await _sendFrame(
+              frame,
+              diagnosticStartedAtMicros: diagnosticStartedAtMicros,
+            );
+          }
         })
         .whenComplete(() {
           _pendingOutgoing--;
@@ -1159,17 +1195,30 @@ class RoomSession {
     return next;
   }
 
-  Future<void> _sendFrame(Frame frame) async {
+  Future<void> _sendFrame(Frame frame, {int? diagnosticStartedAtMicros}) async {
     Frame outFrame = frame;
     if (secureCodec != null) {
       try {
+        final sealStarted = PipelineProbe.nowMicros();
         outFrame = await secureCodec!.seal(frame);
+        if (frame.type == FrameType.audio) {
+          PipelineProbe.record(
+            'sealAudio',
+            PipelineProbe.nowMicros() - sealStarted,
+          );
+        }
       } catch (e) {
         AppLog.error('RoomSession', '密封加密帧失败，已放弃发送', e);
         return;
       }
     }
     _emitFrame(outFrame, realtime: frame.type == FrameType.audio);
+    if (diagnosticStartedAtMicros != null) {
+      PipelineProbe.record(
+        'audioDartToTransport',
+        PipelineProbe.nowMicros() - diagnosticStartedAtMicros,
+      );
+    }
   }
 
   void _emitFrame(Frame frame, {bool realtime = false}) {

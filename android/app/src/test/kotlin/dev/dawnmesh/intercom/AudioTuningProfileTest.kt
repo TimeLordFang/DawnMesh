@@ -26,4 +26,34 @@ class AudioTuningProfileTest {
                 a.l2capCoalesceMillis < b.l2capCoalesceMillis
         })
     }
+
+    @Test fun advancedParametersAreBoundedAndPublishedAtomically() {
+        val base = AudioTuningParameters.defaults(AudioTuningProfile.BALANCED)
+        val custom = AudioTuningParameters.fromMap(
+            mapOf(
+                "profile" to "balanced",
+                "prebufferFrames" to 4,
+                "maxAdaptiveFrames" to 1,
+                "maxPlayoutQueueFrames" to 99,
+                "l2capCoalesceMillis" to 35,
+                "headsetBitrate" to 6_000,
+                "dropStaleRealtime" to true,
+                "maxRealtimeAgeMillis" to 40,
+                "flushEveryWrite" to false,
+            ),
+            base,
+        )
+
+        assertEquals(4, custom.bluetoothPrebufferFrames)
+        assertEquals(4, custom.bluetoothMaxAdaptiveFrames)
+        assertEquals(32, custom.maxPlayoutQueueFrames)
+        assertEquals(32, custom.bluetoothMaxBufferFrames)
+
+        BluetoothAudioCoexistence.setActive(true)
+        BluetoothAudioCoexistence.setParameters(custom)
+        assertEquals(35, BluetoothAudioCoexistence.l2capCoalesceMillis())
+        assertEquals(40, BluetoothAudioCoexistence.maxRealtimeAgeMillis())
+        assertTrue(BluetoothAudioCoexistence.dropStaleRealtime())
+        assertTrue(!BluetoothAudioCoexistence.flushEveryWrite())
+    }
 }

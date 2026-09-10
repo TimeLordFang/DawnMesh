@@ -91,6 +91,26 @@ class BoundedFrameWriterTest {
         } finally { writer.close() }
     }
 
+    @Test fun reportsBatchShapeAndOldestQueueAge() {
+        val now = AtomicLong(0)
+        val batches = mutableListOf<Triple<Int, Int, Long>>()
+        val writer = BoundedFrameWriter(
+            coalesceMillis = 25,
+            nanoTimeProvider = { now.get() },
+            onBatchPrepared = { frames, bytes, age -> batches.add(Triple(frames, bytes, age)) },
+            write = {},
+            closeTransport = {},
+            onFailure = { throw AssertionError(it) },
+        )
+        try {
+            writer.send(byteArrayOf(1, 2))
+            now.set(TimeUnit.MILLISECONDS.toNanos(7))
+            writer.send(byteArrayOf(3))
+            writer.flush().get(2, TimeUnit.SECONDS)
+            assertEquals(listOf(Triple(2, 3, 7_000L)), batches)
+        } finally { writer.close() }
+    }
+
     @Test fun aggressiveRealtimeQueueKeepsNewestAudioAndPreservesControl() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)

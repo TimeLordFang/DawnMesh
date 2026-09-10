@@ -65,15 +65,15 @@ class PlatformAudioPlugin(
     }
 
     /** 一路远端音频流：抖动缓冲 + 它专属的解码器（Opus 解码器有状态，不能共用）。 */
-    private class RemoteStream(bluetooth: Boolean, profile: AudioTuningProfile) {
+    private class RemoteStream(bluetooth: Boolean, parameters: AudioTuningParameters) {
         val jitter = if (bluetooth) {
             JitterBuffer(
-                prebufferFrames = profile.bluetoothPrebufferFrames,
-                maxBuffer = profile.bluetoothMaxBufferFrames,
-                maxAdaptiveTarget = profile.bluetoothMaxAdaptiveFrames,
-                maxPlayoutQueueFrames = profile.maxPlayoutQueueFrames,
-                stableFramesBeforeDecay = profile.stableFramesBeforeDecay,
-                maxConcealmentFrames = profile.maxConcealmentFrames,
+                prebufferFrames = parameters.bluetoothPrebufferFrames,
+                maxBuffer = parameters.bluetoothMaxBufferFrames,
+                maxAdaptiveTarget = parameters.bluetoothMaxAdaptiveFrames,
+                maxPlayoutQueueFrames = parameters.maxPlayoutQueueFrames,
+                stableFramesBeforeDecay = parameters.stableFramesBeforeDecay,
+                maxConcealmentFrames = parameters.maxConcealmentFrames,
                 ordered = true,
             )
         } else {
@@ -102,9 +102,15 @@ class PlatformAudioPlugin(
     private var currentBitrate = OpusCodec.DEFAULT_BITRATE
     private var effectiveBitrate = OpusCodec.DEFAULT_BITRATE
     private var bluetoothAudioAvailable = false
-    @Volatile private var tuningProfile = AudioTuningProfile.fromWireName(
-        context.getSharedPreferences("dawnmesh_profile", Context.MODE_PRIVATE)
-            .getString("audio_tuning_profile", "balanced"),
+    private val captureGapUs = MetricWindow()
+    private val encodeUs = MetricWindow()
+    private val captureEventDispatchUs = MetricWindow()
+    private val eventChannelCallUs = MetricWindow()
+    private val remoteSubmitUs = MetricWindow()
+    private val audioTrackWriteUs = MetricWindow()
+    @Volatile private var lastCapturedNanos = 0L
+    @Volatile private var tuningParameters = AudioTuningParameters.load(
+        context.getSharedPreferences("dawnmesh_profile", Context.MODE_PRIVATE),
     )
 
     // 播放
@@ -130,7 +136,7 @@ class PlatformAudioPlugin(
     } else null
 
     init {
-        BluetoothAudioCoexistence.setTuningProfile(tuningProfile)
+        BluetoothAudioCoexistence.setParameters(tuningParameters)
         methodChannel.setMethodCallHandler(this)
         eventChannel.setStreamHandler(this)
     }
@@ -248,6 +254,18 @@ class PlatformAudioPlugin(
                 result.success(true)
             }
 
+            "setAudioTuningParameters" -> {
+                val raw = call.arguments as? Map<*, *>
+                if (raw == null) {
+                    result.error("BAD_AUDIO_PARAMETERS", "音频调优参数无效", null)
+                    return
+                }
+                applyAudioTuningParameters(
+                    AudioTuningParameters.fromMap(raw, tuningParameters),
+                )
+                result.success(tuningParameters.toMap())
+            }
+
             "stopPlayback" -> {
                 stopPlayback()
                 result.success(true)
@@ -279,6 +297,7 @@ class PlatformAudioPlugin(
             PackageManager.PERMISSION_GRANTED
 
     private fun submitRemoteFrame(data: ByteArray) {
+        val submitStarted = System.nanoTime()
         val senderId = data[1].toInt() and 0xFF
         val seq = ((data[2].toInt() and 0xFF) shl 8) or (data[3].toInt() and 0xFF)
         val payloadLength = ((data[4].toInt() and 0xFF) shl 8) or (data[5].toInt() and 0xFF)
@@ -291,8 +310,9 @@ class PlatformAudioPlugin(
 
         val packet = data.copyOfRange(FRAME_HEADER_SIZE, FRAME_HEADER_SIZE + payloadLength)
         remotes.getOrPut(senderId) {
-            RemoteStream(currentBitrate <= OpusCodec.BLUETOOTH_BITRATE, tuningProfile)
+            RemoteStream(currentBitrate <= OpusCodec.BLUETOOTH_BITRATE, tuningParameters)
         }.jitter.put(seq, packet)
+        remoteSubmitUs.add((System.nanoTime() - submitStarted) / 1_000)
     }
 
     // ------------------------------------------------------------------ 采集
@@ -348,6 +368,7 @@ class PlatformAudioPlugin(
         effectiveBitrate = currentBitrate
         uplinkCodec = OpusCodec(effectiveBitrate)
         audioRecord = record
+        lastCapturedNanos = 0L
         capturing.set(true)
 
         updateAudioRouting()
@@ -419,6 +440,12 @@ class PlatformAudioPlugin(
             // 读满一整帧（320 采样点 / 20ms）
             offset = 0
 
+            val capturedNanos = System.nanoTime()
+            if (lastCapturedNanos != 0L) {
+                captureGapUs.add((capturedNanos - lastCapturedNanos) / 1_000)
+            }
+            lastCapturedNanos = capturedNanos
+
             if (muted.get()) continue
 
             val encodeStart = System.nanoTime()
@@ -430,14 +457,28 @@ class PlatformAudioPlugin(
                 continue
             }
 
-            if (System.nanoTime() - encodeStart > 20_000_000) slowEncodes++
+            val encodeDuration = System.nanoTime() - encodeStart
+            encodeUs.add(encodeDuration / 1_000)
+            if (encodeDuration > 20_000_000) slowEncodes++
             if (System.nanoTime() - lastReport > 10_000_000_000L) {
                 if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
+                Log.d(
+                    TAG,
+                    "采集管线统计：captureGap[${captureGapUs.summary()}]," +
+                        "encode[${encodeUs.summary()}],eventDispatch[${captureEventDispatchUs.summary()}]," +
+                        "eventCall[${eventChannelCallUs.summary()}]",
+                )
                 slowEncodes = 0
                 lastReport = System.nanoTime()
             }
             val event = mapOf<String, Any>("data" to packet, "level" to level)
-            mainHandler.post { eventSink?.success(event) }
+            val dispatchStarted = System.nanoTime()
+            mainHandler.post {
+                captureEventDispatchUs.add((System.nanoTime() - dispatchStarted) / 1_000)
+                val callStarted = System.nanoTime()
+                eventSink?.success(event)
+                eventChannelCallUs.add((System.nanoTime() - callStarted) / 1_000)
+            }
         }
     }
 
@@ -564,7 +605,7 @@ class PlatformAudioPlugin(
         // 构造时保留设备要求的容量，再限制实际可写缓冲。部分蓝牙路由给出的
         // minBuffer 超过 120ms；限制到约 80ms 可直接减少应用侧排队延迟。
         // Android 仍可按硬件约束返回更大的值，播放循环会监控真实欠载并扩容。
-        val requestedPlaybackFrames = SAMPLES_PER_FRAME * tuningProfile.audioTrackBufferFrames
+        val requestedPlaybackFrames = SAMPLES_PER_FRAME * tuningParameters.audioTrackBufferFrames
         val effectivePlaybackFrames = track.setBufferSizeInFrames(requestedPlaybackFrames)
 
         audioTrack = track
@@ -604,7 +645,7 @@ class PlatformAudioPlugin(
             if (System.nanoTime() - lastReport > 10_000_000_000L) {
                 val trackUnderruns = track.underrunCount
                 if (trackUnderruns > lastTrackUnderruns &&
-                    tuningProfile != AudioTuningProfile.LOW_LATENCY) {
+                    tuningParameters.profile != AudioTuningProfile.LOW_LATENCY) {
                     val currentFrames = track.bufferSizeInFrames
                     val capacityFrames = track.bufferCapacityInFrames
                     if (currentFrames < capacityFrames) {
@@ -620,6 +661,11 @@ class PlatformAudioPlugin(
                 }
                 lastTrackUnderruns = trackUnderruns
                 for ((id, stream) in remotes) Log.d(TAG, "音频缓冲 #$id: ${stream.jitter.diagnostics()}; trackUnderruns=$trackUnderruns; trackBuffer=${track.bufferSizeInFrames}")
+                Log.d(
+                    TAG,
+                    "播放管线统计：remoteSubmit[${remoteSubmitUs.summary()}]," +
+                        "trackWrite[${audioTrackWriteUs.summary()}]",
+                )
                 logActiveAudioRoute("播放中")
                 lastReport = System.nanoTime()
             }
@@ -654,12 +700,14 @@ class PlatformAudioPlugin(
 
             var offset = 0
             while (offset < SAMPLES_PER_FRAME && playing.get()) {
+                val writeStarted = System.nanoTime()
                 val written = try {
                     track.write(out, offset, SAMPLES_PER_FRAME - offset)
                 } catch (e: Exception) {
                     Log.e(TAG, "AudioTrack.write 异常", e)
                     -1
                 }
+                audioTrackWriteUs.add((System.nanoTime() - writeStarted) / 1_000)
                 if (written < 0) {
                     consecutiveErrors++
                     Log.w(TAG, "AudioTrack.write 返回 $written (连续 $consecutiveErrors 次)")
@@ -890,7 +938,7 @@ class PlatformAudioPlugin(
             "实际音频路由($reason): input=${label(input)}; output=${label(output)}; " +
                 "communication=${label(communication)}; mode=${audioManager.mode}; " +
                 "phoneMic=$preferBuiltinMic; coexistence=${BluetoothAudioCoexistence.isActive()}; " +
-                "profile=${tuningProfile.wireName}; opus=${effectiveBitrate}bps",
+                "${BluetoothAudioCoexistence.diagnostics()}; opus=${effectiveBitrate}bps",
         )
     }
 
@@ -902,16 +950,14 @@ class PlatformAudioPlugin(
         val coexistence =
             currentBitrate <= OpusCodec.BLUETOOTH_BITRATE && bluetoothAudioAvailable
         BluetoothAudioCoexistence.setActive(coexistence)
-        val desiredBitrate = if (coexistence) tuningProfile.headsetBitrate else currentBitrate
+        val desiredBitrate = if (coexistence) tuningParameters.headsetBitrate else currentBitrate
         if (effectiveBitrate == desiredBitrate) return
         uplinkCodec?.setBitrate(desiredBitrate)
         effectiveBitrate = desiredBitrate
         Log.i(
             TAG,
             if (coexistence) {
-                "检测到蓝牙房与蓝牙耳机并用：profile=${tuningProfile.wireName}，" +
-                    "Opus=${tuningProfile.headsetBitrate}bps，" +
-                    "L2CAP=${tuningProfile.l2capCoalesceMillis}ms"
+                "检测到蓝牙房与蓝牙耳机并用：${BluetoothAudioCoexistence.diagnostics()}"
             } else {
                 "蓝牙耳机共存模式已退出：Opus 恢复为 ${currentBitrate}bps"
             },
@@ -921,20 +967,27 @@ class PlatformAudioPlugin(
     /** 调试页切换后立即应用；远端流按新目标重新蓄水，避免混用两套时序。 */
     @Synchronized
     private fun applyAudioTuningProfile(profile: AudioTuningProfile) {
-        if (tuningProfile == profile) return
-        tuningProfile = profile
-        BluetoothAudioCoexistence.setTuningProfile(profile)
+        applyAudioTuningParameters(AudioTuningParameters.defaults(profile))
+    }
+
+    /** 高级参数由调试页持久化后传入；运行中的发送器会从共享快照立即读取。 */
+    @Synchronized
+    private fun applyAudioTuningParameters(parameters: AudioTuningParameters) {
+        if (tuningParameters == parameters) return
+        tuningParameters = parameters
+        BluetoothAudioCoexistence.setParameters(parameters)
         remotes.clear()
 
-        val requestedFrames = SAMPLES_PER_FRAME * profile.audioTrackBufferFrames
+        val requestedFrames = SAMPLES_PER_FRAME * parameters.audioTrackBufferFrames
         val actualFrames = audioTrack?.setBufferSizeInFrames(requestedFrames)
         applyBluetoothCoexistenceTuning()
         Log.i(
             TAG,
-            "音频调优档位切换为 ${profile.wireName}：jitter=" +
-                "${profile.bluetoothPrebufferFrames * 20}-${profile.bluetoothMaxAdaptiveFrames * 20}ms，" +
-                "liveCap=${profile.maxPlayoutQueueFrames * 20}ms，" +
-                "track=${actualFrames ?: requestedFrames}帧，L2CAP=${profile.l2capCoalesceMillis}ms",
+            "音频调优参数已热更新：jitter=" +
+                "${parameters.bluetoothPrebufferFrames * 20}-${parameters.bluetoothMaxAdaptiveFrames * 20}ms，" +
+                "liveCap=${parameters.maxPlayoutQueueFrames * 20}ms，" +
+                "PLC=${parameters.maxConcealmentFrames * 20}ms，" +
+                "track=${actualFrames ?: requestedFrames}帧；${BluetoothAudioCoexistence.diagnostics()}",
         )
     }
 
