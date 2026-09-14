@@ -82,6 +82,7 @@ class InternetRoomApi {
     required String deviceId,
     required int maxParticipants,
     required int hostDisconnectTimeoutMinutes,
+    String? monitoringKey,
   }) async => InternetConnectionGrant.fromJson(
     await _decode(
       _client.post(
@@ -93,6 +94,7 @@ class InternetRoomApi {
           'deviceId': deviceId,
           'maxParticipants': maxParticipants,
           'hostDisconnectTimeoutMinutes': hostDisconnectTimeoutMinutes,
+          'monitoringKey': ?monitoringKey,
         }),
       ),
     ),

@@ -26,6 +26,7 @@ void main() {
             'name': 'Dawn server',
             'protocolVersion': 1,
             'maxRoomParticipants': 50,
+            'adminListeningSupported': true,
           }),
           200,
           headers: const {'content-type': 'application/json; charset=utf-8'},
@@ -35,6 +36,45 @@ void main() {
     final info = await api.info();
     expect(info.instanceId, 'instance-1');
     expect(info.maxRoomParticipants, 50);
+    expect(info.adminListeningSupported, isTrue);
+    api.close();
+  });
+
+  test('room creation sends monitoring key only when host opts in', () async {
+    final api = InternetRoomApi(
+      profile,
+      client: MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['monitoringKey'], 'escrowed-room-key');
+        return http.Response(
+          jsonEncode({
+            'room': {
+              'id': 'room',
+              'name': 'Room',
+              'memberCount': 1,
+              'maxParticipants': 25,
+              'hostNickname': 'Host',
+              'adminListeningAvailable': true,
+            },
+            'memberId': 'member',
+            'livekitUrl': 'wss://rtc.example.test',
+            'livekitToken': 'token',
+            'resumeToken': 'resume',
+            'eventsUrl': 'wss://talk.example.test/api/v1/events',
+          }),
+          201,
+        );
+      }),
+    );
+    final grant = await api.createRoom(
+      name: 'Room',
+      nickname: 'Host',
+      deviceId: '123456789012345678901234',
+      maxParticipants: 25,
+      hostDisconnectTimeoutMinutes: 10,
+      monitoringKey: 'escrowed-room-key',
+    );
+    expect(grant.room.adminListeningAvailable, isTrue);
     api.close();
   });
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../theme/app_theme.dart';
+import 'avatar_frame.dart';
 
 /// Member Horizontal Orbit Track displaying active participants and speaking waves.
 class MemberOrbit extends StatelessWidget {
@@ -51,12 +52,6 @@ class _MemberAvatarChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeBorderColor = isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnCoral;
-    final speakingGlow = member.isSpeaking
-        ? (isNight ? const Color(0xFF6B9BE8) : const Color(0xFFF39C82))
-        : Colors.transparent;
     // 昵称里带的 3 位数字短码按需展示：只有在同名冲突时才展示，避免平时多余干扰。
     final (displayName, code) = DeviceCode.split(member.nickname);
 
@@ -66,75 +61,26 @@ class _MemberAvatarChip extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg,
-              border: Border.all(
-                color: member.isSpeaking
-                    ? activeBorderColor
-                    : (isNight
-                          ? const Color(0xFF283A52)
-                          : const Color(0xFFDCCEC8)),
-                width: member.isSpeaking ? 3.0 : 1.4,
-              ),
-              boxShadow: member.isSpeaking
-                  ? [
-                      BoxShadow(
-                        color: speakingGlow.withValues(alpha: 0.45),
-                        blurRadius: 12,
-                        spreadRadius: 2.5,
-                      ),
-                    ]
-                  : [],
-            ),
-            child: Center(
-              child: Text(
-                member.nickname.isNotEmpty
-                    ? member.nickname.characters.first
-                    : "?",
-                style: TextStyle(
-                  color: isNight
-                      ? AppTheme.darkTextPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
-              ),
-            ),
+          AvatarFrame(
+            senderCode: code ?? '${member.memberId}',
+            nickname: displayName,
+            isHost: member.isHost,
+            isSpeaking: member.isSpeaking,
+            isMuted: member.isMuted,
+            size: 64,
+            isNight: isNight,
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (member.isHost)
-                Padding(
-                  padding: const EdgeInsets.only(right: 3),
-                  child: Icon(
-                    Icons.star,
-                    size: 14,
-                    color: isNight
-                        ? AppTheme.moonSilverWhite
-                        : AppTheme.dawnCoral,
-                  ),
-                ),
-              Flexible(
-                child: Text(
-                  displayName,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isNight
-                        ? AppTheme.darkTextSecondary
-                        : AppTheme.lightTextSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          Text(
+            displayName,
+            style: TextStyle(
+              fontSize: 14,
+              color: isNight
+                  ? AppTheme.darkTextSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           if (code != null && hasConflict)
             Text(

@@ -1,5 +1,30 @@
 import 'package:flutter/material.dart';
+
+import '../../core/session/device_code.dart';
 import '../theme/app_theme.dart';
+
+/// Returns a compact avatar label without adding image bytes to room protocols.
+///
+/// Chinese names use their first character. Names separated by spaces use
+/// the first letter of the first two words, while a single Latin word uses its
+/// first two letters. The stable device code still selects the colour theme.
+String avatarInitials(String nickname) {
+  final (baseName, _) = DeviceCode.split(nickname.trim());
+  final characters = baseName.characters.toList(growable: false);
+  if (characters.isEmpty) return '?';
+  final words = baseName
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .toList(growable: false);
+  if (words.length > 1) {
+    return '${words.first.characters.first}${words[1].characters.first}'
+        .toUpperCase();
+  }
+  if (RegExp(r'^[A-Za-z0-9]+$').hasMatch(baseName)) {
+    return characters.take(2).join().toUpperCase();
+  }
+  return characters.first.toUpperCase();
+}
 
 /// 预设不可自定义的 8 款成员身份头像框主题
 class AvatarFrameTheme {
@@ -88,6 +113,8 @@ class AvatarFrame extends StatelessWidget {
   final String senderCode;
   final String nickname;
   final bool isHost;
+  final bool isSpeaking;
+  final bool isMuted;
   final double size;
   final bool isNight;
 
@@ -96,6 +123,8 @@ class AvatarFrame extends StatelessWidget {
     required this.senderCode,
     required this.nickname,
     this.isHost = false,
+    this.isSpeaking = false,
+    this.isMuted = false,
     this.size = 36,
     this.isNight = false,
   });
@@ -103,67 +132,104 @@ class AvatarFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = AvatarFrameTheme.fromCode(senderCode, isHost: isHost);
-    final initial = nickname.isNotEmpty ? nickname.characters.first : '?';
+    final initial = avatarInitials(nickname);
     final framePadding = isHost ? 3.0 : 2.5;
 
-    return Stack(
-      alignment: Alignment.center,
-      clipBehavior: Clip.none,
-      children: [
-        // 外层不可自定义算法光环 / 头像框
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: SweepGradient(colors: theme.borderGradient),
-            boxShadow: [
-              BoxShadow(
-                color: theme.glowColor.withValues(alpha: isHost ? 0.45 : 0.25),
-                blurRadius: isHost ? 6 : 4,
-                spreadRadius: isHost ? 1.0 : 0.5,
-              ),
-            ],
-          ),
-          padding: EdgeInsets.all(framePadding),
-          child: Container(
+    return Semantics(
+      label:
+          '$nickname${isHost ? '，房主' : ''}${isSpeaking ? '，正在发言' : ''}${isMuted ? '，麦克风已关闭' : ''}',
+      image: true,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // 外层不可自定义算法光环 / 头像框
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: size,
+            height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isNight ? const Color(0xFF1E1C24) : Colors.white,
+              gradient: SweepGradient(colors: theme.borderGradient),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.glowColor.withValues(
+                    alpha: isSpeaking ? 0.72 : (isHost ? 0.45 : 0.25),
+                  ),
+                  blurRadius: isSpeaking ? 14 : (isHost ? 6 : 4),
+                  spreadRadius: isSpeaking ? 3 : (isHost ? 1.0 : 0.5),
+                ),
+              ],
             ),
-            child: Center(
-              child: Text(
-                initial,
-                style: TextStyle(
-                  fontSize: size * 0.42,
-                  fontWeight: FontWeight.bold,
-                  color: isNight ? Colors.white : AppTheme.lightTextPrimary,
+            padding: EdgeInsets.all(framePadding),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isNight ? const Color(0xFF1E1C24) : Colors.white,
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    fontSize:
+                        size * (initial.characters.length > 1 ? 0.3 : 0.42),
+                    fontWeight: FontWeight.bold,
+                    color: isNight ? Colors.white : AppTheme.lightTextPrimary,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
 
-        // 房主顶部专属微型小标识
-        if (isHost)
-          Positioned(
-            top: -3,
-            right: -2,
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFFFD700),
-                boxShadow: [BoxShadow(color: Color(0x66FFD700), blurRadius: 4)],
-              ),
-              child: const Icon(
-                Icons.star_rounded,
-                size: 10,
-                color: Color(0xFF7A4500),
+          // 房主顶部专属微型小标识
+          if (isHost)
+            Positioned(
+              top: -3,
+              right: -2,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFFFD700),
+                  boxShadow: [
+                    BoxShadow(color: Color(0x66FFD700), blurRadius: 4),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.star_rounded,
+                  size: 10,
+                  color: Color(0xFF7A4500),
+                ),
               ),
             ),
-          ),
-      ],
+          if (isMuted)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                padding: EdgeInsets.all(size * 0.07),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isNight
+                      ? const Color(0xFF3A2630)
+                      : const Color(0xFFFFF3F4),
+                  border: Border.all(
+                    color: isNight
+                        ? const Color(0xFFEF9A9A)
+                        : const Color(0xFFC4474E),
+                  ),
+                ),
+                child: Icon(
+                  Icons.mic_off_rounded,
+                  size: size * 0.2,
+                  color: isNight
+                      ? const Color(0xFFEF9A9A)
+                      : const Color(0xFFC4474E),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

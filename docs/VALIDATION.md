@@ -2,9 +2,9 @@
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,865,466 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.22` / versionCode **22**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`0b9c3c4bc0e1c5af2a121e5910d57d7435aa0076de176f1292e81783d9c8626c`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,963,702 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.23` / versionCode **23**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`7dacf2031f8665ed43ce04aaec1c568d6b535fa03ecbbde9dc06b8ce3aff7d7c`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,7 +15,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 全量 **177 项通过** |
+| Flutter 测试 | 全量 **178 项通过** |
 | `:app:testDebugUnitTest` | Kotlin **31 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
@@ -25,6 +25,12 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.23 统一头像与公网房管理
+
+- Wi-Fi、蓝牙和公网房统一使用由昵称缩写及稳定设备短码生成的头像，不增加近场协议负载；发言和禁麦状态直接显示在头像上。
+- 公网房主可直接在通话页成员头像下禁麦或移交房主；空间不足时使用“更多”入口展示完整成员网格。
+- 支持在建房时主动允许自部署服务器管理员收听，默认关闭；收听活动通过管理快照同步，并在所有房内客户端持续显示。
 
 ## dev.22 公网对讲入口
 

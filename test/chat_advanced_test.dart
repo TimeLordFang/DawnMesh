@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/audio/audio_io.dart';
@@ -39,17 +40,17 @@ void main() {
         type: FrameType.joinReq,
         senderId: 0,
         seq: 1,
-        payload:
-            JoinRequestPayload(
-              nickname: '新伙伴#2222',
-              sessionToken: Uint8List(16),
-            ).encode(),
+        payload: JoinRequestPayload(
+          nickname: '新伙伴#2222',
+          sessionToken: Uint8List(16),
+        ).encode(),
       );
       hostSession.handleIncomingFrame(joinReq);
 
       // 验证 Host 发出了 chatSync 历史补发帧
-      final syncFrames =
-          hostSentFrames.where((f) => f.type == FrameType.chatSync).toList();
+      final syncFrames = hostSentFrames
+          .where((f) => f.type == FrameType.chatSync)
+          .toList();
       expect(syncFrames.length, 2);
 
       // 模拟 Client 端接收这些 chatSync 帧
@@ -63,14 +64,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 2,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '房主小明#1111'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '新伙伴#2222'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主小明#1111'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '新伙伴#2222'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -101,14 +101,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '房主#0000'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '探索者#3F7A'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主#0000'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '探索者#3F7A'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -117,11 +116,10 @@ void main() {
           type: FrameType.chat,
           senderId: 2,
           seq: 10,
-          payload:
-              const ChatMessagePayload(
-                text: '我是探索者，大家好！',
-                senderCode: '3F7A',
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '我是探索者，大家好！',
+            senderCode: '3F7A',
+          ).encode(),
         ),
       );
 
@@ -134,18 +132,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 2,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '房主#0000'),
-                  RosterMember(
-                    memberId: 2,
-                    flags: 0x00,
-                    nickname: '银河旅行家#3F7A',
-                  ),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主#0000'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '银河旅行家#3F7A'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -159,11 +152,10 @@ void main() {
           type: FrameType.chat,
           senderId: 2,
           seq: 11,
-          payload:
-              const ChatMessagePayload(
-                text: '我改名了，现在叫银河旅行家',
-                senderCode: '3F7A',
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '我改名了，现在叫银河旅行家',
+            senderCode: '3F7A',
+          ).encode(),
         ),
       );
 
@@ -216,14 +208,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '伙伴#BBBB'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '探索者#AAAA'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '伙伴#BBBB'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '探索者#AAAA'),
+            ],
+          ).encode(),
         ),
       );
       await remoteSession.handleIncomingFrame(
@@ -231,12 +222,11 @@ void main() {
           type: FrameType.chat,
           senderId: 2,
           seq: 5,
-          payload:
-              const ChatMessagePayload(
-                text: '远端收到的一条消息',
-                senderCode: 'AAAA',
-                timestampMs: 1725450000000,
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '远端收到的一条消息',
+            senderCode: 'AAAA',
+            timestampMs: 1725450000000,
+          ).encode(),
         ),
       );
       expect(remoteSession.chatMessages.length, 1);
@@ -248,11 +238,10 @@ void main() {
           type: FrameType.chatDelete,
           senderId: 3,
           seq: 6,
-          payload:
-              const ChatDeletePayload(
-                senderCode: 'FAKE',
-                messageId: 'AAAA_1725450000000_5',
-              ).encode(),
+          payload: const ChatDeletePayload(
+            senderCode: 'FAKE',
+            messageId: 'AAAA_1725450000000_5',
+          ).encode(),
         ),
       );
       expect(remoteSession.chatMessages.length, 1); // 未被删除
@@ -263,11 +252,10 @@ void main() {
           type: FrameType.chatDelete,
           senderId: 2,
           seq: 7,
-          payload:
-              ChatDeletePayload(
-                senderCode: 'AAAA',
-                messageId: remoteMsgId,
-              ).encode(),
+          payload: ChatDeletePayload(
+            senderCode: 'AAAA',
+            messageId: remoteMsgId,
+          ).encode(),
         ),
       );
       expect(remoteSession.chatMessages, isEmpty); // 成功被移除
@@ -294,6 +282,10 @@ void main() {
       final host2 = AvatarFrameTheme.fromCode('BBBB', isHost: true);
       expect(host1.name, 'HostCrown');
       expect(host2.name, 'HostCrown');
+
+      expect(avatarInitials('Alice Smith#123'), 'AS');
+      expect(avatarInitials('曙光之声#321'), '曙');
+      expect(avatarInitials('radio#ABC1'), 'RA');
     });
 
     testWidgets('RoomChatSheet 气泡署名：同名冲突显隐与身份徽标', (tester) async {
@@ -313,23 +305,22 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(
-                    memberId: 1,
-                    flags: 0x01,
-                    nickname: '探索者#${DeviceCode.current}',
-                  ),
-                  RosterMember(
-                    memberId: 2,
-                    flags: 0x00,
-                    nickname: '探索者#$remoteExplorerCode',
-                  ),
-                  RosterMember(memberId: 3, flags: 0x00, nickname: '阿彬#222'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(
+                memberId: 1,
+                flags: 0x01,
+                nickname: '探索者#${DeviceCode.current}',
+              ),
+              RosterMember(
+                memberId: 2,
+                flags: 0x00,
+                nickname: '探索者#$remoteExplorerCode',
+              ),
+              RosterMember(memberId: 3, flags: 0x00, nickname: '阿彬#222'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -338,11 +329,10 @@ void main() {
           type: FrameType.chat,
           senderId: 2,
           seq: 2,
-          payload:
-              const ChatMessagePayload(
-                text: '我是远端同名探索者',
-                senderCode: remoteExplorerCode,
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '我是远端同名探索者',
+            senderCode: remoteExplorerCode,
+          ).encode(),
         ),
       );
 
@@ -352,11 +342,10 @@ void main() {
           type: FrameType.chat,
           senderId: 3,
           seq: 3,
-          payload:
-              const ChatMessagePayload(
-                text: '我是阿彬，我的名字独一无二',
-                senderCode: '222',
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '我是阿彬，我的名字独一无二',
+            senderCode: '222',
+          ).encode(),
         ),
       );
 

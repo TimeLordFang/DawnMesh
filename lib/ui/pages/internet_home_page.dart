@@ -178,6 +178,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
       builder: (_) => _CreateRoomDialog(
         initialName: '${widget.nickname}的网络聊天室',
         serverMaximum: info.maxRoomParticipants,
+        adminListeningSupported: info.adminListeningSupported,
       ),
     );
     if (options == null) return;
@@ -194,6 +195,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
         maxParticipants: options.maxParticipants,
         hostDisconnectTimeoutMinutes: options.hostTimeoutMinutes,
         invite: invite,
+        allowAdminListening: options.allowAdminListening,
       );
       if (!mounted) {
         await session.disposeSession();
@@ -580,19 +582,23 @@ class _CreateOptions {
     this.name,
     this.maxParticipants,
     this.hostTimeoutMinutes,
+    this.allowAdminListening,
   );
   final String name;
   final int maxParticipants;
   final int hostTimeoutMinutes;
+  final bool allowAdminListening;
 }
 
 class _CreateRoomDialog extends StatefulWidget {
   const _CreateRoomDialog({
     required this.initialName,
     required this.serverMaximum,
+    required this.adminListeningSupported,
   });
   final String initialName;
   final int serverMaximum;
+  final bool adminListeningSupported;
   @override
   State<_CreateRoomDialog> createState() => _CreateRoomDialogState();
 }
@@ -604,6 +610,7 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   );
   final _timeout = TextEditingController(text: '10');
   String? _error;
+  bool _allowAdminListening = false;
 
   void _submit() {
     final maximum = int.tryParse(_maximum.text.trim());
@@ -620,7 +627,10 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
       );
       return;
     }
-    Navigator.pop(context, _CreateOptions(_name.text.trim(), maximum, timeout));
+    Navigator.pop(
+      context,
+      _CreateOptions(_name.text.trim(), maximum, timeout, _allowAdminListening),
+    );
   }
 
   @override
@@ -659,6 +669,17 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
             '房主断线期间保留身份，超时后由在线成员接任。全房无人在线仍在 10 分钟后回收。',
             style: TextStyle(fontSize: 12),
           ),
+          if (widget.adminListeningSupported) ...[
+            const SizedBox(height: 10),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _allowAdminListening,
+              onChanged: (value) =>
+                  setState(() => _allowAdminListening = value),
+              title: const Text('允许服务器管理员实时收听'),
+              subtitle: const Text('开启后，房间密钥会加密托管在自部署服务器；监听期间所有成员都会看到提示。'),
+            ),
+          ],
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),

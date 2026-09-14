@@ -95,6 +95,7 @@ class InternetRoomSession extends ChangeNotifier {
   bool get canSpeak => _canSpeak;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
+  bool get adminListening => _summary?.adminListening ?? false;
   Stream<double> get waveStream => _waveController.stream;
 
   static Future<InternetRoomSession> create({
@@ -106,17 +107,19 @@ class InternetRoomSession extends ChangeNotifier {
     required int maxParticipants,
     required int hostDisconnectTimeoutMinutes,
     required RoomInvite invite,
+    bool allowAdminListening = false,
   }) async {
+    final random = Random.secure();
+    final key = Uint8List.fromList(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
     final grant = await api.createRoom(
       name: roomName,
       nickname: nickname,
       deviceId: deviceId,
       maxParticipants: maxParticipants,
       hostDisconnectTimeoutMinutes: hostDisconnectTimeoutMinutes,
-    );
-    final random = Random.secure();
-    final key = Uint8List.fromList(
-      List<int>.generate(32, (_) => random.nextInt(256)),
+      monitoringKey: allowAdminListening ? base64UrlEncode(key) : null,
     );
     final session = InternetRoomSession._(
       api: api,

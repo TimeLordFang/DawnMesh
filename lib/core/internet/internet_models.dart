@@ -49,12 +49,14 @@ class InternetServerInfo {
     required this.name,
     required this.maxRoomParticipants,
     required this.protocolVersion,
+    this.adminListeningSupported = false,
   });
 
   final String instanceId;
   final String name;
   final int maxRoomParticipants;
   final int protocolVersion;
+  final bool adminListeningSupported;
 
   factory InternetServerInfo.fromJson(Map<String, dynamic> json) =>
       InternetServerInfo(
@@ -62,6 +64,8 @@ class InternetServerInfo {
         name: json['name'] as String? ?? 'DawnMesh Server',
         maxRoomParticipants: json['maxRoomParticipants'] as int? ?? 25,
         protocolVersion: json['protocolVersion'] as int? ?? 1,
+        adminListeningSupported:
+            json['adminListeningSupported'] as bool? ?? false,
       );
 }
 
@@ -73,6 +77,8 @@ class InternetRoomSummary {
     required this.maxParticipants,
     required this.hostNickname,
     this.isHost = false,
+    this.adminListening = false,
+    this.adminListeningAvailable = false,
   });
 
   final String id;
@@ -81,6 +87,8 @@ class InternetRoomSummary {
   final int maxParticipants;
   final String hostNickname;
   final bool isHost;
+  final bool adminListening;
+  final bool adminListeningAvailable;
 
   factory InternetRoomSummary.fromJson(Map<String, dynamic> json) =>
       InternetRoomSummary(
@@ -90,6 +98,9 @@ class InternetRoomSummary {
         maxParticipants: json['maxParticipants'] as int? ?? 25,
         hostNickname: json['hostNickname'] as String? ?? '',
         isHost: json['isHost'] as bool? ?? false,
+        adminListening: json['adminListening'] as bool? ?? false,
+        adminListeningAvailable:
+            json['adminListeningAvailable'] as bool? ?? false,
       );
 }
 

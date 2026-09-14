@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/internet_room_session.dart';
+import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart' show VoiceMode;
 import '../theme/app_theme.dart';
+import '../widgets/avatar_frame.dart';
 import '../widgets/voice_mode_switch.dart';
 
 class InternetRoomPage extends StatefulWidget {
@@ -126,7 +128,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    builder: (_) => _MemberSheet(session: widget.session),
+    builder: (_) => _MemberSheet(
+      session: widget.session,
+      isNight: widget.isNight,
+      accent: widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy,
+    ),
   );
 
   void _showChat() => showModalBottomSheet<void>(
@@ -186,14 +192,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           ),
           actions: [
             IconButton(
-              tooltip: '成员',
-              onPressed: _showMembers,
-              icon: Badge(
-                label: Text('${session.members.length}'),
-                child: const Icon(Icons.group_outlined),
-              ),
-            ),
-            IconButton(
               tooltip: '消息',
               onPressed: _showChat,
               icon: const Icon(Icons.chat_bubble_outline_rounded),
@@ -218,17 +216,43 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     onToggle: () =>
                         setState(() => _inviteVisible = !_inviteVisible),
                   ),
+                if (session.adminListening)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: .14),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: .35),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.hearing_rounded, color: Colors.orange),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '服务器管理员正在实时收听本房间',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 72,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: session.members.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 10),
-                    itemBuilder: (_, index) {
-                      final member = session.members[index];
-                      return _MemberPill(member: member, accent: accent);
-                    },
+                  height: session.isHost ? 112 : 82,
+                  child: _InternetMemberStrip(
+                    session: session,
+                    accent: accent,
+                    isNight: widget.isNight,
+                    onMore: _showMembers,
+                    onError: _showError,
                   ),
                 ),
                 const Spacer(),
@@ -357,33 +381,191 @@ class _InviteCard extends StatelessWidget {
   );
 }
 
-class _MemberPill extends StatelessWidget {
-  const _MemberPill({required this.member, required this.accent});
-  final InternetMember member;
+class _InternetMemberStrip extends StatelessWidget {
+  const _InternetMemberStrip({
+    required this.session,
+    required this.accent,
+    required this.isNight,
+    required this.onMore,
+    required this.onError,
+  });
+
+  final InternetRoomSession session;
   final Color accent;
+  final bool isNight;
+  final VoidCallback onMore;
+  final ValueChanged<String> onError;
+
   @override
-  Widget build(BuildContext context) => Container(
-    width: 64,
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: Column(
-      children: [
-        CircleAvatar(
-          backgroundColor: member.isSpeaking
-              ? accent
-              : accent.withValues(alpha: .14),
-          foregroundColor: member.isSpeaking ? Colors.white : accent,
-          child: Icon(
-            member.canSpeak ? Icons.person_rounded : Icons.mic_off_rounded,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const itemExtent = 78.0;
+      final capacity = (constraints.maxWidth / itemExtent).floor().clamp(1, 12);
+      final overflow = session.members.length > capacity;
+      final visibleCount = overflow
+          ? (capacity - 1).clamp(0, session.members.length)
+          : session.members.length;
+      return Row(
+        mainAxisAlignment: visibleCount < capacity
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.start,
+        children: [
+          for (final member in session.members.take(visibleCount))
+            _MemberPill(
+              member: member,
+              session: session,
+              accent: accent,
+              isNight: isNight,
+              onError: onError,
+            ),
+          if (overflow)
+            _MoreMembersPill(
+              hiddenCount: session.members.length - visibleCount,
+              accent: accent,
+              onTap: onMore,
+            ),
+        ],
+      );
+    },
+  );
+}
+
+class _MemberPill extends StatelessWidget {
+  const _MemberPill({
+    required this.member,
+    required this.session,
+    required this.accent,
+    required this.isNight,
+    required this.onError,
+  });
+  final InternetMember member;
+  final InternetRoomSession session;
+  final Color accent;
+  final bool isNight;
+  final ValueChanged<String> onError;
+
+  Future<void> _setVoice() async {
+    try {
+      await session.setMemberCanSpeak(member.id, !member.canSpeak);
+    } catch (error) {
+      onError('$error');
+    }
+  }
+
+  Future<void> _transfer(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移交房主'),
+        content: Text('确定将房主移交给“${member.nickname}”吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          member.nickname,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11),
-        ),
-      ],
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认移交'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await session.transferHost(member.id);
+    } catch (error) {
+      onError('$error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (displayName, code) = DeviceCode.split(member.nickname);
+    final manageable = session.isHost && member.id != session.memberId;
+    return SizedBox(
+      width: 78,
+      child: Column(
+        children: [
+          AvatarFrame(
+            senderCode: code ?? member.id,
+            nickname: displayName,
+            isHost: member.isHost,
+            isSpeaking: member.isSpeaking,
+            isMuted: !member.canSpeak,
+            size: 48,
+            isNight: isNight,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11),
+          ),
+          if (manageable)
+            SizedBox(
+              height: 30,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: member.canSpeak ? '关闭麦克风' : '恢复发言',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    onPressed: _setVoice,
+                    icon: Icon(
+                      member.canSpeak
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded,
+                      color: accent,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '移交房主',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    onPressed: () => _transfer(context),
+                    icon: Icon(Icons.workspace_premium_outlined, color: accent),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoreMembersPill extends StatelessWidget {
+  const _MoreMembersPill({
+    required this.hiddenCount,
+    required this.accent,
+    required this.onTap,
+  });
+  final int hiddenCount;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 78,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: accent.withValues(alpha: .14),
+            foregroundColor: accent,
+            child: const Icon(Icons.more_horiz_rounded),
+          ),
+          const SizedBox(height: 4),
+          Text('更多 $hiddenCount', style: const TextStyle(fontSize: 11)),
+        ],
+      ),
     ),
   );
 }
@@ -493,8 +675,14 @@ class _AutomaticTalkDisc extends StatelessWidget {
 }
 
 class _MemberSheet extends StatefulWidget {
-  const _MemberSheet({required this.session});
+  const _MemberSheet({
+    required this.session,
+    required this.isNight,
+    required this.accent,
+  });
   final InternetRoomSession session;
+  final bool isNight;
+  final Color accent;
   @override
   State<_MemberSheet> createState() => _MemberSheetState();
 }
@@ -520,55 +708,41 @@ class _MemberSheetState extends State<_MemberSheet> {
   Widget build(BuildContext context) => DraggableScrollableSheet(
     expand: false,
     initialChildSize: .65,
-    builder: (_, controller) => ListView(
+    builder: (_, controller) => CustomScrollView(
       controller: controller,
-      padding: const EdgeInsets.all(18),
-      children: [
-        const Text(
-          '房间成员',
-          style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        for (final member in widget.session.members)
-          ListTile(
-            leading: CircleAvatar(
-              child: Icon(member.canSpeak ? Icons.person : Icons.mic_off),
+      slivers: [
+        const SliverPadding(
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 12),
+          sliver: SliverToBoxAdapter(
+            child: Text(
+              '全部成员',
+              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
             ),
-            title: Text(member.nickname),
-            subtitle: Text(
-              member.isHost ? '房主' : (member.canSpeak ? '可发言' : '已被房主禁麦'),
-            ),
-            trailing:
-                widget.session.isHost && member.id != widget.session.memberId
-                ? PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      try {
-                        if (value == 'voice') {
-                          await widget.session.setMemberCanSpeak(
-                            member.id,
-                            !member.canSpeak,
-                          );
-                        }
-                        if (value == 'host') {
-                          await widget.session.transferHost(member.id);
-                        }
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('$error')));
-                        }
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'voice',
-                        child: Text(member.canSpeak ? '关闭麦克风' : '恢复发言资格'),
-                      ),
-                      const PopupMenuItem(value: 'host', child: Text('移交房主')),
-                    ],
-                  )
-                : null,
           ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+          sliver: SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _MemberPill(
+                member: widget.session.members[index],
+                session: widget.session,
+                accent: widget.accent,
+                isNight: widget.isNight,
+                onError: (message) =>
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(message))),
+              ),
+              childCount: widget.session.members.length,
+            ),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 96,
+              mainAxisExtent: 112,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 8,
+            ),
+          ),
+        ),
       ],
     ),
   );
@@ -628,35 +802,52 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
                   itemCount: widget.session.messages.length,
                   itemBuilder: (_, index) {
                     final message = widget.session.messages[index];
-                    return Align(
-                      alignment: message.isMine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 9),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        constraints: const BoxConstraints(maxWidth: 300),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!message.isMine)
-                              Text(
-                                message.senderName,
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            Text(message.text),
-                          ],
-                        ),
+                    final member = widget.session.members
+                        .where((item) => item.id == message.senderId)
+                        .firstOrNull;
+                    final (senderName, senderCode) = DeviceCode.split(
+                      message.senderName,
+                    );
+                    final avatar = AvatarFrame(
+                      senderCode: senderCode ?? message.senderId,
+                      nickname: senderName,
+                      isHost: member?.isHost ?? false,
+                      size: 34,
+                      isNight: Theme.of(context).brightness == Brightness.dark,
+                    );
+                    final bubble = Container(
+                      margin: const EdgeInsets.only(bottom: 9),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
                       ),
+                      constraints: const BoxConstraints(maxWidth: 270),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!message.isMine)
+                            Text(
+                              senderName,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          Text(message.text),
+                        ],
+                      ),
+                    );
+                    return Row(
+                      mainAxisAlignment: message.isMine
+                          ? MainAxisAlignment.end
+                          : MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: message.isMine
+                          ? [bubble, const SizedBox(width: 8), avatar]
+                          : [avatar, const SizedBox(width: 8), bubble],
                     );
                   },
                 ),

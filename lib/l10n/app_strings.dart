@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.22\nThe Internet intercom entry is now always visible on the home screen, with direct access to self-hosted server settings.\nIncludes end-to-end encrypted audio, configurable servers, and host moderation.'
-          : '0.1.0-dev.22\n公网对讲入口现在完整显示在首页，可直接进入自部署服务器配置。\n支持语音端到端加密、切换服务器和房主管理。';
+          ? '0.1.0-dev.23\nUnified generated member avatars now show speaking and muted state across all room modes.\nInternet hosts can moderate from member avatars, and opted-in rooms support visible administrator listening.'
+          : '0.1.0-dev.23\n所有房间模式统一使用轻量成员头像，并直接显示发言和禁麦状态。\n公网房主可在头像下管理成员；经房主授权的房间支持有明确提示的管理员实时收听。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn
