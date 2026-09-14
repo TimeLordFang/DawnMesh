@@ -26,6 +26,10 @@ internal object CallControlBridge {
                 automatic = call.argument<Boolean>("automatic") == true
                 muted = call.argument<Boolean>("muted") == true
                 pressed = active && !automatic && !muted && call.argument<Boolean>("pressed") == true
+                CallControlBridge.context?.get()?.let {
+                    if (active) IntercomForegroundService.start(it)
+                    else IntercomForegroundService.stop(it)
+                }
                 notifyState()
                 result.success(null)
             }

@@ -1,10 +1,10 @@
-# 验证记录（2026-09-10）
+# 验证记录（2026-09-14）
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**58,480,761 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.20` / versionCode **20**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`57271ae4449a732a99940b0015c35ca04e67506950b01bd111b822a44128cf5b`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,865,402 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.21` / versionCode **21**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`0b9c3c4bc0e1c5af2a121e5910d57d7435aa0076de176f1292e81783d9c8626c`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,7 +15,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 全量 **174 项通过** |
+| Flutter 测试 | 全量 **177 项通过** |
 | `:app:testDebugUnitTest` | Kotlin **31 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
@@ -25,6 +25,16 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.21 公网对讲首版
+
+- 首页新增“网络对讲”，可用 Android 安全存储保存和切换多个自部署 HTTPS 服务器；服务端实例 ID 变化会中止连接，HTTP 客户端不跟随重定向携带凭证。
+- 公网房默认 25 人，部署者可配置更高上限；创建时房主可设置 1–60 分钟断线保留时间。普通成员恢复和全房无人在线回收均为 10 分钟，房主超时后移交给最早加入的在线成员。
+- 6 位邀请码只在客户端间执行 SPAKE2；随机媒体房间密钥不发给服务端。LiveKit/WebRTC 音频启用 E2EE，文字消息使用用途分离的 AES-256-GCM 密钥、发送端绑定和防重放窗口。
+- 房主可修改房间名、关闭或恢复成员发言资格、主动移交房主及解散房间。LiveKit 初始令牌禁止发布音频，管理通道就绪后才按 SQLite 中的当前权限放行；恢复令牌每次成功使用后轮换。
+- App 层协调管理通道和媒体通道的单次恢复，避免两个重连同时轮换凭证。公网通话继续复用前台服务、锁屏按住说话/自动通话及静音控件。
+- 独立项目 `/Users/judoon/workspace/DawnMeshServer` 包含 Go 控制服务、SQLite 状态、LiveKit Compose、Nginx 对接示例、API 文档和初始化脚本。服务端执行 `go test -race ./...` 与 `go vet ./...` 均通过。
+- 本机完成 Flutter 静态分析、177 项测试、release 构建、v2 签名及 16 KB ZIP 对齐校验。公网 UDP/TCP/TURN、25 人容量、耳麦路由和不同 Android 厂商后台行为仍由实际部署后的真机验收确认。
 
 ## dev.20 蓝牙音频测量与运行时调参
 

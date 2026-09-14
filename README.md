@@ -5,13 +5,15 @@
 [![License](https://img.shields.io/github/license/TimeLordFang/DawnMesh)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#兼容性)
 
-一款面向近距离场景的去中心化局域语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接建房和加入，不依赖中心服务器；日常对讲不需要互联网。
+一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前开发版本：`0.1.0-dev.20`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前开发版本：`0.1.0-dev.21`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
 - **三种近场链路**：同一局域网、Wi-Fi Direct、BLE 发现 + L2CAP 数据通道。
+- **自部署公网房**：可保存并切换多个 HTTPS 服务器，默认 25 人；公网语音使用 LiveKit/WebRTC，语音与聊天均端到端加密。
+- **公网房主管理**：支持修改房间名、关闭成员麦克风、移交房主，以及建房时设置 1–60 分钟的房主断线保留时间。
 - **两种发言方式**：按住对讲，或检测到语音后自动发送；Wi-Fi 房和蓝牙房均支持。
 - **邀请码加密**：建房生成随机 6 位数字，使用 PAKE 验证后分发独立随机房间密钥；语音、消息和控制帧使用 AES-256-GCM。
 - **断线恢复**：链路意外中断后最多自动重试 10 分钟，蓝牙房主重新开启蓝牙后会重建广播、监听端口和动态 PSM。
@@ -22,7 +24,7 @@
 
 ## 安全与隐私
 
-房间邀请码仅保存在当前会话内存中，文字聊天退出后从本机内存清除。应用没有账号、云端服务或遥测上传；只有用户主动检查更新时会连接 GitHub。
+房间邀请码仅保存在当前会话内存中，文字聊天退出后从本机内存清除。应用没有账号、预置公网服务或遥测上传。使用公网房时，App 只连接用户选定的自部署服务器；主动检查更新时会连接 GitHub。
 
 6 位邀请码适合当面口述和临时小组访问控制。它不能抵御持码成员冒名，也不等同于长期高强度密码。请只把邀请码告诉可信成员。
 
@@ -30,7 +32,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.20-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.21-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -109,12 +111,14 @@ GitHub Actions 在 [`.github/workflows/release.yml`](.github/workflows/release.y
 
 ```text
 android/   Android 宿主、BLE/L2CAP、Wi-Fi Direct、音频与前台服务
-lib/       Flutter 界面、会话、发现、传输、加密和调试日志
+lib/       Flutter 界面、近场/公网会话、发现、传输、加密和调试日志
 native/    C++ 帧协议、环形缓冲和 PCM 处理
 test/      Dart/Flutter 回归测试
 docs/      安全审查、兼容性、验证记录和发布说明
 scripts/   本机工具链与校验脚本
 ```
+
+公网控制服务和 LiveKit Compose 部署文件位于独立的同级项目 `DawnMeshServer`，其 README 包含 Nginx、媒体端口、备份和升级说明。
 
 ## 兼容性
 

@@ -20,6 +20,7 @@ import '../theme/app_theme.dart';
 import '../transitions/stage_choreography.dart';
 import '../../core/update/update_service.dart';
 import '../../l10n/app_strings.dart';
+import 'internet_home_page.dart';
 
 /// 首页前景：昵称、房型、建房/扫描按钮、附近房间列表。
 ///
@@ -438,44 +439,76 @@ class _HomeContentState extends State<HomeContent> {
 
                   const SizedBox(height: 14),
 
-                  // 2. 房型选择（WiFi 房 / 蓝牙房）
+                  // 2. 房型选择
                   StageExitItem(
                     stage: stage,
                     index: 1,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
-                      // IntrinsicHeight + stretch：两张卡等高，以内容较多的
-                      // 那张为准；否则中英文折行数不同时一高一低不齐整。
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _ModeSelectChip(
-                                icon: Icons.wifi,
-                                title: s.wifiRoom,
-                                subtitle: s.wifiRoomChipSubtitle,
-                                isSelected:
-                                    _selectedMode == RoomMode.wifiFullDuplex,
-                                isNight: isNight,
-                                onTap: () =>
-                                    _selectMode(RoomMode.wifiFullDuplex),
-                              ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final cardWidth = (constraints.maxWidth - 12) / 2;
+                          return SizedBox(
+                            height: 164,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              clipBehavior: Clip.none,
+                              children: [
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _ModeSelectChip(
+                                    icon: Icons.wifi,
+                                    title: s.wifiRoom,
+                                    subtitle: s.wifiRoomChipSubtitle,
+                                    isSelected:
+                                        _selectedMode ==
+                                        RoomMode.wifiFullDuplex,
+                                    isNight: isNight,
+                                    onTap: () =>
+                                        _selectMode(RoomMode.wifiFullDuplex),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _ModeSelectChip(
+                                    icon: Icons.bluetooth,
+                                    title: s.bluetoothRoom,
+                                    subtitle: s.bleRoomChipSubtitle,
+                                    isSelected:
+                                        _selectedMode == RoomMode.bluetoothPtt,
+                                    isNight: isNight,
+                                    onTap: () =>
+                                        _selectMode(RoomMode.bluetoothPtt),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _ModeSelectChip(
+                                    icon: Icons.public_rounded,
+                                    title: '网络对讲',
+                                    subtitle: '通过自部署服务器，与远方的人安全对讲',
+                                    isSelected: false,
+                                    isNight: isNight,
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Navigator.push<void>(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => InternetHomePage(
+                                            isNight: widget.isNight,
+                                            nickname: _nickname,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _ModeSelectChip(
-                                icon: Icons.bluetooth,
-                                title: s.bluetoothRoom,
-                                subtitle: s.bleRoomChipSubtitle,
-                                isSelected:
-                                    _selectedMode == RoomMode.bluetoothPtt,
-                                isNight: isNight,
-                                onTap: () => _selectMode(RoomMode.bluetoothPtt),
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),

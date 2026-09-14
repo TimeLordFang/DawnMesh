@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.20\nAdded Bluetooth audio pipeline measurements and persistent advanced controls.\nThe debug console now reports capture, encryption, platform-channel, socket, jitter, and playback timing.'
-          : '0.1.0-dev.20\n新增蓝牙音频全链路测量和可持久化的高级参数控制。\n调试控制台会显示采集、加密、平台通道、Socket、抖动缓冲及播放阶段的耗时。';
+          ? '0.1.0-dev.21\nAdded self-hosted Internet intercom rooms with end-to-end encrypted audio, configurable servers, and host moderation.\nHosts can set a 1–60 minute recovery window, rename rooms, mute members, and hand over ownership.'
+          : '0.1.0-dev.21\n新增支持自部署服务端的公网对讲房，语音端到端加密，并可配置和切换服务端。\n房主可设置 1–60 分钟断线保留时长、修改房间名、禁言成员和移交房主。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn
