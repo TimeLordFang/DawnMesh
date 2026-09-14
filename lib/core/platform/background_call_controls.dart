@@ -16,6 +16,7 @@ class BackgroundCallControls {
 
   Future<void> update({
     required bool bluetooth,
+    bool internet = false,
     required bool automatic,
     required bool pressed,
     required bool muted,
@@ -25,6 +26,7 @@ class BackgroundCallControls {
       await channel.invokeMethod('update', {
         'active': true,
         'bluetooth': bluetooth,
+        'internet': internet,
         'automatic': automatic,
         'pressed': pressed,
         'muted': muted,

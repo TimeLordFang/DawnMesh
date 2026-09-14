@@ -1,8 +1,11 @@
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
 
@@ -12,6 +15,7 @@ import '../security/room_invite.dart';
 import '../security/session_crypto.dart';
 import '../security/spake2.dart';
 import '../session/room_session.dart' show VoiceMode;
+import 'internet_audio_profile.dart';
 import 'internet_models.dart';
 import 'internet_room_api.dart';
 
@@ -49,6 +53,8 @@ class InternetRoomSession extends ChangeNotifier {
     required this.resumeToken,
     required this.isHost,
     required this._roomKey,
+    required this._audioProfile,
+    required this._meteredNetwork,
   });
 
   final InternetRoomApi api;
@@ -67,6 +73,7 @@ class InternetRoomSession extends ChangeNotifier {
   EventsListener<RoomEvent>? _listener;
   WebSocket? _eventsSocket;
   StreamSubscription<dynamic>? _eventSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _eventReconnectTimer;
   Future<InternetConnectionGrant>? _resumeFuture;
   DateTime? _reconnectStartedAt;
@@ -76,6 +83,9 @@ class InternetRoomSession extends ChangeNotifier {
   bool _canSpeak = true;
   bool _pttPressed = false;
   bool _speakerOn = true;
+  InternetAudioProfile _audioProfile;
+  bool _meteredNetwork;
+  bool _audioProfileManuallySelected = false;
   VoiceMode _voiceMode = VoiceMode.pushToTalk;
   InternetConnectionState _connectionState = InternetConnectionState.connecting;
   InternetRoomSummary? _summary;
@@ -95,6 +105,9 @@ class InternetRoomSession extends ChangeNotifier {
   bool get canSpeak => _canSpeak;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
+  InternetAudioProfile get audioProfile => _audioProfile;
+  bool get isMeteredNetwork => _meteredNetwork;
+  int get audioBitrate => _audioProfile.bitrateFor(metered: _meteredNetwork);
   bool get adminListening => _summary?.adminListening ?? false;
   Stream<double> get waveStream => _waveController.stream;
 
@@ -109,6 +122,7 @@ class InternetRoomSession extends ChangeNotifier {
     required RoomInvite invite,
     bool allowAdminListening = false,
   }) async {
+    final networkFuture = _readNetworkAudioRecommendation();
     final random = Random.secure();
     final key = Uint8List.fromList(
       List<int>.generate(32, (_) => random.nextInt(256)),
@@ -121,6 +135,7 @@ class InternetRoomSession extends ChangeNotifier {
       hostDisconnectTimeoutMinutes: hostDisconnectTimeoutMinutes,
       monitoringKey: allowAdminListening ? base64UrlEncode(key) : null,
     );
+    final network = await networkFuture;
     final session = InternetRoomSession._(
       api: api,
       profile: profile,
@@ -130,6 +145,8 @@ class InternetRoomSession extends ChangeNotifier {
       resumeToken: grant.resumeToken,
       isHost: true,
       roomKey: key,
+      audioProfile: network.$2,
+      meteredNetwork: network.$1,
     ).._summary = grant.room;
     await session._start(grant, invite: invite);
     return session;
@@ -143,12 +160,14 @@ class InternetRoomSession extends ChangeNotifier {
     required InternetRoomSummary room,
     required RoomInvite invite,
   }) async {
+    final networkFuture = _readNetworkAudioRecommendation();
     final admission = await api.beginAdmission(
       roomId: room.id,
       nickname: nickname,
       deviceId: deviceId,
     );
     final result = await _completeAdmission(profile, admission, invite);
+    final network = await networkFuture;
     final session =
         InternetRoomSession._(
             api: api,
@@ -159,6 +178,8 @@ class InternetRoomSession extends ChangeNotifier {
             resumeToken: result.grant.resumeToken,
             isHost: false,
             roomKey: result.roomKey,
+            audioProfile: network.$2,
+            meteredNetwork: network.$1,
           )
           .._summary = result.grant.room
           .._hostPasswordScalar = result.passwordScalar;
@@ -324,6 +345,9 @@ class InternetRoomSession extends ChangeNotifier {
     }
     await _connectEvents(grant.eventsUrl);
     await _connectLiveKit(grant);
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      (results) => unawaited(_handleConnectivityChanged(results)),
+    );
     await _backgroundControls.bind(_handleBackgroundCommand);
     await _syncBackgroundControls();
   }
@@ -332,6 +356,21 @@ class InternetRoomSession extends ChangeNotifier {
   SessionCipher? _chatCipher;
 
   Future<void> _connectLiveKit(InternetConnectionGrant grant) async {
+    // DawnMesh is an intercom rather than an exclusive phone call. Keeping
+    // LiveKit's communication route while declining exclusive audio focus lets
+    // turn-by-turn navigation remain audible and mix/duck according to Android.
+    await AudioManager.instance.setAudioSessionOptions(
+      const AudioSessionOptions.communication(
+        android: AndroidAudioSessionConfiguration(
+          audioMode: AndroidAudioMode.inCommunication,
+          manageAudioFocus: false,
+          focusMode: AndroidAudioFocusMode.gainTransientMayDuck,
+          streamType: AndroidAudioStreamType.voiceCall,
+          usageType: AndroidAudioAttributesUsageType.voiceCommunication,
+          contentType: AndroidAudioAttributesContentType.speech,
+        ),
+      ),
+    );
     final provider = await BaseKeyProvider.create();
     await provider.setKey(base64UrlEncode(_roomKey));
     final room = Room(
@@ -343,10 +382,12 @@ class InternetRoomSession extends ChangeNotifier {
           voiceIsolation: true,
           stopAudioCaptureOnMute: false,
         ),
-        defaultAudioPublishOptions: const AudioPublishOptions(
-          encoding: AudioEncoding(maxBitrate: 16000),
+        defaultAudioPublishOptions: AudioPublishOptions(
+          encoding: AudioEncoding(maxBitrate: audioBitrate),
           dtx: true,
-          red: true,
+          // LiveKit disables RED when E2EE is enabled. Keep it explicit so the
+          // profile's bandwidth estimate never assumes redundant packets.
+          red: false,
         ),
         encryption: E2EEOptions(keyProvider: provider),
       ),
@@ -403,8 +444,14 @@ class InternetRoomSession extends ChangeNotifier {
     await _applyMicrophone(
       _voiceMode == VoiceMode.automatic && !_muted && _canSpeak,
     );
+    await _applyAudioBitrate();
     _refreshMembers();
-    AppLog.info('DawnInternet', '已连接公网房「${summary.name}」，E2EE 已启用');
+    AppLog.info(
+      'DawnInternet',
+      '已连接公网房「${summary.name}」，E2EE 已启用；音频=${_audioProfile.label}，'
+          '网络=${_meteredNetwork ? '移动/计费' : 'Wi-Fi/有线'}，'
+          '上限=${audioBitrate}bps，DTX=true',
+    );
   }
 
   Future<void> _connectEvents(String eventsUrl) async {
@@ -746,6 +793,19 @@ class InternetRoomSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAudioProfile(InternetAudioProfile value) async {
+    if (_closed) return;
+    _audioProfileManuallySelected = true;
+    if (_audioProfile == value) return;
+    _audioProfile = value;
+    await _applyAudioBitrate();
+    AppLog.info(
+      'DawnInternet',
+      '公网音频档位=${value.name}，网络=${_meteredNetwork ? '移动/计费' : 'Wi-Fi/有线'}，上限=${audioBitrate}bps，DTX=true',
+    );
+    notifyListeners();
+  }
+
   Future<void> setPtt(bool pressed) async {
     if (_voiceMode != VoiceMode.pushToTalk || _closed || !_canSpeak || _muted) {
       pressed = false;
@@ -773,6 +833,72 @@ class InternetRoomSession extends ChangeNotifier {
     await _livekitRoom?.localParticipant?.setMicrophoneEnabled(
       enabled && _canSpeak && !_muted,
     );
+    if (enabled) await _applyAudioBitrate();
+  }
+
+  Future<void> _applyAudioBitrate() async {
+    final publication = _livekitRoom?.localParticipant
+        ?.getTrackPublicationBySource(TrackSource.microphone);
+    final sender = publication?.track?.sender;
+    if (sender == null) return;
+    final parameters = sender.parameters;
+    final encodings = parameters.encodings;
+    if (encodings == null || encodings.isEmpty) return;
+    for (final encoding in encodings) {
+      encoding.maxBitrate = audioBitrate;
+    }
+    final applied = await sender.setParameters(parameters);
+    if (!applied) {
+      AppLog.warn('DawnInternet', 'WebRTC 未接受 ${audioBitrate}bps 音频码率更新');
+    }
+  }
+
+  static bool _isMeteredConnection(List<ConnectivityResult> results) {
+    if (results.contains(ConnectivityResult.wifi) ||
+        results.contains(ConnectivityResult.ethernet)) {
+      return false;
+    }
+    // VPN/other cannot reliably reveal the underlying bearer. Treat unknown
+    // transports as metered so they do not accidentally consume mobile data.
+    return true;
+  }
+
+  static Future<(bool, InternetAudioProfile)>
+  _readNetworkAudioRecommendation() async {
+    try {
+      final metered = _isMeteredConnection(
+        await Connectivity().checkConnectivity(),
+      );
+      return (
+        metered,
+        InternetAudioProfileDetails.recommended(metered: metered),
+      );
+    } catch (error) {
+      AppLog.warn('DawnInternet', '无法识别当前网络，默认使用省流档：$error');
+      return (true, InternetAudioProfile.dataSaver);
+    }
+  }
+
+  Future<void> _handleConnectivityChanged(
+    List<ConnectivityResult> results,
+  ) async {
+    if (_closed) return;
+    final metered = _isMeteredConnection(results);
+    final recommended = InternetAudioProfileDetails.recommended(
+      metered: metered,
+    );
+    final nextProfile = _audioProfileManuallySelected
+        ? _audioProfile
+        : recommended;
+    if (_meteredNetwork == metered && _audioProfile == nextProfile) return;
+    _meteredNetwork = metered;
+    _audioProfile = nextProfile;
+    await _applyAudioBitrate();
+    AppLog.info(
+      'DawnInternet',
+      '网络切换为 ${metered ? '移动/计费网络' : 'Wi-Fi/有线网络'}，公网音频调整为 ${_audioProfile.label} ${audioBitrate}bps',
+    );
+    notifyListeners();
   }
 
   Future<void> setSpeakerphone(bool enabled) async {
@@ -795,6 +921,7 @@ class InternetRoomSession extends ChangeNotifier {
 
   Future<void> _syncBackgroundControls() => _backgroundControls.update(
     bluetooth: false,
+    internet: true,
     automatic: _voiceMode == VoiceMode.automatic,
     pressed: _pttPressed,
     muted: _muted || !_canSpeak,
@@ -826,12 +953,16 @@ class InternetRoomSession extends ChangeNotifier {
     if (_closed) return;
     _closed = true;
     _eventReconnectTimer?.cancel();
+    await _connectivitySubscription?.cancel();
     await _backgroundControls.close();
     await _eventSubscription?.cancel();
     await _eventsSocket?.close();
     await _listener?.dispose();
     await _livekitRoom?.disconnect();
     await _livekitRoom?.dispose();
+    await AudioManager.instance.setAudioSessionManagementMode(
+      AudioSessionManagementMode.automatic,
+    );
     await _waveController.close();
     _roomKey.fillRange(0, _roomKey.length, 0);
     api.close();

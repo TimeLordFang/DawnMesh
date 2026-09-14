@@ -11,6 +11,7 @@ internal object CallControlBridge {
     private var context: WeakReference<Context>? = null
     var active = false; private set
     var bluetooth = false; private set
+    var internet = false; private set
     var automatic = false; private set
     var pressed = false; private set
     var muted = false; private set
@@ -23,6 +24,7 @@ internal object CallControlBridge {
                 if (call.method != "update") { result.notImplemented(); return@setMethodCallHandler }
                 active = call.argument<Boolean>("active") == true
                 bluetooth = call.argument<Boolean>("bluetooth") == true
+                internet = call.argument<Boolean>("internet") == true
                 automatic = call.argument<Boolean>("automatic") == true
                 muted = call.argument<Boolean>("muted") == true
                 pressed = active && !automatic && !muted && call.argument<Boolean>("pressed") == true

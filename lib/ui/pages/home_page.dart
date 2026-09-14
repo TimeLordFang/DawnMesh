@@ -451,7 +451,7 @@ class _HomeContentState extends State<HomeContent> {
                           return Column(
                             children: [
                               SizedBox(
-                                height: 148,
+                                height: 100,
                                 child: Row(
                                   children: [
                                     SizedBox(
@@ -1291,7 +1291,7 @@ class _ModeSelectChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
           color: isSelected ? activeColor.withValues(alpha: 0.12) : cardBg,
           borderRadius: BorderRadius.circular(18),
@@ -1302,36 +1302,50 @@ class _ModeSelectChip extends StatelessWidget {
             width: isSelected ? 2.0 : 1.0,
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: isSelected ? activeColor : textSecondary,
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: activeColor.withValues(alpha: isSelected ? .18 : .08),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                icon,
+                size: 19,
+                color: isSelected ? activeColor : textSecondary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                     title,
-                    maxLines: 2,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: isSelected ? activeColor : textPrimary,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 15,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: textSecondary, fontSize: 13),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textSecondary,
+                      fontSize: 12,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

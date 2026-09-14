@@ -97,7 +97,8 @@ class IntercomForegroundService : Service() {
                     NOTIFICATION_ID,
                     notification(this),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
                 )
             } else startForeground(NOTIFICATION_ID, notification(this))
             running = true

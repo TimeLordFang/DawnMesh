@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.23\nUnified generated member avatars now show speaking and muted state across all room modes.\nInternet hosts can moderate from member avatars, and opted-in rooms support visible administrator listening.'
-          : '0.1.0-dev.23\n所有房间模式统一使用轻量成员头像，并直接显示发言和禁麦状态。\n公网房主可在头像下管理成员；经房主授权的房间支持有明确提示的管理员实时收听。';
+          ? '1.0.0-beta.1\nInternet rooms now offer clarity, balanced, and data-saver audio profiles with automatic network-aware defaults.\nNavigation prompts can mix with intercom audio, and lock-screen calls receive stronger foreground playback protection.'
+          : '1.0.0-beta.1\n公网房新增清晰、平衡、省流三档，并会根据 Wi-Fi 或移动网络自动选择默认档位。\n导航播报可与对讲声音叠加，锁屏通话增加前台播放保护。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

@@ -268,7 +268,11 @@ class LockScreenTalkActivity : Activity() {
             CallControlBridge.pressed -> "正在发送 · 滑出圆环也可停止"
             else -> "按住圆环发言 · 松开恢复收听"
         }
-        roomType.text = if (CallControlBridge.bluetooth) "蓝牙房间" else "Wi-Fi 房间"
+        roomType.text = when {
+            CallControlBridge.internet -> "公网房间"
+            CallControlBridge.bluetooth -> "蓝牙房间"
+            else -> "Wi-Fi 房间"
+        }
         modes.visibility = View.VISIBLE
         for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
             button.isSelected = selected

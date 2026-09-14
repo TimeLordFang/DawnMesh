@@ -7,12 +7,13 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前开发版本：`0.1.0-dev.23`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前测试版本：`1.0.0-beta.1`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
 - **三种近场链路**：同一局域网、Wi-Fi Direct、BLE 发现 + L2CAP 数据通道。
 - **自部署公网房**：可保存并切换多个 HTTPS 服务器，默认 25 人；公网语音使用 LiveKit/WebRTC，语音与聊天均端到端加密。
+- **公网音频三档**：清晰、平衡、省流可在通话中切换；Wi-Fi 默认提高清晰度，移动网络默认使用低码率 Opus 与 DTX 静音抑制。
 - **统一成员头像**：Wi-Fi、蓝牙和公网房均按昵称缩写及设备短码生成轻量头像，正在发言和禁麦状态可以直接辨认。
 - **公网房主管理**：支持修改房间名，并可直接在通话页头像下关闭成员麦克风或移交房主；建房时可设置 1–60 分钟的房主断线保留时间。
 - **两种发言方式**：按住对讲，或检测到语音后自动发送；Wi-Fi 房和蓝牙房均支持。
@@ -33,7 +34,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载名称类似 `DawnMesh-0.1.0-dev.23-release.apk` 的文件。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.0.0-beta.1-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/internet/internet_audio_profile.dart';
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/internet_room_session.dart';
 import '../../core/session/device_code.dart';
@@ -178,7 +179,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
-                stateText,
+                '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
                   color:
@@ -317,6 +320,10 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                               : Icons.hearing_rounded,
                         ),
                       ),
+                      _InternetAudioProfileMenu(
+                        session: session,
+                        accent: accent,
+                      ),
                       IconButton.filled(
                         tooltip: '离开',
                         style: IconButton.styleFrom(
@@ -336,6 +343,83 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       ),
     );
   }
+}
+
+class _InternetAudioProfileMenu extends StatelessWidget {
+  const _InternetAudioProfileMenu({
+    required this.session,
+    required this.accent,
+  });
+
+  final InternetRoomSession session;
+  final Color accent;
+
+  IconData _icon(InternetAudioProfile profile) => switch (profile) {
+    InternetAudioProfile.clarity => Icons.high_quality_rounded,
+    InternetAudioProfile.balanced => Icons.tune_rounded,
+    InternetAudioProfile.dataSaver => Icons.data_saver_on_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<InternetAudioProfile>(
+    tooltip:
+        '音频档位：${session.audioProfile.label} · '
+        '${session.isMeteredNetwork ? '移动/计费网络' : 'Wi-Fi/有线网络'} · '
+        '${session.audioBitrate ~/ 1000}kbps',
+    initialValue: session.audioProfile,
+    onSelected: (value) => unawaited(session.setAudioProfile(value)),
+    itemBuilder: (context) => [
+      for (final profile in InternetAudioProfile.values)
+        PopupMenuItem(
+          value: profile,
+          child: SizedBox(
+            width: 238,
+            child: Row(
+              children: [
+                Icon(
+                  _icon(profile),
+                  color: profile == session.audioProfile ? accent : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${profile.label} · '
+                        '${profile.bitrateFor(metered: session.isMeteredNetwork) ~/ 1000}kbps',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        profile.description,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (profile == session.audioProfile)
+                  Icon(Icons.check_rounded, color: accent),
+              ],
+            ),
+          ),
+        ),
+    ],
+    child: Tooltip(
+      message: '公网音频档位',
+      child: Material(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        shape: const CircleBorder(),
+        child: SizedBox.square(
+          dimension: 40,
+          child: Icon(
+            _icon(session.audioProfile),
+            color: Theme.of(context).colorScheme.onSecondaryContainer,
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _InviteCard extends StatelessWidget {

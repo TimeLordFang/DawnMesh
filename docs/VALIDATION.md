@@ -1,10 +1,10 @@
-# 验证记录（2026-09-14）
+# 验证记录（2026-09-15）
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,963,702 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.23` / versionCode **23**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
-- APK SHA-256：`7dacf2031f8665ed43ce04aaec1c568d6b535fa03ecbbde9dc06b8ce3aff7d7c`。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,980,422 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `1.0.0-beta.1` / versionCode **25**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- APK SHA-256：`52a833187041d40eb36229b96d6ebdfeffa950148c529c0e14877561b09b61d7`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
 
@@ -15,7 +15,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | Flutter analyze | **No issues found** |
-| Flutter 测试 | 全量 **178 项通过** |
+| Flutter 测试 | 全量 **180 项通过** |
 | `:app:testDebugUnitTest` | Kotlin **31 项通过，0 失败** |
 | `:app:lintDebug` | 成功，0 errors；未关闭 Lint 或加入忽略基线 |
 | Flutter release APK | 构建成功，使用独立本地密钥 |
@@ -25,6 +25,14 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## 1.0.0-beta.1 后台通话、导航混音与公网音频档位
+
+- 通话前台服务增加 `mediaPlayback` 类型，继续持有有限期自动续租的 CPU 唤醒锁；Wi-Fi 与公网房同时持有高性能 Wi-Fi 锁。公网房的锁屏面板现在正确显示“公网房间”。
+- 近场原生播放继续不申请独占音频焦点；公网 LiveKit 保持通信路由但不再长期管理独占焦点，让导航按系统策略混音或压低对讲声。经典蓝牙耳机使用 SCO 时，其他应用能否把导航音频送入同一耳机仍受耳机和厂商音频策略限制。
+- 公网房新增清晰、平衡、省流三档，通话中可即时切换。Wi-Fi/有线默认清晰，移动、VPN 或未知网络默认省流；码率范围为 12–32 kbps，全部启用 Opus DTX，静音段只保留必要的协议开销。
+- 首页 Wi-Fi 与蓝牙房卡片由 148 dp 收窄为 100 dp，并改为横向图标与文案布局。
+- 完整串行 Flutter 测试 **180 项**、Kotlin 单元测试、Android Lint、静态分析、release APK 构建、v2 签名与 16 KB ZIP 对齐校验均通过。
 
 ## dev.23 统一头像与公网房管理
 
