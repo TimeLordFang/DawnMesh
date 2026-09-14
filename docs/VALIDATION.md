@@ -2,8 +2,8 @@
 
 ## 本次交付
 
-- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,865,402 字节**。
-- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.21` / versionCode **21**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
+- 发布 APK：`build/app/outputs/flutter-apk/app-release.apk`，**99,865,466 字节**。
+- 包 ID `dev.dawnmesh.intercom`，版本 `0.1.0-dev.22` / versionCode **22**，minSdk **26**、targetSdk **36**。BLE L2CAP 对讲需要 Android **10 / API 29** 以上。
 - APK SHA-256：`0b9c3c4bc0e1c5af2a121e5910d57d7435aa0076de176f1292e81783d9c8626c`。
 - 独立 RSA 3072 位签名证书 SHA-256：`58807a8354fe95537c7b818a29cc694d7f43c9480f1a60bd3fba7320bd285446`。
 - APK Signature Scheme v2 校验通过；release Manifest 未开启 debuggable，allowBackup=false。
@@ -25,6 +25,10 @@
 | 32 位 ABI | armeabi-v7a 的本项目 C++ 为 4096 对齐，单独记录；不是 Android 64 位 16 KB 对齐失败 |
 
 按 [Android 官方 16 KB 检查范围](https://developer.android.com/guide/practices/page-sizes#elf-alignment)核对 64 位 ELF 与 ZIP 对齐。Flutter 引擎与本项目 C++ 具备 GNU_RELRO；Flutter 3.47.2 生成的 `libapp.so` 没有该段。以上均为静态包检查，没有据此声称已在所有 16 KB 页面设备运行通过。
+
+## dev.22 公网对讲入口
+
+- 首页始终显示完整的“公网对讲”入口，可直接进入自部署服务器配置、创建房间或加入远程房间。
 
 ## dev.21 公网对讲首版
 

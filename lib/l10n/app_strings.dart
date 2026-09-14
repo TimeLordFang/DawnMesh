@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '0.1.0-dev.21\nAdded self-hosted Internet intercom rooms with end-to-end encrypted audio, configurable servers, and host moderation.\nHosts can set a 1–60 minute recovery window, rename rooms, mute members, and hand over ownership.'
-          : '0.1.0-dev.21\n新增支持自部署服务端的公网对讲房，语音端到端加密，并可配置和切换服务端。\n房主可设置 1–60 分钟断线保留时长、修改房间名、禁言成员和移交房主。';
+          ? '0.1.0-dev.22\nThe Internet intercom entry is now always visible on the home screen, with direct access to self-hosted server settings.\nIncludes end-to-end encrypted audio, configurable servers, and host moderation.'
+          : '0.1.0-dev.22\n公网对讲入口现在完整显示在首页，可直接进入自部署服务器配置。\n支持语音端到端加密、切换服务器和房主管理。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

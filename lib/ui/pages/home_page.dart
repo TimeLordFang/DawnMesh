@@ -448,65 +448,62 @@ class _HomeContentState extends State<HomeContent> {
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final cardWidth = (constraints.maxWidth - 12) / 2;
-                          return SizedBox(
-                            height: 164,
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              clipBehavior: Clip.none,
-                              children: [
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _ModeSelectChip(
-                                    icon: Icons.wifi,
-                                    title: s.wifiRoom,
-                                    subtitle: s.wifiRoomChipSubtitle,
-                                    isSelected:
-                                        _selectedMode ==
-                                        RoomMode.wifiFullDuplex,
-                                    isNight: isNight,
-                                    onTap: () =>
-                                        _selectMode(RoomMode.wifiFullDuplex),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _ModeSelectChip(
-                                    icon: Icons.bluetooth,
-                                    title: s.bluetoothRoom,
-                                    subtitle: s.bleRoomChipSubtitle,
-                                    isSelected:
-                                        _selectedMode == RoomMode.bluetoothPtt,
-                                    isNight: isNight,
-                                    onTap: () =>
-                                        _selectMode(RoomMode.bluetoothPtt),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _ModeSelectChip(
-                                    icon: Icons.public_rounded,
-                                    title: '网络对讲',
-                                    subtitle: '通过自部署服务器，与远方的人安全对讲',
-                                    isSelected: false,
-                                    isNight: isNight,
-                                    onTap: () {
-                                      FocusScope.of(context).unfocus();
-                                      Navigator.push<void>(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => InternetHomePage(
-                                            isNight: widget.isNight,
-                                            nickname: _nickname,
-                                          ),
+                          return Column(
+                            children: [
+                              SizedBox(
+                                height: 148,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: cardWidth,
+                                      child: _ModeSelectChip(
+                                        icon: Icons.wifi,
+                                        title: s.wifiRoom,
+                                        subtitle: s.wifiRoomChipSubtitle,
+                                        isSelected:
+                                            _selectedMode ==
+                                            RoomMode.wifiFullDuplex,
+                                        isNight: isNight,
+                                        onTap: () => _selectMode(
+                                          RoomMode.wifiFullDuplex,
                                         ),
-                                      );
-                                    },
-                                  ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    SizedBox(
+                                      width: cardWidth,
+                                      child: _ModeSelectChip(
+                                        icon: Icons.bluetooth,
+                                        title: s.bluetoothRoom,
+                                        subtitle: s.bleRoomChipSubtitle,
+                                        isSelected:
+                                            _selectedMode ==
+                                            RoomMode.bluetoothPtt,
+                                        isNight: isNight,
+                                        onTap: () =>
+                                            _selectMode(RoomMode.bluetoothPtt),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 8),
+                              _InternetEntryCard(
+                                isNight: isNight,
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                  Navigator.push<void>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => InternetHomePage(
+                                        isNight: widget.isNight,
+                                        nickname: _nickname,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           );
                         },
                       ),
@@ -1164,6 +1161,104 @@ class _HomeContentState extends State<HomeContent> {
   }
 }
 
+class _InternetEntryCard extends StatelessWidget {
+  const _InternetEntryCard({required this.isNight, required this.onTap});
+
+  final bool isNight;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final textPrimary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final textSecondary = isNight
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.46),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.public_rounded, color: accent, size: 22),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '公网对讲',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '自部署',
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '配置服务器，创建或加入远程房间',
+                      style: TextStyle(color: textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_forward_ios_rounded, color: accent, size: 17),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ModeSelectChip extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -1234,6 +1329,8 @@ class _ModeSelectChip extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               subtitle,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(color: textSecondary, fontSize: 13),
             ),
           ],
