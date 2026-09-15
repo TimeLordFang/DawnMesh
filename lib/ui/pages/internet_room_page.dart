@@ -16,12 +16,10 @@ class InternetRoomPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.isNight,
-    this.inviteCode,
   });
 
   final InternetRoomSession session;
   final bool isNight;
-  final String? inviteCode;
 
   @override
   State<InternetRoomPage> createState() => _InternetRoomPageState();
@@ -30,6 +28,7 @@ class InternetRoomPage extends StatefulWidget {
 class _InternetRoomPageState extends State<InternetRoomPage>
     with WidgetsBindingObserver {
   bool _inviteVisible = true;
+  String? _shownInviteCode;
   Timer? _inviteTimer;
 
   @override
@@ -37,22 +36,46 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.session.addListener(_onSessionChanged);
-    if (widget.inviteCode != null) {
-      _inviteTimer = Timer(const Duration(seconds: 10), () {
-        if (mounted) setState(() => _inviteVisible = false);
-      });
-    }
+    _shownInviteCode = widget.session.hostInviteCode;
+    _inviteVisible = _shownInviteCode != null;
+    _scheduleInviteHide();
+  }
+
+  void _scheduleInviteHide() {
+    _inviteTimer?.cancel();
+    if (!_inviteVisible || _shownInviteCode == null) return;
+    _inviteTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) setState(() => _inviteVisible = false);
+    });
+  }
+
+  void _toggleInvite() {
+    setState(() => _inviteVisible = !_inviteVisible);
+    _scheduleInviteHide();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
       unawaited(widget.session.setPtt(false));
+      _inviteTimer?.cancel();
+      if (_inviteVisible) setState(() => _inviteVisible = false);
     }
   }
 
   void _onSessionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final nextCode = widget.session.hostInviteCode;
+    if (nextCode != _shownInviteCode) {
+      setState(() {
+        _shownInviteCode = nextCode;
+        // 新房主获得邀请码时显示 10 秒；旧房主失去身份后立即移除。
+        _inviteVisible = nextCode != null;
+      });
+      _scheduleInviteHide();
+      return;
+    }
+    setState(() {});
   }
 
   @override
@@ -150,6 +173,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
+    final inviteCode = session.hostInviteCode;
     final accent = widget.isNight
         ? AppTheme.nightSkyBlue
         : AppTheme.dawnBurgundy;
@@ -212,12 +236,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
             child: Column(
               children: [
-                if (widget.inviteCode != null)
+                if (inviteCode != null)
                   _InviteCard(
-                    code: widget.inviteCode!,
+                    code: inviteCode,
                     visible: _inviteVisible,
-                    onToggle: () =>
-                        setState(() => _inviteVisible = !_inviteVisible),
+                    onToggle: _toggleInvite,
                   ),
                 if (session.adminListening)
                   Container(

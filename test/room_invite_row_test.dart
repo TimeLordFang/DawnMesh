@@ -86,4 +86,35 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('invite follows host role and is removed from the former host', (
+    tester,
+  ) async {
+    final isHost = ValueNotifier(false);
+    addTearDown(isHost.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<bool>(
+          valueListenable: isHost,
+          builder: (context, value, _) =>
+              HostRoomInviteRow(isHost: value, code: '012345'),
+        ),
+      ),
+    );
+    expect(find.text('012345'), findsNothing);
+
+    isHost.value = true;
+    await tester.pump();
+    expect(find.text('012345'), findsOneWidget);
+
+    isHost.value = false;
+    await tester.pump();
+    expect(find.text('012345'), findsNothing);
+    expect(find.byIcon(Icons.visibility_outlined), findsNothing);
+
+    isHost.value = true;
+    await tester.pump();
+    expect(find.text('012345'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

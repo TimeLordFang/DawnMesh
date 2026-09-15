@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/audio/audio_io.dart';
 import '../../core/platform/platform_audio_channel.dart';
+import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
 import '../transitions/stage_choreography.dart';
 import '../widgets/celestial_canvas.dart';
@@ -594,12 +595,17 @@ class _SessionStageState extends State<SessionStage>
                   );
                 },
               ),
-              if (session.roomInvite case final invite?)
-                RoomInviteRow(
-                  key: ObjectKey(session),
-                  code: invite.code,
-                  initiallyVisible: session.isHost,
-                ),
+              StreamBuilder<List<Member>>(
+                stream: session.membersStream,
+                initialData: session.members,
+                builder: (context, _) {
+                  final invite = session.roomInvite;
+                  return HostRoomInviteRow(
+                    isHost: session.isHost,
+                    code: invite?.code,
+                  );
+                },
+              ),
             ],
           ),
         ),

@@ -167,6 +167,7 @@ class InternetMember {
     required this.nickname,
     required this.isHost,
     required this.canSpeak,
+    this.sortOrder = 0,
     this.isSpeaking = false,
   });
 
@@ -174,5 +175,11 @@ class InternetMember {
   final String nickname;
   final bool isHost;
   final bool canSpeak;
+  final int sortOrder;
   final bool isSpeaking;
+
+  static int compareStable(InternetMember a, InternetMember b) {
+    final byOrder = a.sortOrder.compareTo(b.sortOrder);
+    return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+  }
 }

@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '1.0.0-beta.1\nInternet rooms now offer clarity, balanced, and data-saver audio profiles with automatic network-aware defaults.\nNavigation prompts can mix with intercom audio, and lock-screen calls receive stronger foreground playback protection.'
-          : '1.0.0-beta.1\n公网房新增清晰、平衡、省流三档，并会根据 Wi-Fi 或移动网络自动选择默认档位。\n导航播报可与对讲声音叠加，锁屏通话增加前台播放保护。';
+          ? '1.0.0-beta.2\nThe invitation now follows the current host and disappears from the previous host after handover.\nMember avatars keep a stable order while roles, speaking state, and media connections change.'
+          : '1.0.0-beta.2\n房主移交后，邀请码会跟随新房主，并立即从原房主界面移除。\n房主身份、发言状态和媒体连接变化时，成员头像保持稳定顺序。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

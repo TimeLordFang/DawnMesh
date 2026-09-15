@@ -205,11 +205,8 @@ class _InternetHomePageState extends State<InternetHomePage> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) => InternetRoomPage(
-            session: session,
-            inviteCode: invite.code,
-            isNight: widget.isNight,
-          ),
+          builder: (_) =>
+              InternetRoomPage(session: session, isNight: widget.isNight),
         ),
       );
       if (mounted) await _refresh();

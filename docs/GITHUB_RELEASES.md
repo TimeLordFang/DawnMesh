@@ -39,19 +39,19 @@ gh secret set ANDROID_KEY_PASSWORD
 先修改 `pubspec.yaml`。例如：
 
 ```yaml
-version: 1.0.0-beta.1+25
+version: 1.0.0-beta.2+26
 ```
 
 提交代码并把同名标签推送到 GitHub：
 
 ```bash
 git add pubspec.yaml
-git commit -m "Release 1.0.0-beta.1"
+git commit -m "Release 1.0.0-beta.2"
 git push origin main
 git push github main
-git tag -a v1.0.0-beta.1 -m "DawnMesh 1.0.0-beta.1"
-git push origin v1.0.0-beta.1
-git push github v1.0.0-beta.1
+git tag -a v1.0.0-beta.2 -m "DawnMesh 1.0.0-beta.2"
+git push origin v1.0.0-beta.2
+git push github v1.0.0-beta.2
 ```
 
 工作流会检查标签必须等于 `v` 加 `pubspec.yaml` 的 versionName。检查通过后，Release 包含签名 APK、SHA-256 文件和 GitHub 自动生成的更新记录；名称含 `-dev`、`-alpha`、`-beta` 或其他连字符时会标为 prerelease。

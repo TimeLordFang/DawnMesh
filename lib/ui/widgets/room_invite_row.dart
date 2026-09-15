@@ -1,6 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+class HostRoomInviteRow extends StatelessWidget {
+  const HostRoomInviteRow({
+    super.key,
+    required this.isHost,
+    required this.code,
+  });
+
+  final bool isHost;
+  final String? code;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = code;
+    if (!isHost || value == null) return const SizedBox.shrink();
+    return RoomInviteRow(code: value);
+  }
+}
+
 /// A short-lived reveal; hidden digits are absent from the accessibility tree.
 class RoomInviteRow extends StatefulWidget {
   const RoomInviteRow({

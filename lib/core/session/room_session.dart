@@ -811,6 +811,8 @@ class RoomSession {
 
   Future<void> _followNewHost(HostTransferPlan plan, RoomTransport t) async {
     _isHost = false;
+    // 先通知界面撤下房主专属的邀请码，再开始物理链路重连。
+    _notifyMembers();
     _updateState(RoomState.reconnecting);
 
     if (!await t.reconnectToHost(plan.successor.endpoint)) {

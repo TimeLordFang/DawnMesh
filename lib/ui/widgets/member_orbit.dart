@@ -5,6 +5,22 @@ import '../../core/session/member.dart';
 import '../theme/app_theme.dart';
 import 'avatar_frame.dart';
 
+List<Member> stableMemberDisplayOrder(Iterable<Member> members) {
+  final result = members.toList();
+  result.sort((a, b) {
+    final (aName, aCode) = DeviceCode.split(a.nickname);
+    final (bName, bCode) = DeviceCode.split(b.nickname);
+    // 新版成员都有稳定的设备短码。用它排序可避免房主交接后成员号重编
+    // 导致头像跳位；旧版无短码时再按昵称和成员号确定性兜底。
+    final byCode = (aCode ?? '').compareTo(bCode ?? '');
+    if (byCode != 0) return byCode;
+    final byName = aName.compareTo(bName);
+    if (byName != 0) return byName;
+    return a.memberId.compareTo(b.memberId);
+  });
+  return result;
+}
+
 /// Member Horizontal Orbit Track displaying active participants and speaking waves.
 class MemberOrbit extends StatelessWidget {
   final List<Member> members;
@@ -14,7 +30,8 @@ class MemberOrbit extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allNicknames = members.map((m) => m.nickname).toList();
+    final orderedMembers = stableMemberDisplayOrder(members);
+    final allNicknames = orderedMembers.map((m) => m.nickname).toList();
 
     return SizedBox(
       // 头像 64 + 昵称一行 + 冲突短码一行，留点余量。
@@ -22,10 +39,10 @@ class MemberOrbit extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 22),
-        itemCount: members.length,
+        itemCount: orderedMembers.length,
         separatorBuilder: (_, _) => const SizedBox(width: 18),
         itemBuilder: (context, index) {
-          final member = members[index];
+          final member = orderedMembers[index];
           final (baseName, _) = DeviceCode.split(member.nickname);
           final hasConflict = DeviceCode.hasConflict(baseName, allNicknames);
           return _MemberAvatarChip(

@@ -52,6 +52,7 @@ class InternetRoomSession extends ChangeNotifier {
     required this.memberId,
     required this.resumeToken,
     required this.isHost,
+    required this._inviteCode,
     required this._roomKey,
     required this._audioProfile,
     required this._meteredNetwork,
@@ -64,6 +65,7 @@ class InternetRoomSession extends ChangeNotifier {
   final String memberId;
   String resumeToken;
   bool isHost;
+  final String _inviteCode;
   final Uint8List _roomKey;
   final BackgroundCallControls _backgroundControls = BackgroundCallControls(
     Object(),
@@ -90,6 +92,7 @@ class InternetRoomSession extends ChangeNotifier {
   InternetConnectionState _connectionState = InternetConnectionState.connecting;
   InternetRoomSummary? _summary;
   final List<InternetMember> _members = [];
+  final Map<String, int> _memberSortOrders = {};
   final List<InternetChatMessage> _messages = [];
   final Map<String, _HostAdmission> _hostAdmissions = {};
   final Set<String> _speakingIds = {};
@@ -105,6 +108,7 @@ class InternetRoomSession extends ChangeNotifier {
   bool get canSpeak => _canSpeak;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
+  String? get hostInviteCode => isHost ? _inviteCode : null;
   InternetAudioProfile get audioProfile => _audioProfile;
   bool get isMeteredNetwork => _meteredNetwork;
   int get audioBitrate => _audioProfile.bitrateFor(metered: _meteredNetwork);
@@ -144,6 +148,7 @@ class InternetRoomSession extends ChangeNotifier {
       memberId: grant.memberId,
       resumeToken: grant.resumeToken,
       isHost: true,
+      inviteCode: invite.code,
       roomKey: key,
       audioProfile: network.$2,
       meteredNetwork: network.$1,
@@ -177,6 +182,7 @@ class InternetRoomSession extends ChangeNotifier {
             memberId: result.grant.memberId,
             resumeToken: result.grant.resumeToken,
             isHost: false,
+            inviteCode: invite.code,
             roomKey: result.roomKey,
             audioProfile: network.$2,
             meteredNetwork: network.$1,
@@ -517,18 +523,26 @@ class InternetRoomSession extends ChangeNotifier {
     _members
       ..clear()
       ..addAll(
-        raw.map((item) {
+        raw.indexed.map((entry) {
+          final (index, item) = entry;
           final value = item as Map<String, dynamic>;
           final id = value['id'] as String;
+          final sortOrder = value['joinOrder'] as int? ?? index;
+          _memberSortOrders[id] = sortOrder;
           return InternetMember(
             id: id,
             nickname: value['nickname'] as String? ?? id,
             isHost: value['isHost'] as bool? ?? false,
             canSpeak: value['canSpeak'] as bool? ?? true,
+            // DawnMesh Server emits this array in immutable join order. Older
+            // servers do not expose the numeric order, so the array index is
+            // the protocol-compatible fallback.
+            sortOrder: sortOrder,
             isSpeaking: _speakingIds.contains(id),
           );
         }),
-      );
+      )
+      ..sort(InternetMember.compareStable);
     notifyListeners();
   }
 
@@ -673,9 +687,14 @@ class InternetRoomSession extends ChangeNotifier {
     final room = _livekitRoom;
     if (room == null) return;
     final management = {for (final item in _members) item.id: item};
-    final participants = <Participant>[...room.remoteParticipants.values];
+    final participants = <Participant>[...room.remoteParticipants.values]
+      ..sort((a, b) => a.identity.compareTo(b.identity));
     final local = room.localParticipant;
-    if (local != null) participants.insert(0, local);
+    if (local != null) participants.add(local);
+    var nextOrder = _memberSortOrders.values.fold<int>(
+      0,
+      (value, order) => order >= value ? order + 1 : value,
+    );
     _members
       ..clear()
       ..addAll(
@@ -689,10 +708,17 @@ class InternetRoomSession extends ChangeNotifier {
             isHost:
                 managed?.isHost ?? (participant.identity == memberId && isHost),
             canSpeak: managed?.canSpeak ?? participant.permissions.canPublish,
+            sortOrder:
+                managed?.sortOrder ??
+                _memberSortOrders.putIfAbsent(
+                  participant.identity,
+                  () => nextOrder++,
+                ),
             isSpeaking: _speakingIds.contains(participant.identity),
           );
         }),
-      );
+      )
+      ..sort(InternetMember.compareStable);
     notifyListeners();
   }
 
