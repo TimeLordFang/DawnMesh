@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '1.0.0-beta.2\nThe invitation now follows the current host and disappears from the previous host after handover.\nMember avatars keep a stable order while roles, speaking state, and media connections change.'
-          : '1.0.0-beta.2\n房主移交后，邀请码会跟随新房主，并立即从原房主界面移除。\n房主身份、发言状态和媒体连接变化时，成员头像保持稳定顺序。';
+          ? '1.0.0-beta.3\nFixed encrypted chat compatibility between the Android app and the web client.\nAligned LiveKit media encryption keys across Android, web, and the server monitor.'
+          : '1.0.0-beta.3\n修复 Android App 与网页客户端之间的加密文字消息兼容问题。\n统一 Android、网页端和服务端监听的 LiveKit 媒体加密密钥。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn

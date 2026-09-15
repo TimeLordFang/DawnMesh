@@ -378,6 +378,9 @@ class InternetRoomSession extends ChangeNotifier {
       ),
     );
     final provider = await BaseKeyProvider.create();
+    // Native LiveKit uses this passphrase's UTF-8 bytes as key material. The
+    // browser must pass the same bytes explicitly instead of a JS string,
+    // because its string overload selects a different PBKDF2 path.
     await provider.setKey(base64UrlEncode(_roomKey));
     final room = Room(
       roomOptions: RoomOptions(
@@ -395,7 +398,10 @@ class InternetRoomSession extends ChangeNotifier {
           // profile's bandwidth estimate never assumes redundant packets.
           red: false,
         ),
-        encryption: E2EEOptions(keyProvider: provider),
+        // Chat already has its own AES-GCM envelope. Limiting LiveKit E2EE to
+        // media avoids a second, SDK-version-dependent data-channel wrapper.
+        // ignore: deprecated_member_use
+        e2eeOptions: E2EEOptions(keyProvider: provider),
       ),
     );
     final listener = room.createListener()
