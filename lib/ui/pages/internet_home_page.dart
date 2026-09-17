@@ -209,6 +209,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
               InternetRoomPage(session: session, isNight: widget.isNight),
         ),
       );
+      await session.disposeSession();
       if (mounted) await _refresh();
     } catch (error, stack) {
       api.close();
@@ -248,6 +249,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
               InternetRoomPage(session: session, isNight: widget.isNight),
         ),
       );
+      await session.disposeSession();
       if (mounted) await _refresh();
     } catch (error, stack) {
       api.close();

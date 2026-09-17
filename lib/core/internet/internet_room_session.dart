@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -58,6 +59,30 @@ class InternetRoomSession extends ChangeNotifier {
     required this._meteredNetwork,
   });
 
+  @visibleForTesting
+  InternetRoomSession.forTesting({
+    required InternetRoomApi api,
+    required ServerProfile profile,
+    required String nickname,
+    required String roomId,
+    required String memberId,
+    required InternetRoomSummary summary,
+    bool isHost = false,
+  }) : api = api,
+       profile = profile,
+       nickname = nickname,
+       roomId = roomId,
+       memberId = memberId,
+       resumeToken = 'test-resume-token',
+       isHost = isHost,
+       _inviteCode = '123456',
+       _roomKey = Uint8List(32),
+       _audioProfile = InternetAudioProfile.clarity,
+       _meteredNetwork = false {
+    _summary = summary;
+    _connectionState = InternetConnectionState.connected;
+  }
+
   final InternetRoomApi api;
   final ServerProfile profile;
   final String nickname;
@@ -105,6 +130,7 @@ class InternetRoomSession extends ChangeNotifier {
   InternetConnectionState get connectionState => _connectionState;
   VoiceMode get voiceMode => _voiceMode;
   bool get isMuted => _muted;
+  bool get roomEnded => _roomEnded;
   bool get canSpeak => _canSpeak;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
@@ -500,9 +526,29 @@ class InternetRoomSession extends ChangeNotifier {
           isHost = event['hostMemberId'] == memberId;
           _applyMembers(event['members']);
         case 'room_ended':
+          if (_roomEnded) return;
           _roomEnded = true;
           _eventReconnectTimer?.cancel();
-          _setConnectionState(InternetConnectionState.disconnected);
+          _pttPressed = false;
+          if (_connectionState == InternetConnectionState.disconnected) {
+            notifyListeners();
+          } else {
+            _setConnectionState(InternetConnectionState.disconnected);
+          }
+          await _applyMicrophone(false);
+          final listener = _listener;
+          _listener = null;
+          await listener?.dispose();
+          final room = _livekitRoom;
+          _livekitRoom = null;
+          await room?.disconnect();
+          await room?.dispose();
+          final subscription = _eventSubscription;
+          _eventSubscription = null;
+          await subscription?.cancel();
+          final socket = _eventsSocket;
+          _eventsSocket = null;
+          await socket?.close();
           AppLog.warn('DawnInternet', '房间已被房主解散或因超时关闭');
         case 'pake_hello':
           if (isHost) await _handlePakeHello(event);
@@ -513,6 +559,10 @@ class InternetRoomSession extends ChangeNotifier {
       AppLog.error('DawnInternet', '管理事件处理失败：$error', stack);
     }
   }
+
+  @visibleForTesting
+  Future<void> receiveRoomEndedForTesting() =>
+      _handleManagementEvent(jsonEncode({'type': 'room_ended'}));
 
   void _applySnapshot(Map<String, dynamic> event) {
     final room = event['room'];

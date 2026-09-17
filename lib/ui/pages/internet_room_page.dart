@@ -30,6 +30,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   bool _inviteVisible = true;
   String? _shownInviteCode;
   Timer? _inviteTimer;
+  Timer? _roomEndedTimer;
+  bool _roomEndedCountdownStarted = false;
+  bool _roomEndedReturnStarted = false;
 
   @override
   void initState() {
@@ -39,6 +42,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     _shownInviteCode = widget.session.hostInviteCode;
     _inviteVisible = _shownInviteCode != null;
     _scheduleInviteHide();
+    if (widget.session.roomEnded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startRoomEndedCountdown();
+      });
+    }
   }
 
   void _scheduleInviteHide() {
@@ -65,6 +73,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
 
   void _onSessionChanged() {
     if (!mounted) return;
+    if (widget.session.roomEnded) {
+      _startRoomEndedCountdown();
+      setState(() {});
+      return;
+    }
     final nextCode = widget.session.hostInviteCode;
     if (nextCode != _shownInviteCode) {
       setState(() {
@@ -78,15 +91,50 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     setState(() {});
   }
 
+  void _startRoomEndedCountdown() {
+    if (_roomEndedCountdownStarted || !mounted) return;
+    _roomEndedCountdownStarted = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('房间已被群主解散，10 秒后自动返回房间列表'),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: '立即返回',
+          onPressed: () => unawaited(_returnFromRoomEndedRoom()),
+        ),
+      ),
+    );
+    _roomEndedTimer = Timer(
+      const Duration(seconds: 10),
+      () => unawaited(_returnFromRoomEndedRoom()),
+    );
+  }
+
+  Future<void> _returnFromRoomEndedRoom() async {
+    if (_roomEndedReturnStarted || !mounted) return;
+    _roomEndedReturnStarted = true;
+    _roomEndedTimer?.cancel();
+    _roomEndedTimer = null;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    await widget.session.disposeSession();
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.session.removeListener(_onSessionChanged);
     _inviteTimer?.cancel();
+    _roomEndedTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _leave() async {
+    if (widget.session.roomEnded) {
+      await _returnFromRoomEndedRoom();
+      return;
+    }
     var endRoom = false;
     if (widget.session.isHost) {
       final action = await showDialog<String>(
@@ -177,16 +225,18 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     final accent = widget.isNight
         ? AppTheme.nightSkyBlue
         : AppTheme.dawnBurgundy;
-    final stateText = switch (session.connectionState) {
-      InternetConnectionState.connecting => '正在安全连接',
-      InternetConnectionState.connected => '网络良好 · E2EE',
-      InternetConnectionState.reconnecting => '网络波动 · 自动恢复中',
-      InternetConnectionState.disconnected => '连接未能恢复',
-    };
+    final stateText = session.roomEnded
+        ? '房间已解散 · 10 秒后返回'
+        : switch (session.connectionState) {
+            InternetConnectionState.connecting => '正在安全连接',
+            InternetConnectionState.connected => '网络良好 · E2EE',
+            InternetConnectionState.reconnecting => '网络波动 · 自动恢复中',
+            InternetConnectionState.disconnected => '连接未能恢复',
+          };
     return PopScope(
-      canPop: false,
+      canPop: session.roomEnded,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_leave());
+        if (!didPop && !session.roomEnded) unawaited(_leave());
       },
       child: Scaffold(
         appBar: AppBar(
@@ -208,9 +258,10 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color:
-                      session.connectionState ==
-                          InternetConnectionState.connected
+                  color: session.roomEnded
+                      ? Colors.redAccent
+                      : session.connectionState ==
+                            InternetConnectionState.connected
                       ? Colors.green
                       : Colors.orange,
                 ),
@@ -218,12 +269,13 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ],
           ),
           actions: [
-            IconButton(
-              tooltip: '消息',
-              onPressed: _showChat,
-              icon: const Icon(Icons.chat_bubble_outline_rounded),
-            ),
-            if (session.isHost)
+            if (!session.roomEnded)
+              IconButton(
+                tooltip: '消息',
+                onPressed: _showChat,
+                icon: const Icon(Icons.chat_bubble_outline_rounded),
+              ),
+            if (session.isHost && !session.roomEnded)
               IconButton(
                 tooltip: '修改房间名',
                 onPressed: _rename,
@@ -271,16 +323,17 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     ),
                   ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: session.isHost ? 112 : 82,
-                  child: _InternetMemberStrip(
-                    session: session,
-                    accent: accent,
-                    isNight: widget.isNight,
-                    onMore: _showMembers,
-                    onError: _showError,
+                if (!session.roomEnded)
+                  SizedBox(
+                    height: session.isHost ? 112 : 82,
+                    child: _InternetMemberStrip(
+                      session: session,
+                      accent: accent,
+                      isNight: widget.isNight,
+                      onMore: _showMembers,
+                      onError: _showError,
+                    ),
                   ),
-                ),
                 const Spacer(),
                 if (!session.canSpeak) ...[
                   const Icon(
@@ -295,70 +348,88 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   ),
                   const SizedBox(height: 22),
                 ],
-                VoiceModeSwitch(
-                  value: session.voiceMode,
-                  isNight: widget.isNight,
-                  onChanged: session.canSpeak
-                      ? (value) => unawaited(session.setVoiceMode(value))
-                      : (_) {},
-                ),
-                const SizedBox(height: 24),
-                if (session.voiceMode == VoiceMode.pushToTalk)
-                  _InternetPttButton(session: session, accent: accent)
-                else
-                  _AutomaticTalkDisc(session: session, accent: accent),
+                if (session.roomEnded) ...[
+                  const Icon(
+                    Icons.call_end_rounded,
+                    size: 42,
+                    color: Colors.redAccent,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '房间已被群主解散',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('10 秒后自动返回房间列表'),
+                ] else ...[
+                  VoiceModeSwitch(
+                    value: session.voiceMode,
+                    isNight: widget.isNight,
+                    onChanged: session.canSpeak
+                        ? (value) => unawaited(session.setVoiceMode(value))
+                        : (_) {},
+                  ),
+                  const SizedBox(height: 24),
+                  if (session.voiceMode == VoiceMode.pushToTalk)
+                    _InternetPttButton(session: session, accent: accent)
+                  else
+                    _AutomaticTalkDisc(session: session, accent: accent),
+                ],
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
+                if (!session.roomEnded)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: .72),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        IconButton.filledTonal(
+                          tooltip: session.isMuted ? '开启麦克风' : '静音',
+                          onPressed: session.canSpeak
+                              ? () => unawaited(session.toggleMute())
+                              : null,
+                          icon: Icon(
+                            session.isMuted || !session.canSpeak
+                                ? Icons.mic_off_rounded
+                                : Icons.mic_rounded,
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: session.isSpeakerOn ? '切换到听筒/耳机' : '打开扬声器',
+                          onPressed: () => unawaited(
+                            session.setSpeakerphone(!session.isSpeakerOn),
+                          ),
+                          icon: Icon(
+                            session.isSpeakerOn
+                                ? Icons.volume_up_rounded
+                                : Icons.hearing_rounded,
+                          ),
+                        ),
+                        _InternetAudioProfileMenu(
+                          session: session,
+                          accent: accent,
+                        ),
+                        IconButton.filled(
+                          tooltip: '离开',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: _leave,
+                          icon: const Icon(Icons.call_end_rounded),
+                        ),
+                      ],
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withValues(alpha: .72),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      IconButton.filledTonal(
-                        tooltip: session.isMuted ? '开启麦克风' : '静音',
-                        onPressed: session.canSpeak
-                            ? () => unawaited(session.toggleMute())
-                            : null,
-                        icon: Icon(
-                          session.isMuted || !session.canSpeak
-                              ? Icons.mic_off_rounded
-                              : Icons.mic_rounded,
-                        ),
-                      ),
-                      IconButton.filledTonal(
-                        tooltip: session.isSpeakerOn ? '切换到听筒/耳机' : '打开扬声器',
-                        onPressed: () => unawaited(
-                          session.setSpeakerphone(!session.isSpeakerOn),
-                        ),
-                        icon: Icon(
-                          session.isSpeakerOn
-                              ? Icons.volume_up_rounded
-                              : Icons.hearing_rounded,
-                        ),
-                      ),
-                      _InternetAudioProfileMenu(
-                        session: session,
-                        accent: accent,
-                      ),
-                      IconButton.filled(
-                        tooltip: '离开',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: _leave,
-                        icon: const Icon(Icons.call_end_rounded),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
