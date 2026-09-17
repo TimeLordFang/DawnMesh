@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -61,20 +60,14 @@ class InternetRoomSession extends ChangeNotifier {
 
   @visibleForTesting
   InternetRoomSession.forTesting({
-    required InternetRoomApi api,
-    required ServerProfile profile,
-    required String nickname,
-    required String roomId,
-    required String memberId,
+    required this.api,
+    required this.profile,
+    required this.nickname,
+    required this.roomId,
+    required this.memberId,
     required InternetRoomSummary summary,
-    bool isHost = false,
-  }) : api = api,
-       profile = profile,
-       nickname = nickname,
-       roomId = roomId,
-       memberId = memberId,
-       resumeToken = 'test-resume-token',
-       isHost = isHost,
+    this.isHost = false,
+  }) : resumeToken = 'test-resume-token',
        _inviteCode = '123456',
        _roomKey = Uint8List(32),
        _audioProfile = InternetAudioProfile.clarity,
