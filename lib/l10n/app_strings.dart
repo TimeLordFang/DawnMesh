@@ -224,8 +224,8 @@ class AppStrings {
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody =>
       isEn
-          ? '1.0.0-beta.3\nFixed encrypted chat compatibility between the Android app and the web client.\nAligned LiveKit media encryption keys across Android, web, and the server monitor.'
-          : '1.0.0-beta.3\n修复 Android App 与网页客户端之间的加密文字消息兼容问题。\n统一 Android、网页端和服务端监听的 LiveKit 媒体加密密钥。';
+          ? '1.0.0-beta.4\nRoom members are notified when the owner dissolves a room, then return to the previous page automatically.'
+          : '1.0.0-beta.4\n房主解散房间后，其他成员会收到提醒，并在 10 秒后自动返回上一页。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody =>
       isEn
