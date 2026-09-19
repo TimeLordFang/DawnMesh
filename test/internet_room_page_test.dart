@@ -6,28 +6,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  InternetRoomSession makeSession() {
+    const profile = ServerProfile(
+      id: 'server-test',
+      name: '测试服务器',
+      baseUrl: 'https://talk.example.test',
+    );
+    return InternetRoomSession.forTesting(
+      api: InternetRoomApi(profile),
+      profile: profile,
+      nickname: '成员',
+      roomId: 'room-test',
+      memberId: 'member-test',
+      summary: const InternetRoomSummary(
+        id: 'room-test',
+        name: '测试房间',
+        memberCount: 2,
+        maxParticipants: 25,
+        hostNickname: '群主',
+      ),
+    );
+  }
+
   testWidgets(
     'a dissolved room notifies the member and returns after ten seconds',
     (tester) async {
-      const profile = ServerProfile(
-        id: 'server-test',
-        name: '测试服务器',
-        baseUrl: 'https://talk.example.test',
-      );
-      final session = InternetRoomSession.forTesting(
-        api: InternetRoomApi(profile),
-        profile: profile,
-        nickname: '成员',
-        roomId: 'room-test',
-        memberId: 'member-test',
-        summary: const InternetRoomSummary(
-          id: 'room-test',
-          name: '测试房间',
-          memberCount: 2,
-          maxParticipants: 25,
-          hostNickname: '群主',
-        ),
-      );
+      final session = makeSession();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -65,4 +69,33 @@ void main() {
       expect(find.text('房间列表'), findsOneWidget);
     },
   );
+
+  testWidgets('incoming chat shows a badge and opening chat clears it', (
+    tester,
+  ) async {
+    final session = makeSession();
+    addTearDown(session.disposeSession);
+    await tester.pumpWidget(
+      MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
+    );
+
+    session.receiveChatForTesting(text: '有新消息');
+    await tester.pump();
+
+    expect(session.unreadChatCount, 1);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Badge && widget.isLabelVisible,
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('recent-messages-strip')), findsOneWidget);
+    expect(find.text('有新消息'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
+    await tester.pump();
+
+    expect(session.unreadChatCount, 0);
+    expect(find.text('有新消息'), findsWidgets);
+  });
 }

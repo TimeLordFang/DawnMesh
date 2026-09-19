@@ -35,11 +35,9 @@ void main() {
     (w) =>
         w is Text && (w.data == '创建 Wi-Fi 房间' || w.data == 'Create Wi-Fi room'),
   );
-  Finder findInCall() => find.byWidgetPredicate(
-    (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
-  );
-  Finder findLeave() => find.byWidgetPredicate(
-    (w) => w is Text && (w.data == '离开' || w.data == 'Leave'),
+  Finder findInCall() => find.byKey(const ValueKey('automatic-talk-status'));
+  Finder findHangUp() => find.byWidgetPredicate(
+    (w) => w is Text && (w.data == '挂断' || w.data == 'Hang up'),
   );
   Finder findRoomTitle() => find.byWidgetPredicate(
     (w) =>
@@ -95,7 +93,7 @@ void main() {
     expect(findTitle(), findsNothing);
     expect(findCreateWifi(), findsNothing);
     expect(findInCall(), findsOneWidget);
-    expect(findLeave(), findsOneWidget);
+    expect(findHangUp(), findsOneWidget);
     expect(findRoomTitle(), findsOneWidget);
     final inviteRow = find.byType(RoomInviteRow);
     expect(inviteRow, findsOneWidget);
@@ -113,7 +111,7 @@ void main() {
     expect(find.text(code), findsOneWidget);
 
     // 离开房间完成清理
-    await tester.tap(findLeave());
+    await tester.tap(findHangUp());
     await tester.pump();
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -145,7 +143,7 @@ void main() {
     expect(findInCall(), findsOneWidget);
 
     // 退场清理
-    await tester.tap(findLeave());
+    await tester.tap(findHangUp());
     await tester.pump();
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -160,5 +158,48 @@ void main() {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 300)),
     );
+  });
+
+  testWidgets('返回首页保持通话，并可从当前房间卡片重新进入', (tester) async {
+    tester.view.physicalSize = const Size(411, 892);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
+    );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.runAsync(() async {
+      await tester.tap(findCreateWifi());
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    await waitForRoom(tester, true);
+    await tester.pump(const Duration(seconds: 2));
+
+    final inviteRow = find.byType(RoomInviteRow);
+    final invite = tester.widget<RoomInviteRow>(inviteRow).code;
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(find.byKey(const ValueKey('active-room-card')), findsOneWidget);
+    expect(findCreateWifi(), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('active-room-card')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(findInCall(), findsOneWidget);
+    expect(
+      tester.widget<RoomInviteRow>(find.byType(RoomInviteRow)).code,
+      invite,
+    );
+
+    await tester.tap(findHangUp());
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await waitForRoom(tester, false);
+    expect(find.byKey(const ValueKey('active-room-card')), findsNothing);
   });
 }

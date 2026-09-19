@@ -35,11 +35,51 @@ class _InternetHomePageState extends State<InternetHomePage> {
   List<InternetRoomSummary> _rooms = const [];
   bool _loading = true;
   String? _error;
+  InternetRoomSession? _activeSession;
+  bool _roomPageOpen = false;
+  final Map<String, RoomInvite> _rememberedInvites = {};
+
+  String _inviteKey(ServerProfile profile, String roomId) =>
+      '${profile.id}:$roomId';
 
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    final active = _activeSession;
+    active?.removeListener(_onActiveSessionChanged);
+    if (active != null) unawaited(active.disposeSession());
+    super.dispose();
+  }
+
+  void _setActiveSession(InternetRoomSession? session) {
+    if (identical(_activeSession, session)) return;
+    _activeSession?.removeListener(_onActiveSessionChanged);
+    _activeSession = session;
+    session?.addListener(_onActiveSessionChanged);
+    if (mounted) setState(() {});
+  }
+
+  void _onActiveSessionChanged() {
+    final session = _activeSession;
+    if (!mounted || session == null) return;
+    if (session.roomEnded) {
+      if (_roomPageOpen) return;
+      _rememberedInvites.remove(_inviteKey(session.profile, session.roomId));
+      session.removeListener(_onActiveSessionChanged);
+      _activeSession = null;
+      unawaited(session.disposeSession());
+      setState(() {});
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('房间已解散，已从进入记录中移除')));
+      unawaited(_refresh());
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> _load() async {
@@ -90,6 +130,19 @@ class _InternetHomePageState extends State<InternetHomePage> {
         _selected = updated;
         _info = info;
         _rooms = results[1] as List<InternetRoomSummary>;
+        final aliveInviteKeys = _rooms
+            .map((room) => _inviteKey(updated, room.id))
+            .toSet();
+        if (_activeSession != null) {
+          aliveInviteKeys.add(
+            _inviteKey(_activeSession!.profile, _activeSession!.roomId),
+          );
+        }
+        final profilePrefix = '${updated.id}:';
+        _rememberedInvites.removeWhere(
+          (key, _) =>
+              key.startsWith(profilePrefix) && !aliveInviteKeys.contains(key),
+        );
       });
     } catch (error, stack) {
       AppLog.error('DawnInternet', '连接服务器失败：$error', stack);
@@ -202,15 +255,9 @@ class _InternetHomePageState extends State<InternetHomePage> {
         return;
       }
       Navigator.pop(context);
-      await Navigator.push<void>(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              InternetRoomPage(session: session, isNight: widget.isNight),
-        ),
-      );
-      await session.disposeSession();
-      if (mounted) await _refresh();
+      _rememberedInvites[_inviteKey(profile, session.roomId)] = invite;
+      _setActiveSession(session);
+      await _openActiveRoom();
     } catch (error, stack) {
       api.close();
       AppLog.error('DawnInternet', '创建公网房失败：$error', stack);
@@ -222,9 +269,16 @@ class _InternetHomePageState extends State<InternetHomePage> {
   }
 
   Future<void> _joinRoom(InternetRoomSummary room) async {
+    final active = _activeSession;
+    if (active != null) {
+      if (active.roomId == room.id) await _openActiveRoom();
+      return;
+    }
     final profile = _selected;
     if (profile == null) return;
-    final invite = await requestRoomInvite(context);
+    final inviteKey = _inviteKey(profile, room.id);
+    final invite =
+        _rememberedInvites[inviteKey] ?? await requestRoomInvite(context);
     if (invite == null || !mounted) return;
     final api = InternetRoomApi(profile);
     _showBusy('正在由房主验证邀请码…');
@@ -242,22 +296,41 @@ class _InternetHomePageState extends State<InternetHomePage> {
         return;
       }
       Navigator.pop(context);
-      await Navigator.push<void>(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              InternetRoomPage(session: session, isNight: widget.isNight),
-        ),
-      );
-      await session.disposeSession();
-      if (mounted) await _refresh();
+      _rememberedInvites[inviteKey] = invite;
+      _setActiveSession(session);
+      await _openActiveRoom();
     } catch (error, stack) {
+      _rememberedInvites.remove(inviteKey);
       api.close();
       AppLog.error('DawnInternet', '加入公网房失败：$error', stack);
       if (mounted) {
         Navigator.pop(context);
         _showError('$error');
       }
+    }
+  }
+
+  Future<void> _openActiveRoom() async {
+    final session = _activeSession;
+    if (session == null || !mounted || _roomPageOpen) return;
+    setState(() => _roomPageOpen = true);
+    final ended = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            InternetRoomPage(session: session, isNight: widget.isNight),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _roomPageOpen = false);
+    if (!identical(_activeSession, session)) return;
+    if (ended == true || session.roomEnded) {
+      if (session.roomEnded) {
+        _rememberedInvites.remove(_inviteKey(session.profile, session.roomId));
+      }
+      _setActiveSession(null);
+      await session.disposeSession();
+      if (mounted) await _refresh();
     }
   }
 
@@ -284,136 +357,162 @@ class _InternetHomePageState extends State<InternetHomePage> {
     final accent = widget.isNight
         ? AppTheme.nightSkyBlue
         : AppTheme.dawnBurgundy;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('网络对讲'),
-        actions: [
-          if (_selected != null) ...[
-            IconButton(
-              tooltip: '编辑服务器',
-              onPressed: () => _editProfile(existing: _selected),
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'add') _editProfile();
-                if (value == 'delete') _deleteSelected();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'add', child: Text('添加服务器')),
-                PopupMenuItem(value: 'delete', child: Text('删除当前服务器')),
-              ],
-            ),
-          ],
-        ],
-      ),
-      floatingActionButton: _info == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _loading ? null : _createRoom,
-              backgroundColor: accent,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_comment_outlined),
-              label: const Text('创建房间'),
-            ),
-      body: _profiles.isEmpty
-          ? _emptyServers(accent)
-          : RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 104),
-                children: [
-                  DropdownButtonFormField<ServerProfile>(
-                    initialValue: _selected,
-                    decoration: const InputDecoration(
-                      labelText: '当前服务器',
-                      prefixIcon: Icon(Icons.dns_outlined),
-                    ),
-                    items: _profiles
-                        .map(
-                          (profile) => DropdownMenuItem(
-                            value: profile,
-                            child: Text(profile.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _loading ? null : _selectProfile,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_loading) const LinearProgressIndicator(),
-                  if (_error != null)
-                    _statusCard(
-                      Icons.cloud_off_outlined,
-                      '连接失败',
-                      _error!,
-                      Colors.redAccent,
-                    ),
-                  if (_info != null)
-                    _statusCard(
-                      Icons.verified_user_outlined,
-                      '连接正常 · ${_info!.name}',
-                      '协议 v${_info!.protocolVersion} · 房间上限 ${_info!.maxRoomParticipants} 人 · 媒体加密',
-                      accent,
-                    ),
-                  const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '服务器内的房间',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _loading ? null : _refresh,
-                        icon: const Icon(Icons.refresh_rounded),
-                      ),
-                    ],
-                  ),
-                  if (!_loading && _rooms.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(
-                        child: Text(
-                          '这里还没有房间\n创建一个，或稍后下拉刷新',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  for (final room in _rooms)
-                    Card(
-                      margin: const EdgeInsets.only(top: 10),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: accent.withValues(alpha: .14),
-                          child: Icon(Icons.public, color: accent),
-                        ),
-                        title: Text(
-                          room.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          '房主：${room.hostNickname} · ${room.memberCount}/${room.maxParticipants} 人',
-                        ),
-                        trailing: FilledButton.tonal(
-                          onPressed: room.memberCount >= room.maxParticipants
-                              ? null
-                              : () => _joinRoom(room),
-                          child: Text(
-                            room.memberCount >= room.maxParticipants
-                                ? '已满'
-                                : '加入',
-                          ),
-                        ),
-                      ),
-                    ),
+    return PopScope(
+      canPop: _activeSession == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _activeSession != null) unawaited(_openActiveRoom());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('网络对讲'),
+          actions: [
+            if (_selected != null) ...[
+              IconButton(
+                tooltip: '编辑服务器',
+                onPressed: _activeSession == null
+                    ? () => _editProfile(existing: _selected)
+                    : null,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              PopupMenuButton<String>(
+                enabled: _activeSession == null,
+                onSelected: (value) {
+                  if (value == 'add') _editProfile();
+                  if (value == 'delete') _deleteSelected();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'add', child: Text('添加服务器')),
+                  PopupMenuItem(value: 'delete', child: Text('删除当前服务器')),
                 ],
               ),
-            ),
+            ],
+          ],
+        ),
+        floatingActionButton: _info == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _loading || _activeSession != null
+                    ? null
+                    : _createRoom,
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_comment_outlined),
+                label: const Text('创建房间'),
+              ),
+        body: _profiles.isEmpty
+            ? _emptyServers(accent)
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 104),
+                  children: [
+                    if (_activeSession != null) ...[
+                      _ActiveInternetRoomCard(
+                        session: _activeSession!,
+                        accent: accent,
+                        onResume: _openActiveRoom,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    DropdownButtonFormField<ServerProfile>(
+                      initialValue: _selected,
+                      decoration: const InputDecoration(
+                        labelText: '当前服务器',
+                        prefixIcon: Icon(Icons.dns_outlined),
+                      ),
+                      items: _profiles
+                          .map(
+                            (profile) => DropdownMenuItem(
+                              value: profile,
+                              child: Text(profile.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _loading || _activeSession != null
+                          ? null
+                          : _selectProfile,
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loading) const LinearProgressIndicator(),
+                    if (_error != null)
+                      _statusCard(
+                        Icons.cloud_off_outlined,
+                        '连接失败',
+                        _error!,
+                        Colors.redAccent,
+                      ),
+                    if (_info != null)
+                      _statusCard(
+                        Icons.verified_user_outlined,
+                        '连接正常 · ${_info!.name}',
+                        '协议 v${_info!.protocolVersion} · 房间上限 ${_info!.maxRoomParticipants} 人 · 媒体加密',
+                        accent,
+                      ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '服务器内的房间',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _loading ? null : _refresh,
+                          icon: const Icon(Icons.refresh_rounded),
+                        ),
+                      ],
+                    ),
+                    if (!_loading && _rooms.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(
+                          child: Text(
+                            '这里还没有房间\n创建一个，或稍后下拉刷新',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    for (final room in _rooms)
+                      Card(
+                        margin: const EdgeInsets.only(top: 10),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: accent.withValues(alpha: .14),
+                            child: Icon(Icons.public, color: accent),
+                          ),
+                          title: Text(
+                            room.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '房主：${room.hostNickname} · ${room.memberCount}/${room.maxParticipants} 人',
+                          ),
+                          trailing: FilledButton.tonal(
+                            onPressed:
+                                room.memberCount >= room.maxParticipants ||
+                                    (_activeSession != null &&
+                                        _activeSession!.roomId != room.id)
+                                ? null
+                                : () => _joinRoom(room),
+                            child: Text(
+                              _activeSession?.roomId == room.id
+                                  ? '返回'
+                                  : room.memberCount >= room.maxParticipants
+                                  ? '已满'
+                                  : '加入',
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+      ),
     );
   }
 
@@ -472,6 +571,44 @@ class _InternetHomePageState extends State<InternetHomePage> {
             ),
           ),
         ],
+      ),
+    ),
+  );
+}
+
+class _ActiveInternetRoomCard extends StatelessWidget {
+  const _ActiveInternetRoomCard({
+    required this.session,
+    required this.accent,
+    required this.onResume,
+  });
+
+  final InternetRoomSession session;
+  final Color accent;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: accent.withValues(alpha: .10),
+    child: ListTile(
+      key: const ValueKey('active-internet-room-card'),
+      onTap: onResume,
+      leading: CircleAvatar(
+        backgroundColor: accent,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.call_rounded),
+      ),
+      title: Text(
+        session.summary.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: const Text('通话保持中 · 邀请码已保存'),
+      trailing: Badge(
+        isLabelVisible: session.unreadChatCount > 0,
+        label: Text('${session.unreadChatCount}'),
+        child: Icon(Icons.arrow_forward_rounded, color: accent),
       ),
     ),
   );

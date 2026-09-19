@@ -59,9 +59,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        find.byWidgetPredicate(
-          (w) => w is Text && (w.data == '通话中' || w.data == 'In call'),
-        ),
+        find.byKey(const ValueKey('automatic-talk-status')),
         findsOneWidget,
       );
       expect(find.text('按住对讲'), findsOneWidget);

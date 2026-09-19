@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/audio/audio_io.dart';
@@ -25,52 +26,47 @@ void main() {
     expect(gate.isOpen, isFalse);
   });
 
-  test(
-    'Bluetooth switches locally without restarting capture, mute/leave stop sending',
-    () async {
-      final audio = MockAudioIo();
-      final room = RoomSession(
-        audioIo: audio,
-        selfNickname: 'Host',
-        mode: RoomMode.bluetoothPtt,
-      );
-      addTearDown(room.dispose);
-      final sent = <Frame>[];
-      room.onSendFrame = sent.add;
-      await room.createRoom();
-      expect(audio.bitrate, 16000);
-      audio.emitEncodedFrame(Uint8List.fromList([1]), level: .2);
-      expect(sent.where((f) => f.type == FrameType.audio), isEmpty);
-      room.setPtt(true);
-      audio.emitEncodedFrame(Uint8List.fromList([2]), level: .2);
-      room.setPtt(false);
-      audio.emitEncodedFrame(Uint8List.fromList([3]), level: .2);
-      expect(
-        sent
-            .where((f) => f.type == FrameType.audio)
-            .map((f) => f.payload.single),
-        [2],
-      );
-      room.setVoiceMode(VoiceMode.automatic);
-      audio.emitEncodedFrame(Uint8List.fromList([4]), level: 0);
-      audio.emitEncodedFrame(Uint8List.fromList([5]), level: .2);
-      expect(sent.where((f) => f.type == FrameType.audio).last.payload, [5]);
-      expect(room.isPttPressed, isFalse);
-      room.toggleMute();
-      final count = sent.where((f) => f.type == FrameType.audio).length;
-      audio.emitEncodedFrame(Uint8List.fromList([6]), level: .2);
-      expect(sent.where((f) => f.type == FrameType.audio).length, count);
-      room.toggleMute();
-      room.setVoiceMode(VoiceMode.pushToTalk);
-      audio.emitEncodedFrame(Uint8List.fromList([7]), level: .2);
-      expect(sent.where((f) => f.type == FrameType.audio).length, count);
-      expect(audio.isRecording, isTrue);
-      await room.leave();
-      audio.emitEncodedFrame(Uint8List.fromList([8]), level: .2);
-      expect(sent.where((f) => f.type == FrameType.audio).length, count);
-      expect(audio.isRecording, isFalse);
-    },
-  );
+  test('Bluetooth switches locally without restarting capture, mute/leave stop sending', () async {
+    final audio = MockAudioIo();
+    final room = RoomSession(
+      audioIo: audio,
+      selfNickname: 'Host',
+      mode: RoomMode.bluetoothPtt,
+    );
+    addTearDown(room.dispose);
+    final sent = <Frame>[];
+    room.onSendFrame = sent.add;
+    await room.createRoom();
+    expect(audio.bitrate, 16000);
+    audio.emitEncodedFrame(Uint8List.fromList([1]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio), isEmpty);
+    room.setPtt(true);
+    audio.emitEncodedFrame(Uint8List.fromList([2]), level: .2);
+    room.setPtt(false);
+    audio.emitEncodedFrame(Uint8List.fromList([3]), level: .2);
+    expect(
+      sent.where((f) => f.type == FrameType.audio).map((f) => f.payload.single),
+      [2],
+    );
+    room.setVoiceMode(VoiceMode.automatic);
+    audio.emitEncodedFrame(Uint8List.fromList([4]), level: 0);
+    audio.emitEncodedFrame(Uint8List.fromList([5]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio).last.payload, [5]);
+    expect(room.isPttPressed, isFalse);
+    room.toggleMute();
+    final count = sent.where((f) => f.type == FrameType.audio).length;
+    audio.emitEncodedFrame(Uint8List.fromList([6]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio).length, count);
+    room.toggleMute();
+    room.setVoiceMode(VoiceMode.pushToTalk);
+    audio.emitEncodedFrame(Uint8List.fromList([7]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio).length, count);
+    expect(audio.isRecording, isTrue);
+    await room.leave();
+    audio.emitEncodedFrame(Uint8List.fromList([8]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio).length, count);
+    expect(audio.isRecording, isFalse);
+  });
 
   test('Wi-Fi room can switch between automatic and push-to-talk', () async {
     final audio = MockAudioIo();
@@ -126,12 +122,18 @@ void main() {
         ),
       );
       await tester.tap(find.text('自动通话'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(room.voiceMode, VoiceMode.automatic);
+      expect(
+        find.byKey(const ValueKey('automatic-talk-status')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('按住对讲'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(room.voiceMode, VoiceMode.pushToTalk);
+      expect(find.byKey(const ValueKey('push-to-talk-button')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       var disposed = false;
@@ -156,12 +158,11 @@ void main() {
               child: SizedBox(
                 width: 300,
                 child: StatefulBuilder(
-                  builder:
-                      (context, setState) => VoiceModeSwitch(
-                        value: selected,
-                        isNight: true,
-                        onChanged: (mode) => setState(() => selected = mode),
-                      ),
+                  builder: (context, setState) => VoiceModeSwitch(
+                    value: selected,
+                    isNight: true,
+                    onChanged: (mode) => setState(() => selected = mode),
+                  ),
                 ),
               ),
             ),

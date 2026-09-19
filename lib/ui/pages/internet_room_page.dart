@@ -9,6 +9,7 @@ import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart' show VoiceMode;
 import '../theme/app_theme.dart';
 import '../widgets/avatar_frame.dart';
+import '../widgets/recent_messages_strip.dart';
 import '../widgets/voice_mode_switch.dart';
 
 class InternetRoomPage extends StatefulWidget {
@@ -118,7 +119,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     await widget.session.disposeSession();
     if (!mounted) return;
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -162,7 +163,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       endRoom = action == 'end';
     }
     await widget.session.leave(endRoom: endRoom);
-    if (mounted) Navigator.pop(context);
+    if (mounted) Navigator.pop(context, true);
   }
 
   Future<void> _rename() async {
@@ -207,12 +208,21 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ),
   );
 
-  void _showChat() => showModalBottomSheet<void>(
-    context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
-    builder: (_) => _InternetChatSheet(session: widget.session),
-  );
+  Future<void> _showChat() async {
+    widget.session.markChatRead();
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (_) => _InternetChatSheet(session: widget.session),
+    );
+    widget.session.markChatRead();
+  }
+
+  void _minimize() {
+    unawaited(widget.session.setPtt(false));
+    Navigator.of(context).pop(false);
+  }
 
   void _showError(String value) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(value), backgroundColor: Colors.redAccent),
@@ -225,6 +235,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     final accent = widget.isNight
         ? AppTheme.nightSkyBlue
         : AppTheme.dawnBurgundy;
+    final compactHeight = MediaQuery.sizeOf(context).height < 720;
     final stateText = session.roomEnded
         ? '房间已解散 · 10 秒后返回'
         : switch (session.connectionState) {
@@ -236,12 +247,13 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     return PopScope(
       canPop: session.roomEnded,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !session.roomEnded) unawaited(_leave());
+        if (!didPop && !session.roomEnded) _minimize();
       },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            onPressed: _leave,
+            tooltip: '返回房间列表（保持通话）',
+            onPressed: _minimize,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           title: Column(
@@ -273,7 +285,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
               IconButton(
                 tooltip: '消息',
                 onPressed: _showChat,
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                icon: Badge(
+                  isLabelVisible: session.unreadChatCount > 0,
+                  label: Text('${session.unreadChatCount}'),
+                  child: const Icon(Icons.chat_bubble_outline_rounded),
+                ),
               ),
             if (session.isHost && !session.roomEnded)
               IconButton(
@@ -285,7 +301,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
         ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
+            padding: EdgeInsets.fromLTRB(
+              compactHeight ? 16 : 22,
+              compactHeight ? 6 : 12,
+              compactHeight ? 16 : 22,
+              compactHeight ? 10 : 20,
+            ),
             child: Column(
               children: [
                 if (inviteCode != null)
@@ -322,16 +343,36 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       ],
                     ),
                   ),
-                const SizedBox(height: 12),
+                SizedBox(height: compactHeight ? 4 : 12),
                 if (!session.roomEnded)
                   SizedBox(
-                    height: session.isHost ? 112 : 82,
+                    height: compactHeight
+                        ? (session.isHost ? 92 : 72)
+                        : (session.isHost ? 112 : 82),
                     child: _InternetMemberStrip(
                       session: session,
                       accent: accent,
                       isNight: widget.isNight,
                       onMore: _showMembers,
                       onError: _showError,
+                    ),
+                  ),
+                if (!session.roomEnded && session.messages.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: compactHeight ? 3 : 8),
+                    child: RecentMessagesStrip(
+                      messages: [
+                        for (final message in session.messages)
+                          RecentMessagePreviewItem(
+                            sender: DeviceCode.split(message.senderName).$1,
+                            text: message.text,
+                            isMine: message.isMine,
+                          ),
+                      ],
+                      isNight: widget.isNight,
+                      unreadCount: session.unreadChatCount,
+                      maxVisible: compactHeight ? 2 : 3,
+                      onTap: _showChat,
                     ),
                   ),
                 const Spacer(),
@@ -365,15 +406,20 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   VoiceModeSwitch(
                     value: session.voiceMode,
                     isNight: widget.isNight,
+                    dense: compactHeight,
                     onChanged: session.canSpeak
                         ? (value) => unawaited(session.setVoiceMode(value))
                         : (_) {},
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: compactHeight ? 10 : 16),
                   if (session.voiceMode == VoiceMode.pushToTalk)
-                    _InternetPttButton(session: session, accent: accent)
+                    _InternetPttButton(
+                      session: session,
+                      accent: accent,
+                      size: compactHeight ? 118 : 166,
+                    )
                   else
-                    _AutomaticTalkDisc(session: session, accent: accent),
+                    _AutomaticTalkStatus(session: session, accent: accent),
                 ],
                 const Spacer(),
                 if (!session.roomEnded)
@@ -419,7 +465,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                           accent: accent,
                         ),
                         IconButton.filled(
-                          tooltip: '离开',
+                          tooltip: '挂断',
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.redAccent,
                             foregroundColor: Colors.white,
@@ -749,9 +795,14 @@ class _MoreMembersPill extends StatelessWidget {
 }
 
 class _InternetPttButton extends StatelessWidget {
-  const _InternetPttButton({required this.session, required this.accent});
+  const _InternetPttButton({
+    required this.session,
+    required this.accent,
+    required this.size,
+  });
   final InternetRoomSession session;
   final Color accent;
+  final double size;
   @override
   Widget build(BuildContext context) => GestureDetector(
     behavior: HitTestBehavior.opaque,
@@ -762,8 +813,8 @@ class _InternetPttButton extends StatelessWidget {
     onTapCancel: () => unawaited(session.setPtt(false)),
     child: AnimatedContainer(
       duration: const Duration(milliseconds: 120),
-      width: 176,
-      height: 176,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: session.isPttPressed ? accent : accent.withValues(alpha: .88),
@@ -800,52 +851,46 @@ class _InternetPttButton extends StatelessWidget {
   );
 }
 
-class _AutomaticTalkDisc extends StatelessWidget {
-  const _AutomaticTalkDisc({required this.session, required this.accent});
+class _AutomaticTalkStatus extends StatelessWidget {
+  const _AutomaticTalkStatus({required this.session, required this.accent});
   final InternetRoomSession session;
   final Color accent;
   @override
   Widget build(BuildContext context) => StreamBuilder<double>(
+    key: const ValueKey('internet-automatic-talk-status'),
     stream: session.waveStream,
     initialData: 0,
     builder: (_, snapshot) {
       final wave = (snapshot.data ?? 0).clamp(0.0, 1.0);
-      return Transform.scale(
-        scale: 1 + wave * .06,
-        child: Container(
-          width: 176,
-          height: 176,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: accent,
-            boxShadow: [
-              BoxShadow(
-                color: accent.withValues(alpha: .36),
-                blurRadius: 30,
-                spreadRadius: 6,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                session.isMuted || !session.canSpeak
-                    ? Icons.mic_off_rounded
-                    : Icons.graphic_eq_rounded,
-                size: 54,
-                color: Colors.white,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                session.isMuted ? '麦克风已关闭' : '自动通话中',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+      final speaking = wave > .05 && !session.isMuted && session.canSpeak;
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: accent.withValues(alpha: .32)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              session.isMuted || !session.canSpeak
+                  ? Icons.mic_off_rounded
+                  : (speaking
+                        ? Icons.graphic_eq_rounded
+                        : Icons.hearing_rounded),
+              size: 22,
+              color: accent,
+            ),
+            const SizedBox(width: 9),
+            Text(
+              session.isMuted || !session.canSpeak
+                  ? '麦克风已关闭'
+                  : (speaking ? '正在说话' : '自动通话正在聆听'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       );
     },

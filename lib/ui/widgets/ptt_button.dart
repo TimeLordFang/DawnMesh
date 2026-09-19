@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../theme/app_theme.dart';
 import '../../l10n/app_strings.dart';
 
@@ -76,10 +77,12 @@ class _PttButtonState extends State<PttButton>
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final activeColor =
-        widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
-    final pressedColor =
-        widget.isNight ? const Color(0xFF5D85C2) : const Color(0xFFBA5F68);
+    final activeColor = widget.isNight
+        ? AppTheme.nightSkyBlue
+        : AppTheme.dawnBurgundy;
+    final pressedColor = widget.isNight
+        ? const Color(0xFF5D85C2)
+        : const Color(0xFFBA5F68);
 
     return GestureDetector(
       onTapDown: _onPressDown,
@@ -114,14 +117,23 @@ class _PttButtonState extends State<PttButton>
                       size: widget.size * 0.27,
                       color: Colors.white,
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      widget.isPressed ? s.pttHoldingToTalk : s.pttHoldToTalk,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: (widget.size * 0.09).clamp(16.0, 19.0),
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.2,
+                    SizedBox(height: widget.size < 120 ? 6 : 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.isPressed
+                              ? s.pttHoldingToTalk
+                              : s.pttHoldToTalk,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: (widget.size * 0.09).clamp(14.0, 19.0),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: widget.size < 120 ? .5 : 1.2,
+                          ),
+                        ),
                       ),
                     ),
                   ],

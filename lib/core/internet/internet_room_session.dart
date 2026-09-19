@@ -112,6 +112,7 @@ class InternetRoomSession extends ChangeNotifier {
   final List<InternetMember> _members = [];
   final Map<String, int> _memberSortOrders = {};
   final List<InternetChatMessage> _messages = [];
+  int _unreadChatCount = 0;
   final Map<String, _HostAdmission> _hostAdmissions = {};
   final Set<String> _speakingIds = {};
   final StreamController<double> _waveController =
@@ -120,6 +121,7 @@ class InternetRoomSession extends ChangeNotifier {
   InternetRoomSummary get summary => _summary!;
   List<InternetMember> get members => List.unmodifiable(_members);
   List<InternetChatMessage> get messages => List.unmodifiable(_messages);
+  int get unreadChatCount => _unreadChatCount;
   InternetConnectionState get connectionState => _connectionState;
   VoiceMode get voiceMode => _voiceMode;
   bool get isMuted => _muted;
@@ -799,7 +801,7 @@ class InternetRoomSession extends ChangeNotifier {
           value['sentAt'] is! int) {
         throw const FormatException('invalid encrypted chat payload');
       }
-      _messages.add(
+      _appendChatMessage(
         InternetChatMessage(
           id: value['id'] as String,
           senderId: senderId,
@@ -811,9 +813,8 @@ class InternetRoomSession extends ChangeNotifier {
           sentAt: DateTime.fromMillisecondsSinceEpoch(value['sentAt'] as int),
           isMine: senderId == memberId,
         ),
+        isIncoming: senderId != memberId,
       );
-      if (_messages.length > 100) _messages.removeAt(0);
-      notifyListeners();
     } catch (error) {
       AppLog.warn('DawnInternet', '忽略无效聊天数据：$error');
     }
@@ -844,7 +845,7 @@ class InternetRoomSession extends ChangeNotifier {
       reliable: true,
       topic: 'dawnmesh.chat.v1',
     );
-    _messages.add(
+    _appendChatMessage(
       InternetChatMessage(
         id: id,
         senderId: memberId,
@@ -853,7 +854,40 @@ class InternetRoomSession extends ChangeNotifier {
         sentAt: now,
         isMine: true,
       ),
+      isIncoming: false,
     );
+  }
+
+  void _appendChatMessage(
+    InternetChatMessage message, {
+    required bool isIncoming,
+  }) {
+    _messages.add(message);
+    if (_messages.length > 100) _messages.removeAt(0);
+    if (isIncoming) _unreadChatCount++;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void receiveChatForTesting({
+    String senderId = 'remote-member',
+    String senderName = '远端成员',
+    String text = '测试消息',
+  }) => _appendChatMessage(
+    InternetChatMessage(
+      id: 'test-${_messages.length}',
+      senderId: senderId,
+      senderName: senderName,
+      text: text,
+      sentAt: DateTime.now(),
+      isMine: false,
+    ),
+    isIncoming: true,
+  );
+
+  void markChatRead() {
+    if (_unreadChatCount == 0) return;
+    _unreadChatCount = 0;
     notifyListeners();
   }
 

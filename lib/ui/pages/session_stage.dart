@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../core/audio/audio_io.dart';
 import '../../core/platform/platform_audio_channel.dart';
 import '../../core/session/member.dart';
@@ -68,6 +69,7 @@ class _SessionStageState extends State<SessionStage>
   late final AudioIo _audioIo;
 
   RoomSession? _session;
+  bool _roomVisible = false;
   bool _leaving = false;
   String _roomName = "";
 
@@ -99,12 +101,12 @@ class _SessionStageState extends State<SessionStage>
     }
   }
 
-  bool get _inRoom => _session != null;
-
   void _onEnterRoom(RoomSession session, String roomName) {
     setState(() {
       _session = session;
       _roomName = roomName;
+      _roomVisible = true;
+      _leaving = false;
     });
 
     // 建房时特意没开麦（见 HomeContent._onCreateRoom）：AudioRecord/AudioTrack
@@ -117,21 +119,40 @@ class _SessionStageState extends State<SessionStage>
     });
   }
 
+  void _resumeRoom() {
+    if (_session == null || _roomVisible || _leaving) return;
+    setState(() => _roomVisible = true);
+    _stage.forward(from: 0.0);
+  }
+
+  void _minimizeRoom() {
+    final session = _session;
+    if (session == null || !_roomVisible || _leaving) return;
+    // 返回首页只收起房间界面；音频、传输、聊天和邀请码都继续保留。
+    if (session.isPttPressed) session.setPtt(false);
+    setState(() => _roomVisible = false);
+    _stage.reverse();
+  }
+
   void _onLeaveRoom() {
     final session = _session;
     if (session == null || _leaving) return;
-    _leaving = true;
+    setState(() => _leaving = true);
 
     // 点了就走：退场动画立刻起，音频与 socket 的收尾在后台并行做。
     // 早先这里是 `await session.leave()` 再反演动画，等于让用户干等一次
     // socket 关闭，手感上像是按钮没反应。
     final cleanup = session.dispose();
 
-    _stage.reverse().whenComplete(() async {
+    final transition = _stage.value == 0
+        ? Future<void>.value()
+        : _stage.reverse();
+    transition.whenComplete(() async {
       await cleanup;
       if (!mounted) return;
       setState(() {
         _leaving = false;
+        _roomVisible = false;
         _session = null;
         _roomName = "";
       });
@@ -144,11 +165,10 @@ class _SessionStageState extends State<SessionStage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder:
-          (context) => DiagnosticsSheet(
-            isNight: widget.isNight,
-            memberCount: session.members.length,
-          ),
+      builder: (context) => DiagnosticsSheet(
+        isNight: widget.isNight,
+        memberCount: session.members.length,
+      ),
     );
   }
 
@@ -181,9 +201,9 @@ class _SessionStageState extends State<SessionStage>
 
     return PopScope(
       // 在房间里时，系统返回键走的是退场动画，而不是直接弹出路由。
-      canPop: !_inRoom,
+      canPop: !_roomVisible,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _inRoom) _onLeaveRoom();
+        if (!didPop && _roomVisible) _minimizeRoom();
       },
       child: Scaffold(
         body: Stack(
@@ -201,21 +221,28 @@ class _SessionStageState extends State<SessionStage>
                   stage: _stage,
                   audioIo: _audioIo,
                   onEnterRoom: _onEnterRoom,
+                  activeSession: session,
+                  activeRoomName: _roomName,
+                  hasActiveRoom: session != null && !_leaving,
+                  onResumeActiveRoom: _resumeRoom,
+                  onOpenActiveChat: session == null
+                      ? null
+                      : () => _showChatSheet(session),
+                  onEndActiveRoom: _onLeaveRoom,
                 ),
-                builder:
-                    (context, child) => TickerMode(
-                      // 落位后首页整组进 Offstage，但 Offstage 不会暂停 ticker：
-                      // 扫描转圈这类动画会继续在看不见的地方每帧重绘，抢走
-                      // 合成器的时间。退场开始时这里再放开。
-                      enabled: _stage.value < 1.0,
-                      child: Offstage(
-                        offstage: _stage.value >= 1.0,
-                        child: IgnorePointer(
-                          ignoring: _stage.value > 0.0,
-                          child: child,
-                        ),
-                      ),
+                builder: (context, child) => TickerMode(
+                  // 落位后首页整组进 Offstage，但 Offstage 不会暂停 ticker：
+                  // 扫描转圈这类动画会继续在看不见的地方每帧重绘，抢走
+                  // 合成器的时间。退场开始时这里再放开。
+                  enabled: _stage.value < 1.0,
+                  child: Offstage(
+                    offstage: _stage.value >= 1.0,
+                    child: IgnorePointer(
+                      ignoring: _stage.value > 0.0,
+                      child: child,
                     ),
+                  ),
+                ),
               ),
             ),
 
@@ -233,12 +260,10 @@ class _SessionStageState extends State<SessionStage>
                     isNight: widget.isNight,
                     stage: _stage,
                     onLeave: _onLeaveRoom,
+                    onOpenChat: () => _showChatSheet(session),
                   ),
-                  builder:
-                      (context, child) => IgnorePointer(
-                        ignoring: _stage.value < 1.0,
-                        child: child,
-                      ),
+                  builder: (context, child) =>
+                      IgnorePointer(ignoring: _stage.value < 1.0, child: child),
                 ),
               ),
 
@@ -250,9 +275,8 @@ class _SessionStageState extends State<SessionStage>
               right: 0,
               child: AnimatedBuilder(
                 animation: _stage,
-                builder:
-                    (context, _) =>
-                        _buildHeaderLayer(session, homeHeader, roomHeader),
+                builder: (context, _) =>
+                    _buildHeaderLayer(session, homeHeader, roomHeader),
               ),
             ),
           ],
@@ -458,7 +482,7 @@ class _SessionStageState extends State<SessionStage>
             iconSize: 30,
             padding: const EdgeInsets.all(12),
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: _onLeaveRoom,
+            onPressed: _minimizeRoom,
           ),
           from: -16,
         ),
@@ -499,10 +523,9 @@ class _SessionStageState extends State<SessionStage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        backgroundColor:
-                            widget.isNight
-                                ? AppTheme.darkLeaveRosePink
-                                : AppTheme.dawnCoral,
+                        backgroundColor: widget.isNight
+                            ? AppTheme.darkLeaveRosePink
+                            : AppTheme.dawnCoral,
                         child: const Icon(
                           Icons.chat_bubble_outline_rounded,
                           color: Colors.white,
@@ -553,14 +576,13 @@ class _SessionStageState extends State<SessionStage>
                   final state = snapshot.data ?? session.state;
                   final reconnecting = state == RoomState.reconnecting;
                   final disconnected = state == RoomState.disconnected;
-                  final status =
-                      reconnecting
-                          ? s.roomReconnecting
-                          : disconnected
-                          ? s.roomDisconnected
-                          : session.isHost
-                          ? s.hostBroadcastingStatus
-                          : s.memberConnectedStatus;
+                  final status = reconnecting
+                      ? s.roomReconnecting
+                      : disconnected
+                      ? s.roomDisconnected
+                      : session.isHost
+                      ? s.hostBroadcastingStatus
+                      : s.memberConnectedStatus;
                   return Row(
                     children: [
                       if (reconnecting)

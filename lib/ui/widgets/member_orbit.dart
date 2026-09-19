@@ -25,8 +25,14 @@ List<Member> stableMemberDisplayOrder(Iterable<Member> members) {
 class MemberOrbit extends StatelessWidget {
   final List<Member> members;
   final bool isNight;
+  final bool compact;
 
-  const MemberOrbit({super.key, required this.members, required this.isNight});
+  const MemberOrbit({
+    super.key,
+    required this.members,
+    required this.isNight,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +41,7 @@ class MemberOrbit extends StatelessWidget {
 
     return SizedBox(
       // 头像 64 + 昵称一行 + 冲突短码一行，留点余量。
-      height: 118,
+      height: compact ? 74 : 118,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -49,6 +55,7 @@ class MemberOrbit extends StatelessWidget {
             member: member,
             isNight: isNight,
             hasConflict: hasConflict,
+            compact: compact,
           );
         },
       ),
@@ -60,11 +67,13 @@ class _MemberAvatarChip extends StatelessWidget {
   final Member member;
   final bool isNight;
   final bool hasConflict;
+  final bool compact;
 
   const _MemberAvatarChip({
     required this.member,
     required this.isNight,
     this.hasConflict = false,
+    this.compact = false,
   });
 
   @override
@@ -74,7 +83,7 @@ class _MemberAvatarChip extends StatelessWidget {
 
     return SizedBox(
       // 固定宽度，昵称才有可省略的边界；否则横向列表里 Row 拿到的是无界约束。
-      width: 92,
+      width: compact ? 64 : 92,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -84,14 +93,14 @@ class _MemberAvatarChip extends StatelessWidget {
             isHost: member.isHost,
             isSpeaking: member.isSpeaking,
             isMuted: member.isMuted,
-            size: 64,
+            size: compact ? 42 : 64,
             isNight: isNight,
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: compact ? 3 : 6),
           Text(
             displayName,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: compact ? 11.5 : 14,
               color: isNight
                   ? AppTheme.darkTextSecondary
                   : AppTheme.lightTextSecondary,

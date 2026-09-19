@@ -1,5 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../../core/session/chat_message.dart';
+import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
 import '../theme/app_theme.dart';
@@ -7,6 +11,7 @@ import '../transitions/stage_choreography.dart';
 import '../widgets/audio_controls.dart';
 import '../widgets/member_orbit.dart';
 import '../widgets/ptt_button.dart';
+import '../widgets/recent_messages_strip.dart';
 import '../widgets/voice_mode_switch.dart';
 import '../../l10n/app_strings.dart';
 
@@ -23,6 +28,7 @@ class RoomContent extends StatefulWidget {
   final Animation<double> stage;
 
   final VoidCallback onLeave;
+  final VoidCallback? onOpenChat;
 
   const RoomContent({
     super.key,
@@ -30,6 +36,7 @@ class RoomContent extends StatefulWidget {
     required this.isNight,
     required this.stage,
     required this.onLeave,
+    this.onOpenChat,
   });
 
   @override
@@ -58,17 +65,17 @@ class _RoomContentState extends State<RoomContent> {
     final isNight = widget.isNight;
     final stage = widget.stage;
     final compactHeight = MediaQuery.sizeOf(context).height < 700;
-    // 对讲盘按屏幕高度取，矮屏上收一点，免得挤爆下面的控制条。
-    final discSize = (MediaQuery.of(context).size.height * 0.20).clamp(
-      124.0,
-      212.0,
+    // 最近消息进入主界面后，按住说话盘主动收紧，避免挤占文字信息。
+    final discSize = (MediaQuery.of(context).size.height * 0.15).clamp(
+      94.0,
+      166.0,
     );
 
     return SafeArea(
       top: false,
       child: Column(
         children: [
-          SizedBox(height: compactHeight ? 10 : 18),
+          SizedBox(height: compactHeight ? 4 : 18),
 
           // 1. 成员轨道
           StageEnterItem(
@@ -81,15 +88,54 @@ class _RoomContentState extends State<RoomContent> {
                 return MemberOrbit(
                   members: snapshot.data ?? [],
                   isNight: isNight,
+                  compact: compactHeight,
                 );
               },
             ),
           ),
 
+          StreamBuilder<List<ChatMessage>>(
+            stream: widget.session.chatListStream,
+            initialData: widget.session.chatMessages,
+            builder: (context, snapshot) {
+              final messages = snapshot.data ?? const <ChatMessage>[];
+              if (messages.isEmpty || widget.onOpenChat == null) {
+                return const SizedBox.shrink();
+              }
+              return StreamBuilder<int>(
+                stream: widget.session.unreadChatStream,
+                initialData: widget.session.unreadChatCount,
+                builder: (context, unreadSnapshot) => Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    compactHeight ? 2 : 5,
+                    20,
+                    compactHeight ? 5 : 8,
+                  ),
+                  child: RecentMessagesStrip(
+                    messages: [
+                      for (final message in messages)
+                        RecentMessagePreviewItem(
+                          sender: DeviceCode.split(message.senderNickname).$1,
+                          text: message.text,
+                          isMine: message.isLocal,
+                        ),
+                    ],
+                    unreadCount:
+                        unreadSnapshot.data ?? widget.session.unreadChatCount,
+                    maxVisible: compactHeight ? 2 : 3,
+                    isNight: isNight,
+                    onTap: widget.onOpenChat!,
+                  ),
+                ),
+              );
+            },
+          ),
+
           const Spacer(),
 
           Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 8 : 10),
+            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
             child: VoiceModeSwitch(
               value: widget.session.voiceMode,
               isNight: isNight,
@@ -103,10 +149,14 @@ class _RoomContentState extends State<RoomContent> {
             index: 1,
             rise: 40,
             fromScale: 0.84,
-            child:
-                widget.session.isFullDuplex
-                    ? _buildDuplexDisc(isNight, discSize)
-                    : PttButton(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: widget.session.voiceMode == VoiceMode.automatic
+                  ? _buildAutomaticStatus(isNight)
+                  : PttButton(
+                      key: const ValueKey('push-to-talk-button'),
                       isNight: isNight,
                       size: discSize,
                       isPressed: widget.session.isPttPressed,
@@ -116,6 +166,7 @@ class _RoomContentState extends State<RoomContent> {
                         });
                       },
                     ),
+            ),
           ),
 
           const Spacer(),
@@ -149,6 +200,7 @@ class _RoomContentState extends State<RoomContent> {
                 });
               },
               onLeave: widget.onLeave,
+              compact: true,
             ),
           ),
         ],
@@ -156,73 +208,58 @@ class _RoomContentState extends State<RoomContent> {
     );
   }
 
-  Widget _buildDuplexDisc(bool isNight, double size) {
+  Widget _buildAutomaticStatus(bool isNight) {
     final s = AppStrings.of(context);
     final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
-
-    // 光晕做在外层、参数固定：BoxShadow 的模糊是这里最贵的绘制，若
-    // blurRadius/spreadRadius 跟着音量逐帧变，GPU 就得逐帧重做高斯模糊——
-    // 退场动画期间音频还没停，wave 流 30~50Hz 推送，正好和转场抢帧。
-    // 动态感改由圆盘轻微缩放表达：缩放只动合成器的变换矩阵，近乎免费。
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: activeColor.withValues(alpha: 0.42),
-            blurRadius: 28,
-            spreadRadius: 6,
+    return StreamBuilder<double>(
+      key: const ValueKey('automatic-talk-status'),
+      stream: widget.session.waveStream,
+      initialData: 0.0,
+      builder: (context, snapshot) {
+        final wave = (snapshot.data ?? 0.0).clamp(0.0, 1.0);
+        final isSpeaking = wave > 0.05 && !widget.session.isMuted;
+        return Container(
+          constraints: const BoxConstraints(maxWidth: 310),
+          margin: const EdgeInsets.symmetric(horizontal: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          decoration: BoxDecoration(
+            color: activeColor.withValues(alpha: isNight ? .22 : .12),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: activeColor.withValues(alpha: .35)),
           ),
-        ],
-      ),
-      child: StreamBuilder<double>(
-        stream: widget.session.waveStream,
-        initialData: 0.0,
-        builder: (context, snapshot) {
-          final wave = (snapshot.data ?? 0.0).clamp(0.0, 1.0);
-          final isSpeaking = wave > 0.05 && !widget.session.isMuted;
-
-          return Transform.scale(
-            scale: 1.0 + wave * 0.04,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                widget.session.isMuted
+                    ? Icons.mic_off_rounded
+                    : (isSpeaking
+                          ? Icons.graphic_eq_rounded
+                          : Icons.hearing_rounded),
+                size: 22,
                 color: activeColor,
               ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.session.isMuted
-                          ? Icons.mic_off
-                          : (isSpeaking ? Icons.graphic_eq : Icons.mic),
-                      size: size * 0.28,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      widget.session.isMuted
-                          ? s.micMutedStatus
-                          : (isSpeaking ? s.speakingStatus : s.inCallStatus),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: (size * 0.085).clamp(15.0, 18.0),
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ],
+              const SizedBox(width: 9),
+              Flexible(
+                child: Text(
+                  widget.session.isMuted
+                      ? s.micMutedStatus
+                      : (isSpeaking ? s.speakingStatus : s.automaticListening),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isNight
+                        ? AppTheme.darkTextPrimary
+                        : AppTheme.lightTextPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          );
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

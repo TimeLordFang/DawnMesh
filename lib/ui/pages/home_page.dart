@@ -22,6 +22,8 @@ import '../../core/update/update_service.dart';
 import '../../l10n/app_strings.dart';
 import 'internet_home_page.dart';
 
+void _noop() {}
+
 /// 首页前景：昵称、房型、建房/扫描按钮、附近房间列表。
 ///
 /// 头部的日轮背景与大标题不在这里——它们归 `SessionStage` 管，因为进房时那层
@@ -36,6 +38,12 @@ class HomeContent extends StatefulWidget {
 
   final AudioIo audioIo;
   final void Function(RoomSession session, String roomName) onEnterRoom;
+  final RoomSession? activeSession;
+  final String activeRoomName;
+  final bool hasActiveRoom;
+  final VoidCallback onResumeActiveRoom;
+  final VoidCallback? onOpenActiveChat;
+  final VoidCallback onEndActiveRoom;
 
   const HomeContent({
     super.key,
@@ -43,6 +51,12 @@ class HomeContent extends StatefulWidget {
     required this.stage,
     required this.audioIo,
     required this.onEnterRoom,
+    this.activeSession,
+    this.activeRoomName = '',
+    this.hasActiveRoom = false,
+    this.onResumeActiveRoom = _noop,
+    this.onOpenActiveChat,
+    this.onEndActiveRoom = _noop,
   });
 
   @override
@@ -77,6 +91,7 @@ class _HomeContentState extends State<HomeContent> {
   RoomMode _selectedMode = RoomMode.wifiFullDuplex;
   bool _isScanning = false;
   List<WifiP2pPeer> _p2pPeers = [];
+  final Map<String, RoomInvite> _rememberedInvites = {};
 
   Timer? _scanTimer;
   Timer? _periodicScanTimer;
@@ -115,15 +130,29 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onStageStatusChanged(AnimationStatus status) {
-    if (status == AnimationStatus.dismissed) {
-      _stopPeriodicScan();
-      _lanDiscovery.stopAdvertising();
-      WifiDirectManager.instance.removeGroup();
-      _isHostingWifiDirect = false;
-      _restoringWifiDirectGroup = false;
-      _hostWifiCredentials = null;
-      _wifiDirectRecoveryStartedAt = null;
+    if (status == AnimationStatus.dismissed && !widget.hasActiveRoom) {
+      _releaseHostedRoomResources();
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hasActiveRoom &&
+        !widget.hasActiveRoom &&
+        widget.stage.status == AnimationStatus.dismissed) {
+      _releaseHostedRoomResources();
+    }
+  }
+
+  void _releaseHostedRoomResources() {
+    _stopPeriodicScan();
+    _lanDiscovery.stopAdvertising();
+    unawaited(WifiDirectManager.instance.removeGroup());
+    _isHostingWifiDirect = false;
+    _restoringWifiDirectGroup = false;
+    _hostWifiCredentials = null;
+    _wifiDirectRecoveryStartedAt = null;
   }
 
   void _selectMode(RoomMode mode) {
@@ -216,9 +245,11 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
-    if (_busy) return;
+    if (_busy || widget.hasActiveRoom) return;
     setState(() => _busy = true);
-    final invite = await requestRoomInvite(context);
+    final roomKey = 'ble:${room.address}';
+    final invite =
+        _rememberedInvites[roomKey] ?? await requestRoomInvite(context);
     if (!mounted) return;
     if (invite == null) {
       setState(() => _busy = false);
@@ -251,11 +282,13 @@ class _HomeContentState extends State<HomeContent> {
     try {
       await joined;
     } on TimeoutException {
+      _rememberedInvites.remove(roomKey);
       await session.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
       return;
     }
+    _rememberedInvites[roomKey] = invite;
     if (!mounted) {
       await session.dispose();
       return;
@@ -352,6 +385,22 @@ class _HomeContentState extends State<HomeContent> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 18),
+
+                  if (widget.activeSession != null) ...[
+                    StageExitItem(
+                      stage: stage,
+                      index: 0,
+                      child: _ActiveRoomCard(
+                        session: widget.activeSession!,
+                        roomName: widget.activeRoomName,
+                        isNight: isNight,
+                        onResume: widget.onResumeActiveRoom,
+                        onOpenChat: widget.onOpenActiveChat,
+                        onHangUp: widget.onEndActiveRoom,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
                   // 1. 昵称输入
                   StageExitItem(
@@ -527,7 +576,9 @@ class _HomeContentState extends State<HomeContent> {
                           Expanded(
                             flex: 6,
                             child: ElevatedButton(
-                              onPressed: _busy ? null : _onCreateRoom,
+                              onPressed: _busy || widget.hasActiveRoom
+                                  ? null
+                                  : _onCreateRoom,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: isNight
                                     ? AppTheme.nightSkyBlue
@@ -925,7 +976,7 @@ class _HomeContentState extends State<HomeContent> {
   String get _identityNickname => DeviceCode.attach(_nickname);
 
   void _onCreateRoom() async {
-    if (_busy) return;
+    if (_busy || widget.hasActiveRoom) return;
     setState(() => _busy = true);
     await _stopBleScanning();
     if (!mounted) return;
@@ -1007,9 +1058,11 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onJoinRoom(DiscoveredRoom room) async {
-    if (_busy) return;
+    if (_busy || widget.hasActiveRoom) return;
     setState(() => _busy = true);
-    final invite = await requestRoomInvite(context);
+    final roomKey = 'lan:${room.roomId}';
+    final invite =
+        _rememberedInvites[roomKey] ?? await requestRoomInvite(context);
     if (!mounted) return;
     if (invite == null) {
       setState(() => _busy = false);
@@ -1043,11 +1096,13 @@ class _HomeContentState extends State<HomeContent> {
     try {
       await joined;
     } on TimeoutException {
+      _rememberedInvites.remove(roomKey);
       await session.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
       return;
     }
+    _rememberedInvites[roomKey] = invite;
 
     if (!mounted) {
       await session.dispose();
@@ -1058,9 +1113,11 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
-    if (_busy) return;
+    if (_busy || widget.hasActiveRoom) return;
     setState(() => _busy = true);
-    final invite = await requestRoomInvite(context);
+    final roomKey = 'p2p:${peer.address}';
+    final invite =
+        _rememberedInvites[roomKey] ?? await requestRoomInvite(context);
     if (!mounted) return;
     if (invite == null) {
       setState(() => _busy = false);
@@ -1141,11 +1198,13 @@ class _HomeContentState extends State<HomeContent> {
     try {
       await joined;
     } on TimeoutException {
+      _rememberedInvites.remove(roomKey);
       await session.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('入房验证失败，请确认邀请码正确且房主仍在线。');
       return;
     }
+    _rememberedInvites[roomKey] = invite;
 
     if (!mounted) {
       await session.dispose();
@@ -1158,6 +1217,104 @@ class _HomeContentState extends State<HomeContent> {
           : s.wifiRoom;
       widget.onEnterRoom(session, displayName);
     }
+  }
+}
+
+class _ActiveRoomCard extends StatelessWidget {
+  const _ActiveRoomCard({
+    required this.session,
+    required this.roomName,
+    required this.isNight,
+    required this.onResume,
+    required this.onOpenChat,
+    required this.onHangUp,
+  });
+
+  final RoomSession session;
+  final String roomName;
+  final bool isNight;
+  final VoidCallback onResume;
+  final VoidCallback? onOpenChat;
+  final VoidCallback onHangUp;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          key: const ValueKey('active-room-card'),
+          borderRadius: BorderRadius.circular(18),
+          onTap: onResume,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: accent.withValues(alpha: .14),
+                  foregroundColor: accent,
+                  child: const Icon(Icons.call_rounded),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        roomName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 3),
+                      StreamBuilder<RoomState>(
+                        stream: session.stateStream,
+                        initialData: session.state,
+                        builder: (_, snapshot) => Text(
+                          snapshot.data == RoomState.reconnecting
+                              ? s.roomReconnecting
+                              : s.activeRoomKept,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StreamBuilder<int>(
+                  stream: session.unreadChatStream,
+                  initialData: session.unreadChatCount,
+                  builder: (_, snapshot) {
+                    final unread = snapshot.data ?? 0;
+                    return IconButton(
+                      tooltip: s.tooltipChat,
+                      onPressed: onOpenChat,
+                      icon: Badge(
+                        isLabelVisible: unread > 0,
+                        label: Text('$unread'),
+                        child: const Icon(Icons.chat_bubble_outline_rounded),
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
+                  tooltip: s.hangUp,
+                  color: isNight
+                      ? AppTheme.darkLeaveRosePink
+                      : AppTheme.lightLeaveAccent,
+                  onPressed: onHangUp,
+                  icon: const Icon(Icons.call_end_rounded),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

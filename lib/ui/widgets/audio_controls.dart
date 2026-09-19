@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 import '../../l10n/app_strings.dart';
 
@@ -12,6 +13,7 @@ class AudioControlsBar extends StatelessWidget {
   final VoidCallback onToggleSpeaker;
   final VoidCallback onToggleMicSource;
   final VoidCallback onLeave;
+  final bool compact;
 
   const AudioControlsBar({
     super.key,
@@ -23,19 +25,22 @@ class AudioControlsBar extends StatelessWidget {
     required this.onToggleSpeaker,
     required this.onToggleMicSource,
     required this.onLeave,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final leaveColor =
-        isNight ? AppTheme.darkLeaveRosePink : AppTheme.lightLeaveAccent;
+    final leaveColor = isNight
+        ? AppTheme.darkLeaveRosePink
+        : AppTheme.lightLeaveAccent;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
-    final textPrimary =
-        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+    final textPrimary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 18),
+      padding: EdgeInsets.symmetric(horizontal: 13, vertical: compact ? 4 : 18),
       child: Row(
         children: [
           // 1. 静音
@@ -47,6 +52,7 @@ class AudioControlsBar extends StatelessWidget {
             onTap: onToggleMute,
             bgColor: cardBg,
             textColor: textPrimary,
+            compact: compact,
           ),
 
           // 2. 扬声器 / 听筒
@@ -58,6 +64,7 @@ class AudioControlsBar extends StatelessWidget {
             onTap: onToggleSpeaker,
             bgColor: cardBg,
             textColor: textPrimary,
+            compact: compact,
           ),
 
           // 3. 耳机麦 / 手机麦。手机麦模式让蓝牙耳机保持媒体输出，
@@ -70,18 +77,20 @@ class AudioControlsBar extends StatelessWidget {
             onTap: onToggleMicSource,
             bgColor: cardBg,
             textColor: textPrimary,
+            compact: compact,
           ),
 
-          // 4. 离开房间 (高对比度月夜玫瑰粉)
+          // 4. 挂断房间 (高对比度月夜玫瑰粉)
           _ActionButton(
             icon: Icons.call_end,
-            label: s.leave,
+            label: s.hangUp,
             isActive: true,
             isNight: isNight,
             onTap: onLeave,
             bgColor: leaveColor.withValues(alpha: 0.15),
             borderColor: leaveColor.withValues(alpha: 0.62),
             textColor: leaveColor,
+            compact: compact,
           ),
         ],
       ),
@@ -98,6 +107,7 @@ class _ActionButton extends StatelessWidget {
   final Color bgColor;
   final Color? borderColor;
   final Color textColor;
+  final bool compact;
 
   const _ActionButton({
     required this.icon,
@@ -108,6 +118,7 @@ class _ActionButton extends StatelessWidget {
     required this.bgColor,
     this.borderColor,
     required this.textColor,
+    required this.compact,
   });
 
   @override
@@ -121,7 +132,10 @@ class _ActionButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(26),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 7 : 10,
+              vertical: compact ? 7 : 14,
+            ),
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(26),
@@ -139,13 +153,13 @@ class _ActionButton extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 24, color: textColor),
-                  const SizedBox(width: 8),
+                  Icon(icon, size: compact ? 20 : 24, color: textColor),
+                  SizedBox(width: compact ? 5 : 8),
                   Text(
                     label,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: 16,
+                      fontSize: compact ? 12 : 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
