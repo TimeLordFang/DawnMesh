@@ -2,11 +2,27 @@ import 'package:dawn_mesh/core/internet/internet_models.dart';
 import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/internet_room_page.dart';
+import 'package:dawn_mesh/ui/pages/internet_home_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  InternetRoomSession makeSession() {
+  const secureStorage = MethodChannel(
+    'plugins.it_nomads.com/flutter_secure_storage',
+  );
+
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorage, (_) async => null);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorage, null);
+  });
+
+  InternetRoomSession makeSession({bool isHost = false}) {
     const profile = ServerProfile(
       id: 'server-test',
       name: '测试服务器',
@@ -25,6 +41,7 @@ void main() {
         maxParticipants: 25,
         hostNickname: '群主',
       ),
+      isHost: isHost,
     );
   }
 
@@ -83,19 +100,77 @@ void main() {
     await tester.pump();
 
     expect(session.unreadChatCount, 1);
-    expect(
-      find.byWidgetPredicate(
-        (widget) => widget is Badge && widget.isLabelVisible,
-      ),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('recent-messages-strip')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-unread-dot')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-chat-dock')), findsOneWidget);
     expect(find.text('有新消息'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
+    await tester.tap(find.byKey(const ValueKey('open-chat-history')));
     await tester.pump();
 
     expect(session.unreadChatCount, 0);
     expect(find.text('有新消息'), findsWidgets);
+  });
+
+  testWidgets('host does not see the dissolved-by-owner countdown', (
+    tester,
+  ) async {
+    final session = makeSession(isHost: true);
+    addTearDown(session.disposeSession);
+    await tester.pumpWidget(
+      MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
+    );
+
+    await session.receiveRoomEndedForTesting();
+    await tester.pump();
+
+    expect(find.text('房间已被群主解散，10 秒后自动返回房间列表'), findsNothing);
+  });
+
+  testWidgets('room back opens network list and the next back opens app home', (
+    tester,
+  ) async {
+    final session = makeSession();
+    InternetRoomSession? retained = session;
+    addTearDown(session.disposeSession);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InternetHomePage(
+                      isNight: false,
+                      nickname: '成员',
+                      activeSession: retained,
+                      reopenActiveRoom: true,
+                      onActiveSessionChanged: (value) => retained = value,
+                    ),
+                  ),
+                ),
+                child: const Text('App 主界面'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('App 主界面'));
+    await tester.pumpAndSettle();
+    expect(find.byType(InternetRoomPage), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(InternetHomePage), findsOneWidget);
+    expect(find.byType(InternetRoomPage), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(InternetHomePage), findsNothing);
+    expect(find.text('App 主界面'), findsOneWidget);
+    expect(retained, same(session));
   });
 }

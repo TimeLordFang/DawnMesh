@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/audio/audio_io.dart';
+import '../../core/internet/internet_room_session.dart';
 import '../../core/platform/platform_audio_channel.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
@@ -13,7 +14,6 @@ import 'room_page.dart';
 import 'diagnostics_sheet.dart';
 import 'about_page.dart';
 import 'debug_log_page.dart';
-import '../theme/app_theme.dart';
 import '../widgets/room_chat_sheet.dart';
 import '../widgets/room_invite_row.dart';
 import '../../l10n/app_strings.dart';
@@ -36,11 +36,13 @@ import '../../l10n/app_strings.dart';
 class SessionStage extends StatefulWidget {
   final bool isNight;
   final VoidCallback onToggleTheme;
+  final InternetRoomSession? initialInternetSession;
 
   const SessionStage({
     super.key,
     required this.isNight,
     required this.onToggleTheme,
+    this.initialInternetSession,
   });
 
   @override
@@ -69,6 +71,7 @@ class _SessionStageState extends State<SessionStage>
   late final AudioIo _audioIo;
 
   RoomSession? _session;
+  InternetRoomSession? _internetSession;
   bool _roomVisible = false;
   bool _leaving = false;
   String _roomName = "";
@@ -77,6 +80,7 @@ class _SessionStageState extends State<SessionStage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _internetSession = widget.initialInternetSession;
     // 音频通道挂在舞台上，首页与房间共用一个，进出房间不会重建。
     _audioIo = PlatformAudioChannel();
     _stage = AnimationController(
@@ -90,6 +94,7 @@ class _SessionStageState extends State<SessionStage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_session?.dispose());
+    unawaited(_internetSession?.disposeSession());
     _stage.dispose();
     super.dispose();
   }
@@ -157,6 +162,11 @@ class _SessionStageState extends State<SessionStage>
         _roomName = "";
       });
     });
+  }
+
+  void _onInternetSessionChanged(InternetRoomSession? session) {
+    if (!mounted || identical(_internetSession, session)) return;
+    setState(() => _internetSession = session);
   }
 
   void _showDiagnostics() {
@@ -229,6 +239,8 @@ class _SessionStageState extends State<SessionStage>
                       ? null
                       : () => _showChatSheet(session),
                   onEndActiveRoom: _onLeaveRoom,
+                  activeInternetSession: _internetSession,
+                  onInternetSessionChanged: _onInternetSessionChanged,
                 ),
                 builder: (context, child) => TickerMode(
                   // 落位后首页整组进 Offstage，但 Offstage 不会暂停 ticker：
@@ -262,8 +274,13 @@ class _SessionStageState extends State<SessionStage>
                     onLeave: _onLeaveRoom,
                     onOpenChat: () => _showChatSheet(session),
                   ),
-                  builder: (context, child) =>
-                      IgnorePointer(ignoring: _stage.value < 1.0, child: child),
+                  builder: (context, child) => Offstage(
+                    offstage: !_roomVisible && _stage.value == 0,
+                    child: IgnorePointer(
+                      ignoring: _stage.value < 1.0,
+                      child: child,
+                    ),
+                  ),
                 ),
               ),
 
@@ -500,41 +517,6 @@ class _SessionStageState extends State<SessionStage>
                 padding: const EdgeInsets.all(12),
                 icon: const Icon(Icons.terminal_rounded, color: Colors.white),
                 onPressed: _showDebugLogs,
-              ),
-              StreamBuilder<int>(
-                stream: session.unreadChatStream,
-                initialData: session.unreadChatCount,
-                builder: (context, snapshot) {
-                  final unread = snapshot.data ?? 0;
-                  return Semantics(
-                    label: s.chatButtonLabel,
-                    hint: unread > 0 ? s.chatUnreadBadge(unread) : null,
-                    button: true,
-                    child: IconButton(
-                      tooltip: s.tooltipChat,
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(12),
-                      icon: Badge(
-                        isLabelVisible: unread > 0,
-                        label: Text(
-                          '$unread',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        backgroundColor: widget.isNight
-                            ? AppTheme.darkLeaveRosePink
-                            : AppTheme.dawnCoral,
-                        child: const Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
-                      onPressed: () => _showChatSheet(session),
-                    ),
-                  );
-                },
               ),
               IconButton(
                 tooltip: s.tooltipDiagnostics,

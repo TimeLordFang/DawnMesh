@@ -15,4 +15,11 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <style name="LockScreenPanelTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#82E3C8</item>
+        <item name="android:navigationBarColor">#091821</item>
+        <item name="android:statusBarColor">#0D252E</item>
+    </style>
 </resources>

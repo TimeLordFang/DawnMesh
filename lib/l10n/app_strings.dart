@@ -208,8 +208,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.5\nRecent text messages now appear in the room, with unread alerts and a tap for full history. Going back keeps the call active, and automatic voice mode uses a compact listening status.'
-      : '1.0.0-beta.5\n房间主界面现在会显示最近文字消息和未读提醒，点开可查看全部记录。返回首页会保持通话，自动通话模式也改为紧凑的聆听状态。';
+      ? '1.0.0-beta.6\nRoom chat is now always visible and supports emoji, encrypted image sharing, previews, and saving received images. Room navigation and dissolve notices are more predictable, while lock-screen controls now have matching day and night themes.'
+      : '1.0.0-beta.6\n房间聊天现在常驻显示，支持 emoji、加密图片收发、预览和保存。房间返回与解散提示更加清晰，锁屏操控界面也新增了配套的白天与夜间主题。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
@@ -306,6 +306,16 @@ class AppStrings {
   String get chatInputPlaceholder => isEn ? 'Say something…' : '说点什么…';
   String get chatSend => isEn ? 'Send' : '发送';
   String get chatEmptyHint => isEn ? 'No one has said hello yet' : '还没人说第一句';
+  String get chatDockEmpty =>
+      isEn ? 'New messages will appear here' : '消息会显示在这里';
+  String get chatImage => isEn ? 'Image' : '图片';
+  String get chatSendImage => isEn ? 'Send image' : '发送图片';
+  String get chatSaveImage => isEn ? 'Save to phone' : '保存到手机';
+  String get chatImageSaved =>
+      isEn ? 'Image saved to your gallery' : '图片已保存到手机相册';
+  String get chatImageSaveFailed => isEn
+      ? 'Could not save the image. Check photo permissions and try again.'
+      : '图片保存失败，请检查相册权限';
   String get chatMessageTooLong => isEn
       ? 'This message is a little long. Split it into a few messages.'
       : '这条有点长，分成几条发吧';

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio/audio_io.dart';
 import '../../core/diagnostics/app_log.dart';
+import '../../core/internet/internet_room_session.dart';
 import '../../core/preferences/nickname_store.dart';
 import '../../core/security/room_invite.dart';
 import '../widgets/room_invite_dialog.dart';
@@ -44,6 +45,8 @@ class HomeContent extends StatefulWidget {
   final VoidCallback onResumeActiveRoom;
   final VoidCallback? onOpenActiveChat;
   final VoidCallback onEndActiveRoom;
+  final InternetRoomSession? activeInternetSession;
+  final ValueChanged<InternetRoomSession?>? onInternetSessionChanged;
 
   const HomeContent({
     super.key,
@@ -57,6 +60,8 @@ class HomeContent extends StatefulWidget {
     this.onResumeActiveRoom = _noop,
     this.onOpenActiveChat,
     this.onEndActiveRoom = _noop,
+    this.activeInternetSession,
+    this.onInternetSessionChanged,
   });
 
   @override
@@ -92,6 +97,26 @@ class _HomeContentState extends State<HomeContent> {
   bool _isScanning = false;
   List<WifiP2pPeer> _p2pPeers = [];
   final Map<String, RoomInvite> _rememberedInvites = {};
+
+  bool get _hasAnyActiveRoom =>
+      widget.hasActiveRoom || widget.activeInternetSession != null;
+
+  Future<void> _openInternet({bool resumeActiveRoom = false}) async {
+    FocusScope.of(context).unfocus();
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InternetHomePage(
+          isNight: widget.isNight,
+          nickname: _nickname,
+          activeSession: widget.activeInternetSession,
+          onActiveSessionChanged: widget.onInternetSessionChanged,
+          reopenActiveRoom: resumeActiveRoom,
+          rememberedInvites: _rememberedInvites,
+        ),
+      ),
+    );
+  }
 
   Timer? _scanTimer;
   Timer? _periodicScanTimer;
@@ -245,7 +270,7 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   Future<void> _onJoinBleRoom(DiscoveredBleRoom room) async {
-    if (_busy || widget.hasActiveRoom) return;
+    if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
     final roomKey = 'ble:${room.address}';
     final invite =
@@ -402,6 +427,19 @@ class _HomeContentState extends State<HomeContent> {
                     const SizedBox(height: 14),
                   ],
 
+                  if (widget.activeInternetSession != null) ...[
+                    StageExitItem(
+                      stage: stage,
+                      index: 0,
+                      child: _ActiveNetworkRoomCard(
+                        session: widget.activeInternetSession!,
+                        isNight: isNight,
+                        onResume: () => _openInternet(resumeActiveRoom: true),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
                   // 1. 昵称输入
                   StageExitItem(
                     stage: stage,
@@ -539,18 +577,7 @@ class _HomeContentState extends State<HomeContent> {
                               const SizedBox(height: 8),
                               _InternetEntryCard(
                                 isNight: isNight,
-                                onTap: () {
-                                  FocusScope.of(context).unfocus();
-                                  Navigator.push<void>(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => InternetHomePage(
-                                        isNight: widget.isNight,
-                                        nickname: _nickname,
-                                      ),
-                                    ),
-                                  );
-                                },
+                                onTap: _openInternet,
                               ),
                             ],
                           );
@@ -576,7 +603,7 @@ class _HomeContentState extends State<HomeContent> {
                           Expanded(
                             flex: 6,
                             child: ElevatedButton(
-                              onPressed: _busy || widget.hasActiveRoom
+                              onPressed: _busy || _hasAnyActiveRoom
                                   ? null
                                   : _onCreateRoom,
                               style: ElevatedButton.styleFrom(
@@ -976,7 +1003,7 @@ class _HomeContentState extends State<HomeContent> {
   String get _identityNickname => DeviceCode.attach(_nickname);
 
   void _onCreateRoom() async {
-    if (_busy || widget.hasActiveRoom) return;
+    if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
     await _stopBleScanning();
     if (!mounted) return;
@@ -1058,7 +1085,7 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onJoinRoom(DiscoveredRoom room) async {
-    if (_busy || widget.hasActiveRoom) return;
+    if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
     final roomKey = 'lan:${room.roomId}';
     final invite =
@@ -1113,7 +1140,7 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _onJoinWifiDirectPeer(WifiP2pPeer peer) async {
-    if (_busy || widget.hasActiveRoom) return;
+    if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
     final roomKey = 'p2p:${peer.address}';
     final invite =
@@ -1310,6 +1337,58 @@ class _ActiveRoomCard extends StatelessWidget {
                   icon: const Icon(Icons.call_end_rounded),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveNetworkRoomCard extends StatelessWidget {
+  const _ActiveNetworkRoomCard({
+    required this.session,
+    required this.isNight,
+    required this.onResume,
+  });
+
+  final InternetRoomSession session;
+  final bool isNight;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    return ListenableBuilder(
+      listenable: session,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: accent.withValues(alpha: .10),
+          child: ListTile(
+            key: const ValueKey('active-network-room-card'),
+            onTap: onResume,
+            leading: CircleAvatar(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.public_rounded),
+            ),
+            title: Text(
+              session.summary.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text(
+              session.roomEnded ? '网络聊天室已解散 · 点按查看' : '网络聊天室通话保持中 · 点按返回',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Badge(
+              isLabelVisible: session.unreadChatCount > 0,
+              label: Text('${session.unreadChatCount}'),
+              child: Icon(Icons.arrow_forward_rounded, color: accent),
             ),
           ),
         ),

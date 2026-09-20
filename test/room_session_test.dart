@@ -6,6 +6,7 @@ import 'package:dawn_mesh/core/ffi/native_core_ffi.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_delete.dart';
+import 'package:dawn_mesh/core/protocol/payloads/chat_image.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_sync.dart';
 import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
@@ -123,14 +124,13 @@ void main() {
           type: FrameType.roster,
           senderId: 2,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 2,
-                members: [
-                  RosterMember(memberId: 2, flags: 0x01, nickname: '房主'),
-                  RosterMember(memberId: 3, flags: 0x00, nickname: '测试者'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 2,
+            members: [
+              RosterMember(memberId: 2, flags: 0x01, nickname: '房主'),
+              RosterMember(memberId: 3, flags: 0x00, nickname: '测试者'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -214,14 +214,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '房主'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '测试者'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '测试者'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -407,6 +406,86 @@ void main() {
       await sub.cancel();
     });
 
+    test('图片分片发送后在本地回显', () async {
+      session = build();
+      await session.createRoom();
+      final bytes = Uint8List.fromList([
+        0xff,
+        0xd8,
+        0xff,
+        ...List<int>.generate(900, (index) => index & 0xff),
+      ]);
+
+      await session.sendChatImage(
+        bytes: bytes,
+        mimeType: 'image/jpeg',
+        name: 'sunrise.jpg',
+      );
+
+      final chunks = sent.where((frame) => frame.type == FrameType.chatImage);
+      expect(chunks.length, 3);
+      expect(session.chatMessages.single.hasImage, isTrue);
+      expect(session.chatMessages.single.imageBytes, bytes);
+      expect(session.unreadChatCount, 0);
+    });
+
+    test('接收完整图片分片后合并并增加未读', () async {
+      session = build();
+      await session.createRoom();
+      await session.handleIncomingFrame(
+        Frame(
+          type: FrameType.roster,
+          senderId: 1,
+          seq: 2,
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '测试者'),
+              RosterMember(memberId: 2, flags: 0, nickname: '远端伙伴'),
+            ],
+          ).encode(),
+        ),
+      );
+      final bytes = Uint8List.fromList([
+        0x89,
+        0x50,
+        0x4e,
+        0x47,
+        ...List<int>.generate(700, (index) => index & 0xff),
+      ]);
+      final count =
+          (bytes.length + ChatImageChunkPayload.maxChunkBytes - 1) ~/
+          ChatImageChunkPayload.maxChunkBytes;
+      for (var index = 0; index < count; index++) {
+        final start = index * ChatImageChunkPayload.maxChunkBytes;
+        final end = (start + ChatImageChunkPayload.maxChunkBytes).clamp(
+          0,
+          bytes.length,
+        );
+        await session.handleIncomingFrame(
+          Frame(
+            type: FrameType.chatImage,
+            senderId: 2,
+            seq: 20 + index,
+            payload: ChatImageChunkPayload(
+              transferId: 99,
+              timestampMs: 1725450000000,
+              senderCode: '0222',
+              chunkIndex: index,
+              chunkCount: count,
+              format: ChatImageFormat.png,
+              name: 'received.png',
+              data: Uint8List.sublistView(bytes, start, end),
+            ).encode(),
+          ),
+        );
+      }
+
+      expect(session.chatMessages.single.imageBytes, bytes);
+      expect(session.chatMessages.single.imageMimeType, 'image/png');
+      expect(session.unreadChatCount, 1);
+    });
+
     test('收到在册成员合法聊天帧：进流、进历史、未读计数递增', () async {
       session = build();
       await session.createRoom();
@@ -417,14 +496,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 2,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '测试者'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '测试者'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -487,14 +565,13 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 2,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '测试者'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '测试者'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴'),
+            ],
+          ).encode(),
         ),
       );
 
@@ -550,8 +627,10 @@ void main() {
       type: FrameType.joinReq,
       senderId: 0,
       seq: seq,
-      payload:
-          JoinRequestPayload(nickname: nickname, sessionToken: token).encode(),
+      payload: JoinRequestPayload(
+        nickname: nickname,
+        sessionToken: token,
+      ).encode(),
     );
 
     test('同令牌重连复用原成员号，不会变成两个成员', () async {
@@ -612,8 +691,10 @@ void main() {
       type: FrameType.joinReq,
       senderId: 0,
       seq: seq,
-      payload:
-          JoinRequestPayload(nickname: nickname, sessionToken: token).encode(),
+      payload: JoinRequestPayload(
+        nickname: nickname,
+        sessionToken: token,
+      ).encode(),
     );
 
     Uint8List token(int seed) => Uint8List.fromList(List.filled(16, seed));
@@ -671,16 +752,15 @@ void main() {
           type: FrameType.roster,
           senderId: 1,
           seq: 1,
-          payload:
-              RosterPayload(
-                hostId: 1,
-                members: [
-                  RosterMember(memberId: 1, flags: 0x01, nickname: '房主'),
-                  RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴#321'),
-                  RosterMember(memberId: 3, flags: 0x00, nickname: '第三人#654'),
-                  RosterMember(memberId: 4, flags: 0x00, nickname: '测试者'),
-                ],
-              ).encode(),
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主'),
+              RosterMember(memberId: 2, flags: 0x00, nickname: '远端伙伴#321'),
+              RosterMember(memberId: 3, flags: 0x00, nickname: '第三人#654'),
+              RosterMember(memberId: 4, flags: 0x00, nickname: '测试者'),
+            ],
+          ).encode(),
         ),
       );
     }
@@ -740,12 +820,11 @@ void main() {
           type: FrameType.chat,
           senderId: 2,
           seq: 20,
-          payload:
-              const ChatMessagePayload(
-                text: '作者的消息',
-                timestampMs: 1700000001000,
-                senderCode: '321',
-              ).encode(),
+          payload: const ChatMessagePayload(
+            text: '作者的消息',
+            timestampMs: 1700000001000,
+            senderCode: '321',
+          ).encode(),
         ),
       );
       expect(session.chatMessages.length, 1);
@@ -757,11 +836,10 @@ void main() {
           type: FrameType.chatDelete,
           senderId: 3,
           seq: 21,
-          payload:
-              ChatDeletePayload(
-                senderCode: '321',
-                messageId: messageId,
-              ).encode(),
+          payload: ChatDeletePayload(
+            senderCode: '321',
+            messageId: messageId,
+          ).encode(),
         ),
       );
       expect(
@@ -776,11 +854,10 @@ void main() {
           type: FrameType.chatDelete,
           senderId: 2,
           seq: 22,
-          payload:
-              ChatDeletePayload(
-                senderCode: '321',
-                messageId: messageId,
-              ).encode(),
+          payload: ChatDeletePayload(
+            senderCode: '321',
+            messageId: messageId,
+          ).encode(),
         ),
       );
       expect(session.chatMessages, isEmpty);

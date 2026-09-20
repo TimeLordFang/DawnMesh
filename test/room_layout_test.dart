@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/audio/audio_io.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/core/internet/internet_models.dart';
+import 'package:dawn_mesh/core/internet/internet_room_api.dart';
+import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/room_page.dart';
 import 'package:dawn_mesh/ui/pages/session_stage.dart';
 import 'package:dawn_mesh/ui/widgets/room_chat_sheet.dart';
@@ -153,4 +156,46 @@ void main() {
       await session.dispose();
     });
   }
+
+  testWidgets('主界面显示正在保持的网络聊天室', (tester) async {
+    const profile = ServerProfile(
+      id: 'server-test',
+      name: '测试服务器',
+      baseUrl: 'https://talk.example.test',
+    );
+    final session = InternetRoomSession.forTesting(
+      api: InternetRoomApi(profile),
+      profile: profile,
+      nickname: '成员',
+      roomId: 'room-test',
+      memberId: 'member-test',
+      summary: const InternetRoomSummary(
+        id: 'room-test',
+        name: '晚风房间',
+        memberCount: 2,
+        maxParticipants: 25,
+        hostNickname: '群主',
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionStage(
+          isNight: false,
+          onToggleTheme: () {},
+          initialInternetSession: session,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 3));
+
+    expect(
+      find.byKey(const ValueKey('active-network-room-card')),
+      findsOneWidget,
+    );
+    expect(find.text('晚风房间'), findsOneWidget);
+    expect(find.textContaining('网络聊天室通话保持中'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
 }

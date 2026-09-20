@@ -2,20 +2,71 @@ package dev.dawnmesh.intercom
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import kotlin.math.min
 
+internal data class CallPanelPalette(
+    val isNight: Boolean,
+    val backgroundStart: Int,
+    val backgroundEnd: Int,
+    val glow: Int,
+    val ink: Int,
+    val card: Int,
+    val white: Int,
+    val secondary: Int,
+    val mint: Int,
+    val blue: Int,
+    val muted: Int,
+    val padMuted: Int,
+    val padPressed: Int,
+    val padAutomatic: Int,
+    val padHold: Int,
+)
+
 internal object CallPanelColors {
-    val ink = Color.rgb(9, 24, 33)
-    val card = Color.rgb(24, 45, 56)
-    val white = Color.rgb(239, 250, 248)
-    val secondary = Color.rgb(157, 181, 187)
-    val mint = Color.rgb(130, 227, 200)
-    val blue = Color.rgb(153, 206, 251)
-    val muted = Color.rgb(211, 164, 152)
+    val night = CallPanelPalette(
+        isNight = true,
+        backgroundStart = Color.rgb(13, 37, 46),
+        backgroundEnd = Color.rgb(9, 24, 33),
+        glow = Color.argb(40, 113, 225, 195),
+        ink = Color.rgb(9, 24, 33),
+        card = Color.rgb(24, 45, 56),
+        white = Color.rgb(239, 250, 248),
+        secondary = Color.rgb(157, 181, 187),
+        mint = Color.rgb(130, 227, 200),
+        blue = Color.rgb(153, 206, 251),
+        muted = Color.rgb(211, 164, 152),
+        padMuted = Color.rgb(47, 47, 52),
+        padPressed = Color.rgb(33, 100, 91),
+        padAutomatic = Color.rgb(36, 63, 83),
+        padHold = Color.rgb(27, 66, 66),
+    )
+    val day = CallPanelPalette(
+        isNight = false,
+        backgroundStart = Color.rgb(255, 249, 241),
+        backgroundEnd = Color.rgb(244, 241, 236),
+        glow = Color.argb(66, 243, 220, 170),
+        ink = Color.rgb(57, 40, 50),
+        card = Color.rgb(252, 250, 247),
+        white = Color.rgb(42, 34, 37),
+        secondary = Color.rgb(110, 98, 94),
+        mint = Color.rgb(191, 225, 207),
+        blue = Color.rgb(198, 216, 240),
+        muted = Color.rgb(239, 186, 174),
+        padMuted = Color.rgb(247, 229, 224),
+        padPressed = Color.rgb(176, 91, 93),
+        padAutomatic = Color.rgb(222, 232, 246),
+        padHold = Color.rgb(244, 221, 213),
+    )
+
+    fun resolve(context: Context): CallPanelPalette {
+        val mode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return if (mode == Configuration.UI_MODE_NIGHT_YES) night else day
+    }
 }
 
 /** Small vector icons drawn at any density, without a font or image dependency. */
@@ -69,7 +120,10 @@ internal class CallPanelIcon(private val kind: String, private var tint: Int) : 
 }
 
 /** Static atmospheric background; no animation or redraw loop while idle. */
-internal class CallPanelBackdrop(context: Context) : View(context) {
+internal class CallPanelBackdrop(
+    context: Context,
+    private val palette: CallPanelPalette,
+) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var base: Shader? = null
     private var wash: Shader? = null
@@ -77,9 +131,9 @@ internal class CallPanelBackdrop(context: Context) : View(context) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w <= 0 || h <= 0) return
         base = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
-            intArrayOf(Color.rgb(13, 37, 46), CallPanelColors.ink), null, Shader.TileMode.CLAMP)
+            intArrayOf(palette.backgroundStart, palette.backgroundEnd), null, Shader.TileMode.CLAMP)
         wash = RadialGradient(w * .9f, h * .3f, w * .9f,
-            Color.argb(40, 113, 225, 195), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            palette.glow, Color.TRANSPARENT, Shader.TileMode.CLAMP)
     }
     override fun onDraw(canvas: Canvas) {
         paint.shader = base
@@ -91,7 +145,10 @@ internal class CallPanelBackdrop(context: Context) : View(context) {
 }
 
 /** Circular PTT/voice status surface. Animation runs only during a visible hold. */
-internal class CallTalkPad(context: Context) : View(context) {
+internal class CallTalkPad(
+    context: Context,
+    private val palette: CallPanelPalette,
+) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var automatic = false
     private var muted = false
@@ -102,9 +159,9 @@ internal class CallTalkPad(context: Context) : View(context) {
     private val scaledDensity = resources.displayMetrics.scaledDensity
     private val titleTypeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     private val subtitleTypeface = Typeface.create("sans-serif", Typeface.NORMAL)
-    private val micIcon = CallPanelIcon("mic", CallPanelColors.mint)
-    private val autoIcon = CallPanelIcon("wave", CallPanelColors.blue)
-    private val mutedIcon = CallPanelIcon("mic_off", CallPanelColors.muted)
+    private val micIcon = CallPanelIcon("mic", palette.mint)
+    private val autoIcon = CallPanelIcon("wave", palette.blue)
+    private val mutedIcon = CallPanelIcon("mic_off", palette.muted)
     private var fillShader: Shader? = null
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -117,9 +174,14 @@ internal class CallTalkPad(context: Context) : View(context) {
         val cy = height / 2f
         val radius = min(cx, cy) - 12 * density
         if (radius <= 0) return
-        val fill = when { muted -> Color.rgb(47, 47, 52); pressed -> Color.rgb(33, 100, 91); automatic -> Color.rgb(36, 63, 83); else -> Color.rgb(27, 66, 66) }
+        val fill = when {
+            muted -> palette.padMuted
+            pressed -> palette.padPressed
+            automatic -> palette.padAutomatic
+            else -> palette.padHold
+        }
         fillShader = RadialGradient(cx, cy - radius / 2, radius * 1.6f,
-            fill, CallPanelColors.card, Shader.TileMode.CLAMP)
+            fill, palette.card, Shader.TileMode.CLAMP)
     }
 
 
@@ -170,7 +232,7 @@ internal class CallTalkPad(context: Context) : View(context) {
         val cx = width / 2f
         val cy = height / 2f
         val radius = min(cx, cy) - 12 * density
-        val accent = when { muted -> CallPanelColors.muted; automatic -> CallPanelColors.blue; else -> CallPanelColors.mint }
+        val accent = when { muted -> palette.muted; automatic -> palette.blue; else -> palette.mint }
         paint.shader = null
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = density
@@ -192,7 +254,7 @@ internal class CallTalkPad(context: Context) : View(context) {
         val iconY = (cy - 30 * density).toInt()
         icon.setBounds(cx.toInt() - iconHalf, iconY - iconHalf, cx.toInt() + iconHalf, iconY + iconHalf)
         icon.draw(canvas)
-        paint.color = CallPanelColors.white
+        paint.color = palette.white
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = titleTypeface
         paint.textSize = 22 * scaledDensity.coerceAtMost(density * 1.4f)

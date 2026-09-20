@@ -3,8 +3,8 @@ description: "DawnMesh - decentralized near-field voice intercom for Android."
 publish_to: 'none'
 
 # versionName 取 `+` 前半段，versionCode 取后半段。
-# DawnMesh 1.0.0-beta.5 / versionCode 29
-version: 1.0.0-beta.5+29
+# DawnMesh 1.0.0-beta.6 / versionCode 30
+version: 1.0.0-beta.6+30
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -22,6 +22,8 @@ dependencies:
   livekit_client: ^2.12.0
   connectivity_plus: ^7.3.1
   flutter_secure_storage: ^11.1.1
+  image_picker: ^1.2.3
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:

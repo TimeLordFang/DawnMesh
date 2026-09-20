@@ -11,6 +11,7 @@ import 'package:livekit_client/livekit_client.dart';
 
 import '../diagnostics/app_log.dart';
 import '../platform/background_call_controls.dart';
+import '../protocol/payloads/chat_image.dart';
 import '../security/room_invite.dart';
 import '../security/session_crypto.dart';
 import '../security/spake2.dart';
@@ -34,6 +35,9 @@ class InternetChatMessage {
     required this.text,
     required this.sentAt,
     required this.isMine,
+    this.imageBytes,
+    this.imageMimeType,
+    this.imageName,
   });
   final String id;
   final String senderId;
@@ -41,6 +45,11 @@ class InternetChatMessage {
   final String text;
   final DateTime sentAt;
   final bool isMine;
+  final Uint8List? imageBytes;
+  final String? imageMimeType;
+  final String? imageName;
+
+  bool get hasImage => imageBytes != null;
 }
 
 class InternetRoomSession extends ChangeNotifier {
@@ -113,6 +122,7 @@ class InternetRoomSession extends ChangeNotifier {
   final Map<String, int> _memberSortOrders = {};
   final List<InternetChatMessage> _messages = [];
   int _unreadChatCount = 0;
+  final Map<String, _IncomingInternetImage> _incomingImages = {};
   final Map<String, _HostAdmission> _hostAdmissions = {};
   final Set<String> _speakingIds = {};
   final StreamController<double> _waveController =
@@ -774,8 +784,11 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   void _onDataReceived(DataReceivedEvent event) {
-    if (event.topic != 'dawnmesh.chat.v1') return;
-    unawaited(_decryptChat(event));
+    if (event.topic == 'dawnmesh.chat.v1') {
+      unawaited(_decryptChat(event));
+    } else if (event.topic == 'dawnmesh.image.v1') {
+      unawaited(_decryptImageChunk(event));
+    }
   }
 
   Future<void> _decryptChat(DataReceivedEvent event) async {
@@ -856,6 +869,126 @@ class InternetRoomSession extends ChangeNotifier {
       ),
       isIncoming: false,
     );
+  }
+
+  Future<void> sendChatImage({
+    required Uint8List bytes,
+    required String mimeType,
+    required String name,
+  }) async {
+    if (bytes.isEmpty || bytes.length > ChatImageChunkPayload.maxImageBytes) {
+      throw ArgumentError('图片不能超过 192 KB。');
+    }
+    final format = ChatImageFormat.fromMimeType(mimeType);
+    final cipher = _chatCipher;
+    final participant = _livekitRoom?.localParticipant;
+    if (format == null || cipher == null || participant == null) {
+      throw StateError('图片发送通道尚未就绪。');
+    }
+    final now = DateTime.now();
+    final transferId = now.microsecondsSinceEpoch & 0xffffffff;
+    final safeName = _safeInternetImageName(name, format);
+    final chunkCount =
+        (bytes.length + _InternetImageChunk.maxChunkBytes - 1) ~/
+        _InternetImageChunk.maxChunkBytes;
+    for (var index = 0; index < chunkCount; index++) {
+      final start = index * _InternetImageChunk.maxChunkBytes;
+      final end = min(start + _InternetImageChunk.maxChunkBytes, bytes.length);
+      final clear = _InternetImageChunk(
+        transferId: transferId,
+        timestampMs: now.millisecondsSinceEpoch,
+        chunkIndex: index,
+        chunkCount: chunkCount,
+        format: format,
+        name: safeName,
+        data: Uint8List.sublistView(bytes, start, end),
+      ).encode();
+      final encrypted = await cipher.encrypt(
+        clear,
+        associatedData: Uint8List.fromList(
+          utf8.encode('dawnmesh.image.v1\u0000$memberId'),
+        ),
+      );
+      await participant.publishData(
+        [...encrypted.nonce, ...encrypted.ciphertext],
+        reliable: true,
+        topic: 'dawnmesh.image.v1',
+      );
+    }
+    _appendChatMessage(
+      InternetChatMessage(
+        id: '$transferId-$memberId-image',
+        senderId: memberId,
+        senderName: nickname,
+        text: '',
+        sentAt: now,
+        isMine: true,
+        imageBytes: Uint8List.fromList(bytes),
+        imageMimeType: mimeType,
+        imageName: safeName,
+      ),
+      isIncoming: false,
+    );
+  }
+
+  Future<void> _decryptImageChunk(DataReceivedEvent event) async {
+    try {
+      final senderId = event.participant?.identity;
+      final cipher = _chatCipher;
+      if (senderId == null || cipher == null || event.data.length < 29) return;
+      final clear = await cipher.decrypt(
+        EncryptedPacket(
+          nonce: Uint8List.fromList(event.data.sublist(0, 12)),
+          ciphertext: Uint8List.fromList(event.data.sublist(12)),
+        ),
+        associatedData: Uint8List.fromList(
+          utf8.encode('dawnmesh.image.v1\u0000$senderId'),
+        ),
+      );
+      final chunk = _InternetImageChunk.decode(clear);
+      if (chunk == null) return;
+      final now = DateTime.now();
+      _incomingImages.removeWhere(
+        (_, transfer) =>
+            now.difference(transfer.lastUpdated) > const Duration(minutes: 1),
+      );
+      if (_incomingImages.length >= 8) {
+        final oldest = _incomingImages.entries.reduce(
+          (a, b) => a.value.lastUpdated.isBefore(b.value.lastUpdated) ? a : b,
+        );
+        _incomingImages.remove(oldest.key);
+      }
+      final key = '$senderId:${chunk.transferId}';
+      final transfer = _incomingImages.putIfAbsent(
+        key,
+        () => _IncomingInternetImage(chunk),
+      );
+      if (!transfer.accepts(chunk)) {
+        _incomingImages.remove(key);
+        return;
+      }
+      transfer.add(chunk);
+      if (!transfer.isComplete) return;
+      _incomingImages.remove(key);
+      final bytes = transfer.assemble();
+      if (bytes == null) return;
+      _appendChatMessage(
+        InternetChatMessage(
+          id: '${chunk.transferId}-$senderId-image',
+          senderId: senderId,
+          senderName: event.participant?.name ?? senderId,
+          text: '',
+          sentAt: DateTime.fromMillisecondsSinceEpoch(chunk.timestampMs),
+          isMine: senderId == memberId,
+          imageBytes: bytes,
+          imageMimeType: chunk.format.mimeType,
+          imageName: chunk.name,
+        ),
+        isIncoming: senderId != memberId,
+      );
+    } catch (error) {
+      AppLog.warn('DawnInternet', '忽略无效图片数据：$error');
+    }
   }
 
   void _appendChatMessage(
@@ -1073,8 +1206,158 @@ class InternetRoomSession extends ChangeNotifier {
       AudioSessionManagementMode.automatic,
     );
     await _waveController.close();
+    _incomingImages.clear();
     _roomKey.fillRange(0, _roomKey.length, 0);
     api.close();
+  }
+}
+
+String _safeInternetImageName(String raw, ChatImageFormat format) {
+  final extension = switch (format) {
+    ChatImageFormat.jpeg => 'jpg',
+    ChatImageFormat.png => 'png',
+    ChatImageFormat.webp => 'webp',
+  };
+  final cleaned = raw
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')
+      .replaceAll(RegExp(r'_+'), '_');
+  final stem = cleaned.isEmpty ? 'DawnMesh_image' : cleaned;
+  return '${stem.substring(0, min(20, stem.length))}.$extension';
+}
+
+class _InternetImageChunk {
+  const _InternetImageChunk({
+    required this.transferId,
+    required this.timestampMs,
+    required this.chunkIndex,
+    required this.chunkCount,
+    required this.format,
+    required this.name,
+    required this.data,
+  });
+
+  static const int version = 1;
+  static const int headerBytes = 19;
+  static const int maxNameBytes = 32;
+  static const int maxChunkBytes = 12 * 1024;
+  static const int maxChunkCount = 32;
+
+  final int transferId;
+  final int timestampMs;
+  final int chunkIndex;
+  final int chunkCount;
+  final ChatImageFormat format;
+  final String name;
+  final Uint8List data;
+
+  Uint8List encode() {
+    final nameBytes = utf8.encode(name);
+    if (nameBytes.isEmpty ||
+        nameBytes.length > maxNameBytes ||
+        chunkCount <= 0 ||
+        chunkCount > maxChunkCount ||
+        chunkIndex < 0 ||
+        chunkIndex >= chunkCount ||
+        data.isEmpty ||
+        data.length > maxChunkBytes) {
+      throw ArgumentError('invalid internet image chunk');
+    }
+    final result = Uint8List(headerBytes + nameBytes.length + data.length);
+    final view = ByteData.sublistView(result);
+    result[0] = version;
+    view.setUint32(1, transferId, Endian.big);
+    view.setUint64(5, timestampMs, Endian.big);
+    view.setUint16(13, chunkIndex, Endian.big);
+    view.setUint16(15, chunkCount, Endian.big);
+    result[17] = format.value;
+    result[18] = nameBytes.length;
+    result.setRange(headerBytes, headerBytes + nameBytes.length, nameBytes);
+    result.setRange(headerBytes + nameBytes.length, result.length, data);
+    return result;
+  }
+
+  static _InternetImageChunk? decode(Uint8List bytes) {
+    if (bytes.length <= headerBytes || bytes[0] != version) return null;
+    final view = ByteData.sublistView(bytes);
+    final index = view.getUint16(13, Endian.big);
+    final count = view.getUint16(15, Endian.big);
+    final format = ChatImageFormat.fromValue(bytes[17]);
+    final nameLength = bytes[18];
+    if (format == null ||
+        nameLength == 0 ||
+        nameLength > maxNameBytes ||
+        count == 0 ||
+        count > maxChunkCount ||
+        index >= count ||
+        bytes.length <= headerBytes + nameLength ||
+        bytes.length > headerBytes + nameLength + maxChunkBytes) {
+      return null;
+    }
+    try {
+      return _InternetImageChunk(
+        transferId: view.getUint32(1, Endian.big),
+        timestampMs: view.getUint64(5, Endian.big),
+        chunkIndex: index,
+        chunkCount: count,
+        format: format,
+        name: utf8.decode(
+          bytes.sublist(headerBytes, headerBytes + nameLength),
+          allowMalformed: false,
+        ),
+        data: Uint8List.fromList(bytes.sublist(headerBytes + nameLength)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class _IncomingInternetImage {
+  _IncomingInternetImage(_InternetImageChunk first)
+    : transferId = first.transferId,
+      timestampMs = first.timestampMs,
+      chunkCount = first.chunkCount,
+      format = first.format,
+      name = first.name,
+      chunks = List<Uint8List?>.filled(first.chunkCount, null),
+      lastUpdated = DateTime.now();
+
+  final int transferId;
+  final int timestampMs;
+  final int chunkCount;
+  final ChatImageFormat format;
+  final String name;
+  final List<Uint8List?> chunks;
+  DateTime lastUpdated;
+  int totalBytes = 0;
+
+  bool accepts(_InternetImageChunk chunk) =>
+      chunk.transferId == transferId &&
+      chunk.timestampMs == timestampMs &&
+      chunk.chunkCount == chunkCount &&
+      chunk.format == format &&
+      chunk.name == name;
+
+  void add(_InternetImageChunk chunk) {
+    if (chunks[chunk.chunkIndex] != null) return;
+    chunks[chunk.chunkIndex] = Uint8List.fromList(chunk.data);
+    totalBytes += chunk.data.length;
+    lastUpdated = DateTime.now();
+  }
+
+  bool get isComplete => chunks.every((chunk) => chunk != null);
+
+  Uint8List? assemble() {
+    if (!isComplete || totalBytes > ChatImageChunkPayload.maxImageBytes) {
+      return null;
+    }
+    final result = Uint8List(totalBytes);
+    var offset = 0;
+    for (final chunk in chunks) {
+      result.setRange(offset, offset + chunk!.length, chunk);
+      offset += chunk.length;
+    }
+    return result;
   }
 }
 

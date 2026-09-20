@@ -24,6 +24,7 @@ import kotlin.math.min
 
 /** Restricted controls above keyguard. Room secrets and the normal app stay hidden. */
 class LockScreenTalkActivity : Activity() {
+    private lateinit var palette: CallPanelPalette
     private lateinit var status: TextView
     private lateinit var roomType: TextView
     private lateinit var talk: CallTalkPad
@@ -44,15 +45,19 @@ class LockScreenTalkActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        palette = CallPanelColors.resolve(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) setShowWhenLocked(true)
         else @Suppress("DEPRECATION") window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
         @Suppress("DEPRECATION")
-        window.statusBarColor = CallPanelColors.ink
+        window.statusBarColor = palette.backgroundStart
         @Suppress("DEPRECATION")
-        window.navigationBarColor = CallPanelColors.ink
+        window.navigationBarColor = palette.backgroundEnd
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = if (palette.isNight) 0 else
+            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         // Never dismiss the keyguard or turn the screen on automatically.
         val root = FrameLayout(this)
-        root.addView(CallPanelBackdrop(this), FrameLayout.LayoutParams(-1, -1))
+        root.addView(CallPanelBackdrop(this, palette), FrameLayout.LayoutParams(-1, -1))
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
@@ -76,22 +81,22 @@ class LockScreenTalkActivity : Activity() {
         frame.addView(column, FrameLayout.LayoutParams(min(availableWidth, dp(480)), -2, Gravity.CENTER))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heading.addView(label("锁屏通话", 12f, CallPanelColors.secondary))
-        heading.addView(label(getString(R.string.app_name), 28f, CallPanelColors.white, true).apply {
+        heading.addView(label("锁屏通话", 12f, palette.secondary))
+        heading.addView(label(getString(R.string.app_name), 28f, palette.white, true).apply {
             setPadding(0, dp(5), 0, 0)
         })
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(ImageButton(this).apply {
-            setImageDrawable(CallPanelIcon("close", CallPanelColors.white))
+            setImageDrawable(CallPanelIcon("close", palette.white))
             setPadding(dp(12), dp(12), dp(12), dp(12))
             contentDescription = "收起通话面板"
-            background = ripple(CallPanelColors.card, 24f)
+            background = ripple(palette.card, 24f)
             setOnClickListener { gesture.cancel(); finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         column.addView(header, LinearLayout.LayoutParams(-1, -2))
-        roomType = label("", 12f, CallPanelColors.secondary).apply {
+        roomType = label("", 12f, palette.secondary).apply {
             setPadding(dp(12), dp(7), dp(12), dp(7))
-            background = shape(CallPanelColors.card, 16f)
+            background = shape(palette.card, 16f)
         }
         column.addView(roomType, LinearLayout.LayoutParams(-2, -2).apply {
             gravity = Gravity.START; topMargin = dp(16); bottomMargin = dp(26)
@@ -99,7 +104,7 @@ class LockScreenTalkActivity : Activity() {
         modes = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(4))
-            background = shape(CallPanelColors.card, 24f)
+            background = shape(palette.card, 24f)
             elevation = dp(3).toFloat()
         }
         holdMode = modeButton("按住对讲", false)
@@ -109,7 +114,7 @@ class LockScreenTalkActivity : Activity() {
         })
         modes.addView(autoMode, LinearLayout.LayoutParams(0, -2, 1f))
         column.addView(modes, LinearLayout.LayoutParams(-1, -2))
-        talk = CallTalkPad(this).apply {
+        talk = CallTalkPad(this, palette).apply {
             isFocusable = true
             isClickable = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -146,7 +151,7 @@ class LockScreenTalkActivity : Activity() {
         }
         val padSize = min(dp(272), availableWidth - dp(64)).coerceAtLeast(dp(180))
         column.addView(talk, LinearLayout.LayoutParams(padSize, padSize).apply { topMargin = dp(18) })
-        status = label("", 14f, CallPanelColors.secondary).apply {
+        status = label("", 14f, palette.secondary).apply {
             gravity = Gravity.CENTER
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
@@ -155,7 +160,7 @@ class LockScreenTalkActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = dp(80)
             setPadding(dp(18), dp(16), dp(18), dp(16))
-            background = ripple(CallPanelColors.card, 24f)
+            background = ripple(palette.card, 24f)
             isFocusable = true
             setOnClickListener {
                 gesture.cancel()
@@ -167,21 +172,21 @@ class LockScreenTalkActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         }
-        muteTitle = label("", 16f, CallPanelColors.white, true)
-        muteHint = label("", 12f, CallPanelColors.secondary).apply { setPadding(0, dp(5), 0, 0) }
+        muteTitle = label("", 16f, palette.white, true)
+        muteHint = label("", 12f, palette.secondary).apply { setPadding(0, dp(5), 0, 0) }
         micLabels.addView(muteTitle)
         micLabels.addView(muteHint)
         mute.addView(micLabels, LinearLayout.LayoutParams(0, -2, 1f))
-        muteBadge = label("", 12f, CallPanelColors.ink, true).apply {
+        muteBadge = label("", 12f, palette.ink, true).apply {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         mute.addView(muteBadge, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
         column.addView(mute, LinearLayout.LayoutParams(-1, -2))
-        column.addView(label("收起面板，通话继续", 12f, CallPanelColors.secondary).apply {
+        column.addView(label("收起面板，通话继续", 12f, palette.secondary).apply {
             gravity = Gravity.CENTER
             compoundDrawablePadding = dp(7)
-            setCompoundDrawables(CallPanelIcon("lock", CallPanelColors.secondary).apply {
+            setCompoundDrawables(CallPanelIcon("lock", palette.secondary).apply {
                 setBounds(0, 0, dp(14), dp(14))
             }, null, null, null)
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(24) })
@@ -203,7 +208,7 @@ class LockScreenTalkActivity : Activity() {
         isFocusable = true
         isClickable = true
         val icon = ImageView(this@LockScreenTalkActivity).apply {
-            setImageDrawable(CallPanelIcon(if (automatic) "wave" else "mic", CallPanelColors.secondary))
+            setImageDrawable(CallPanelIcon(if (automatic) "wave" else "mic", palette.secondary))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(9) })
@@ -211,8 +216,8 @@ class LockScreenTalkActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         }
-        copy.addView(label(title, 14f, CallPanelColors.secondary, true))
-        copy.addView(label(if (automatic) "声音触发" else "按住发送", 11f, CallPanelColors.secondary).apply {
+        copy.addView(label(title, 14f, palette.secondary, true))
+        copy.addView(label(if (automatic) "声音触发" else "按住发送", 11f, palette.secondary).apply {
             setPadding(0, dp(2), 0, 0)
             alpha = .78f
         })
@@ -242,7 +247,8 @@ class LockScreenTalkActivity : Activity() {
         setColor(color); cornerRadius = radius * resources.displayMetrics.density
     }
     private fun ripple(color: Int, radius: Float) = RippleDrawable(
-        ColorStateList.valueOf(Color.argb(38, 255, 255, 255)), shape(color, radius), shape(Color.WHITE, radius))
+        ColorStateList.valueOf(if (palette.isNight) Color.argb(38, 255, 255, 255)
+            else Color.argb(30, 57, 40, 50)), shape(color, radius), shape(Color.WHITE, radius))
 
     override fun onResume() {
         super.onResume()
@@ -277,11 +283,11 @@ class LockScreenTalkActivity : Activity() {
         for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
             button.isSelected = selected
             button.background = ripple(if (selected) {
-                if (auto) CallPanelColors.blue else CallPanelColors.mint
+                if (auto) palette.blue else palette.mint
             } else Color.TRANSPARENT, 20f)
             val icon = button.getChildAt(0) as ImageView
             val copy = button.getChildAt(1) as LinearLayout
-            val foreground = if (selected) CallPanelColors.ink else CallPanelColors.secondary
+            val foreground = if (selected) palette.ink else palette.secondary
             icon.setImageDrawable(CallPanelIcon(if (button === autoMode) "wave" else "mic", foreground))
             (copy.getChildAt(0) as TextView).setTextColor(foreground)
             (copy.getChildAt(1) as TextView).setTextColor(foreground)
@@ -295,7 +301,7 @@ class LockScreenTalkActivity : Activity() {
         muteTitle.text = if (muted) "麦克风已静音" else "麦克风已开启"
         muteHint.text = if (muted) "点按恢复发言" else "点按静音，保持收听"
         muteBadge.text = if (muted) "静音" else "开启"
-        muteBadge.background = shape(if (muted) CallPanelColors.muted else CallPanelColors.mint, 12f)
+        muteBadge.background = shape(if (muted) palette.muted else palette.mint, 12f)
         mute.contentDescription = if (muted) "麦克风已静音，点按恢复发言" else "麦克风已开启，点按静音"
     }
 

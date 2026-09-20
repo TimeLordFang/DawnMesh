@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
 import '../audio/audio_io.dart';
 import '../audio/voice_activity_gate.dart';
 import '../platform/background_call_controls.dart';
@@ -11,6 +12,7 @@ import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
 import '../protocol/frame_type.dart';
 import '../protocol/payloads/chat_delete.dart';
+import '../protocol/payloads/chat_image.dart';
 import '../protocol/payloads/chat_message.dart';
 import '../protocol/payloads/chat_sync.dart';
 import '../protocol/payloads/join_request.dart';
@@ -59,10 +61,9 @@ class RoomSession {
   final String selfNickname;
   final Uint8List sessionToken;
   final RoomMode mode;
-  late VoiceMode _voiceMode =
-      mode == RoomMode.wifiFullDuplex
-          ? VoiceMode.automatic
-          : VoiceMode.pushToTalk;
+  late VoiceMode _voiceMode = mode == RoomMode.wifiFullDuplex
+      ? VoiceMode.automatic
+      : VoiceMode.pushToTalk;
   VoiceMode get voiceMode => _voiceMode;
   bool get isBluetooth => mode == RoomMode.bluetoothPtt;
   final _voiceGate = VoiceActivityGate();
@@ -169,6 +170,7 @@ class RoomSession {
   int _unreadChatCount = 0;
   final Set<String> _seenChatKeys = <String>{};
   final List<String> _seenChatKeyOrder = <String>[];
+  final Map<String, _IncomingImageTransfer> _incomingImageTransfers = {};
 
   // 跨进退房同人身份与曾用名追踪 (基于设备短码)
   final Map<String, String> _currentNicknameByCode = {};
@@ -484,6 +486,9 @@ class RoomSession {
       case FrameType.chatDelete:
         _handleChatDeleteFrame(frame);
         break;
+      case FrameType.chatImage:
+        _handleChatImageFrame(frame);
+        break;
       case FrameType.handshakeHello:
       case FrameType.handshakeConfirm:
       case FrameType.sealed:
@@ -651,8 +656,9 @@ class RoomSession {
     }
 
     // 名单换了以后，已经不在房里的人的音频流留着只会占内存。
-    final gone =
-        _lastAudioAt.keys.where((id) => !_members.containsKey(id)).toList();
+    final gone = _lastAudioAt.keys
+        .where((id) => !_members.containsKey(id))
+        .toList();
     for (final id in gone) {
       _lastAudioAt.remove(id);
       audioIo.removeRemoteMember(id);
@@ -856,17 +862,16 @@ class RoomSession {
     try {
       return HostTransferPlan(
         successorId: preferredSuccessorId,
-        members:
-            candidates
-                .map(
-                  (c) => HostTransferMember(
-                    memberId: c.memberId,
-                    joinOrder: c.joinOrder,
-                    nickname: c.nickname,
-                    endpoint: c.endpoint,
-                  ),
-                )
-                .toList(),
+        members: candidates
+            .map(
+              (c) => HostTransferMember(
+                memberId: c.memberId,
+                joinOrder: c.joinOrder,
+                nickname: c.nickname,
+                endpoint: c.endpoint,
+              ),
+            )
+            .toList(),
       );
     } catch (e) {
       AppLog.error('RoomSession', '交接计划校验未通过', e);
@@ -899,18 +904,17 @@ class RoomSession {
     // 名单变了，传输层的 UDP 白名单也要跟着变：端点注册只认在册成员号。
     _syncKnownMembersToTransport();
 
-    final rosterMembers =
-        _members.values.map((m) {
-          int flags = 0;
-          if (m.isHost) flags |= 0x01;
-          if (m.isMuted) flags |= 0x02;
-          if (m.isSpeaking) flags |= 0x04;
-          return RosterMember(
-            memberId: m.memberId,
-            flags: flags,
-            nickname: m.nickname,
-          );
-        }).toList();
+    final rosterMembers = _members.values.map((m) {
+      int flags = 0;
+      if (m.isHost) flags |= 0x01;
+      if (m.isMuted) flags |= 0x02;
+      if (m.isSpeaking) flags |= 0x04;
+      return RosterMember(
+        memberId: m.memberId,
+        flags: flags,
+        nickname: m.nickname,
+      );
+    }).toList();
 
     final payload = RosterPayload(
       hostId: _selfMemberId,
@@ -945,10 +949,9 @@ class RoomSession {
         return;
       }
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final packets =
-          isFullDuplex
-              ? _voiceGate.process(opusPacket, level, nowMs)
-              : (isPttPressed ? [opusPacket] : <Uint8List>[]);
+      final packets = isFullDuplex
+          ? _voiceGate.process(opusPacket, level, nowMs)
+          : (isPttPressed ? [opusPacket] : <Uint8List>[]);
       if (!_waveController.isClosed && nowMs - _lastWaveUiEmitMs >= 33) {
         _lastWaveUiEmitMs = nowMs;
         _waveController.add(packets.isEmpty ? 0 : level);
@@ -1010,15 +1013,14 @@ class RoomSession {
   /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
   void pruneStaleMembers() {
     final now = DateTime.now();
-    final stale =
-        _members.values
-            .where(
-              (m) =>
-                  m.memberId != _selfMemberId &&
-                  now.difference(m.lastActiveAt) > _memberTimeout,
-            )
-            .map((m) => m.memberId)
-            .toList();
+    final stale = _members.values
+        .where(
+          (m) =>
+              m.memberId != _selfMemberId &&
+              now.difference(m.lastActiveAt) > _memberTimeout,
+        )
+        .map((m) => m.memberId)
+        .toList();
     if (stale.isEmpty) return;
 
     for (final id in stale) {
@@ -1353,6 +1355,164 @@ class RoomSession {
     _appendChatMessage(localMsg, isIncoming: false);
   }
 
+  /// Sends an already resized chat image as bounded encrypted chunks.
+  Future<void> sendChatImage({
+    required Uint8List bytes,
+    required String mimeType,
+    required String name,
+  }) async {
+    if (_state != RoomState.inRoom) {
+      throw StateError('Cannot send chat image when not in room.');
+    }
+    if (bytes.isEmpty || bytes.length > ChatImageChunkPayload.maxImageBytes) {
+      throw ArgumentError('图片不能超过 192 KB。');
+    }
+    final format = ChatImageFormat.fromMimeType(mimeType);
+    if (format == null) throw ArgumentError('Unsupported image format.');
+    final safeName = _safeImageName(name, format);
+    final fullNickname = _members[_selfMemberId]?.nickname ?? selfNickname;
+    final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
+    final code = DeviceCode.toNumeric(rawCode);
+    final now = DateTime.now();
+    final transferId = now.microsecondsSinceEpoch & 0xffffffff;
+    final chunkCount =
+        (bytes.length + ChatImageChunkPayload.maxChunkBytes - 1) ~/
+        ChatImageChunkPayload.maxChunkBytes;
+
+    for (var index = 0; index < chunkCount; index++) {
+      final start = index * ChatImageChunkPayload.maxChunkBytes;
+      final end = min(
+        start + ChatImageChunkPayload.maxChunkBytes,
+        bytes.length,
+      );
+      final payload = ChatImageChunkPayload(
+        transferId: transferId,
+        timestampMs: now.millisecondsSinceEpoch,
+        senderCode: code,
+        chunkIndex: index,
+        chunkCount: chunkCount,
+        format: format,
+        name: safeName,
+        data: Uint8List.sublistView(bytes, start, end),
+      );
+      await sendFrame(
+        Frame(
+          type: FrameType.chatImage,
+          senderId: _selfMemberId,
+          seq: _nextSeq(),
+          payload: payload.encode(),
+        ),
+      );
+      // BLE's native writer is deliberately bounded. Drain in small batches so
+      // a photo cannot fill the control queue and tear down an otherwise
+      // healthy room connection.
+      if (isBluetooth && (index + 1) % 24 == 0) {
+        await transport?.flush();
+      }
+    }
+    if (isBluetooth) await transport?.flush();
+
+    _recordMemberIdentity(_selfMemberId, fullNickname);
+    _appendChatMessage(
+      ChatMessage(
+        messageId: '${code}_${now.millisecondsSinceEpoch}_image_$transferId',
+        senderId: _selfMemberId,
+        senderCode: code,
+        senderNickname:
+            _currentNicknameByCode[code] ?? DeviceCode.split(fullNickname).$1,
+        previousNickname: _previousNicknamesByCode[code]?.join('、'),
+        seq: 0,
+        text: '',
+        timestamp: now,
+        isLocal: true,
+        isHost: _isHost,
+        imageBytes: Uint8List.fromList(bytes),
+        imageMimeType: mimeType,
+        imageName: safeName,
+      ),
+      isIncoming: false,
+    );
+  }
+
+  void _handleChatImageFrame(Frame frame) {
+    if (_state != RoomState.inRoom || frame.senderId == _selfMemberId) return;
+    final sender = _members[frame.senderId];
+    if (sender == null) return;
+    final payload = ChatImageChunkPayload.decode(frame.payload);
+    if (payload == null) return;
+
+    final now = DateTime.now();
+    _incomingImageTransfers.removeWhere(
+      (_, transfer) =>
+          now.difference(transfer.lastUpdated) > const Duration(minutes: 1),
+    );
+    if (_incomingImageTransfers.length >= 8) {
+      final oldest = _incomingImageTransfers.entries.reduce(
+        (a, b) => a.value.lastUpdated.isBefore(b.value.lastUpdated) ? a : b,
+      );
+      _incomingImageTransfers.remove(oldest.key);
+    }
+
+    final key = '${frame.senderId}:${payload.transferId}';
+    final transfer = _incomingImageTransfers.putIfAbsent(
+      key,
+      () => _IncomingImageTransfer(payload),
+    );
+    if (!transfer.accepts(payload)) {
+      _incomingImageTransfers.remove(key);
+      return;
+    }
+    transfer.add(payload);
+    if (!transfer.isComplete) return;
+    _incomingImageTransfers.remove(key);
+    final bytes = transfer.assemble();
+    if (bytes == null) return;
+
+    _recordMemberIdentity(frame.senderId, sender.nickname);
+    final split = DeviceCode.split(sender.nickname);
+    final senderCode = payload.senderCode.isEmpty
+        ? (split.$2 ?? 'M${frame.senderId}')
+        : DeviceCode.toNumeric(payload.senderCode);
+    _appendChatMessage(
+      ChatMessage(
+        messageId:
+            '${senderCode}_${payload.timestampMs}_image_${payload.transferId}',
+        senderId: frame.senderId,
+        senderCode: senderCode,
+        senderNickname: _currentNicknameByCode[senderCode] ?? split.$1,
+        previousNickname: _previousNicknamesByCode[senderCode]?.join('、'),
+        seq: frame.seq,
+        text: '',
+        timestamp: DateTime.fromMillisecondsSinceEpoch(payload.timestampMs),
+        isLocal: false,
+        isHost: sender.isHost,
+        imageBytes: bytes,
+        imageMimeType: payload.format.mimeType,
+        imageName: payload.name,
+      ),
+      isIncoming: true,
+    );
+  }
+
+  static String _safeImageName(String raw, ChatImageFormat format) {
+    final extension = switch (format) {
+      ChatImageFormat.jpeg => 'jpg',
+      ChatImageFormat.png => 'png',
+      ChatImageFormat.webp => 'webp',
+    };
+    final stem = raw
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')
+        .replaceFirst(
+          RegExp(r'_+(jpg|jpeg|png|webp)$', caseSensitive: false),
+          '',
+        )
+        .replaceAll(RegExp(r'_+'), '_');
+    final clipped = stem.isEmpty
+        ? 'DawnMesh_image'
+        : stem.substring(0, min(20, stem.length));
+    return '$clipped.$extension';
+  }
+
   void _handleChatFrame(Frame frame) {
     if (_state != RoomState.inRoom) return;
 
@@ -1384,15 +1544,14 @@ class RoomSession {
     final split = DeviceCode.split(sender.nickname);
     final senderCode =
         (payload.senderCode != '0000' && payload.senderCode.isNotEmpty)
-            ? DeviceCode.toNumeric(payload.senderCode)
-            : (split.$2 ?? 'M${frame.senderId}');
+        ? DeviceCode.toNumeric(payload.senderCode)
+        : (split.$2 ?? 'M${frame.senderId}');
     final cleanNickname = _currentNicknameByCode[senderCode] ?? split.$1;
     final prevNick = _previousNicknamesByCode[senderCode]?.join('、');
 
-    final timestamp =
-        payload.timestampMs != 0
-            ? DateTime.fromMillisecondsSinceEpoch(payload.timestampMs)
-            : DateTime.now();
+    final timestamp = payload.timestampMs != 0
+        ? DateTime.fromMillisecondsSinceEpoch(payload.timestampMs)
+        : DateTime.now();
     final messageId =
         '${senderCode}_${timestamp.millisecondsSinceEpoch}_${frame.seq}';
 
@@ -1416,7 +1575,7 @@ class RoomSession {
   void _syncChatHistoryTo(int targetMemberId) {
     if (!_isHost) return;
     for (final msg in _chatMessages) {
-      if (msg.isRecalled) continue;
+      if (msg.isRecalled || msg.hasImage) continue;
       final syncPayload = ChatSyncPayload(
         targetMemberId: targetMemberId,
         senderId: msg.senderId,
@@ -1679,6 +1838,7 @@ class RoomSession {
     _unreadChatCount = 0;
     _seenChatKeys.clear();
     _seenChatKeyOrder.clear();
+    _incomingImageTransfers.clear();
     if (!_chatListController.isClosed) {
       _chatListController.add(const []);
     }
@@ -1732,5 +1892,57 @@ class RoomSession {
     await _stateController.close();
     await _membersController.close();
     await _waveController.close();
+  }
+}
+
+class _IncomingImageTransfer {
+  _IncomingImageTransfer(ChatImageChunkPayload first)
+    : transferId = first.transferId,
+      timestampMs = first.timestampMs,
+      senderCode = first.senderCode,
+      chunkCount = first.chunkCount,
+      format = first.format,
+      name = first.name,
+      chunks = List<Uint8List?>.filled(first.chunkCount, null),
+      lastUpdated = DateTime.now();
+
+  final int transferId;
+  final int timestampMs;
+  final String senderCode;
+  final int chunkCount;
+  final ChatImageFormat format;
+  final String name;
+  final List<Uint8List?> chunks;
+  DateTime lastUpdated;
+  int totalBytes = 0;
+
+  bool accepts(ChatImageChunkPayload chunk) =>
+      chunk.transferId == transferId &&
+      chunk.timestampMs == timestampMs &&
+      chunk.senderCode == senderCode &&
+      chunk.chunkCount == chunkCount &&
+      chunk.format == format &&
+      chunk.name == name;
+
+  void add(ChatImageChunkPayload chunk) {
+    if (chunks[chunk.chunkIndex] != null) return;
+    chunks[chunk.chunkIndex] = Uint8List.fromList(chunk.data);
+    totalBytes += chunk.data.length;
+    lastUpdated = DateTime.now();
+  }
+
+  bool get isComplete => chunks.every((chunk) => chunk != null);
+
+  Uint8List? assemble() {
+    if (!isComplete || totalBytes > ChatImageChunkPayload.maxImageBytes) {
+      return null;
+    }
+    final result = Uint8List(totalBytes);
+    var offset = 0;
+    for (final chunk in chunks) {
+      result.setRange(offset, offset + chunk!.length, chunk);
+      offset += chunk.length;
+    }
+    return result;
   }
 }

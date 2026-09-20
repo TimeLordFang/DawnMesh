@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import '../../core/internet/internet_audio_profile.dart';
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/internet_room_session.dart';
+import '../../core/platform/chat_media_service.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart' show VoiceMode;
 import '../theme/app_theme.dart';
 import '../widgets/avatar_frame.dart';
-import '../widgets/recent_messages_strip.dart';
+import '../widgets/chat_image_bubble.dart';
+import '../widgets/room_chat_dock.dart';
 import '../widgets/voice_mode_switch.dart';
 
 class InternetRoomPage extends StatefulWidget {
@@ -34,6 +36,8 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   Timer? _roomEndedTimer;
   bool _roomEndedCountdownStarted = false;
   bool _roomEndedReturnStarted = false;
+  bool _endingRoomByHost = false;
+  final _chatMedia = ChatMediaService();
 
   @override
   void initState() {
@@ -75,7 +79,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   void _onSessionChanged() {
     if (!mounted) return;
     if (widget.session.roomEnded) {
-      _startRoomEndedCountdown();
+      if (!_endingRoomByHost && !widget.session.isHost) {
+        _startRoomEndedCountdown();
+      }
       setState(() {});
       return;
     }
@@ -93,7 +99,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   }
 
   void _startRoomEndedCountdown() {
-    if (_roomEndedCountdownStarted || !mounted) return;
+    if (_roomEndedCountdownStarted ||
+        !mounted ||
+        _endingRoomByHost ||
+        widget.session.isHost) {
+      return;
+    }
     _roomEndedCountdownStarted = true;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -117,9 +128,8 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     _roomEndedTimer?.cancel();
     _roomEndedTimer = null;
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-    await widget.session.disposeSession();
-    if (!mounted) return;
     Navigator.of(context).pop(true);
+    unawaited(widget.session.disposeSession());
   }
 
   @override
@@ -161,6 +171,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       );
       if (action == null) return;
       endRoom = action == 'end';
+      _endingRoomByHost = endRoom;
     }
     await widget.session.leave(endRoom: endRoom);
     if (mounted) Navigator.pop(context, true);
@@ -281,16 +292,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ],
           ),
           actions: [
-            if (!session.roomEnded)
-              IconButton(
-                tooltip: '消息',
-                onPressed: _showChat,
-                icon: Badge(
-                  isLabelVisible: session.unreadChatCount > 0,
-                  label: Text('${session.unreadChatCount}'),
-                  child: const Icon(Icons.chat_bubble_outline_rounded),
-                ),
-              ),
             if (session.isHost && !session.roomEnded)
               IconButton(
                 tooltip: '修改房间名',
@@ -357,22 +358,32 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       onError: _showError,
                     ),
                   ),
-                if (!session.roomEnded && session.messages.isNotEmpty)
+                if (!session.roomEnded)
                   Padding(
                     padding: EdgeInsets.only(top: compactHeight ? 3 : 8),
-                    child: RecentMessagesStrip(
+                    child: RoomChatDock(
                       messages: [
                         for (final message in session.messages)
-                          RecentMessagePreviewItem(
+                          RoomChatDockItem(
                             sender: DeviceCode.split(message.senderName).$1,
                             text: message.text,
                             isMine: message.isMine,
+                            hasImage: message.hasImage,
                           ),
                       ],
                       isNight: widget.isNight,
                       unreadCount: session.unreadChatCount,
-                      maxVisible: compactHeight ? 2 : 3,
-                      onTap: _showChat,
+                      onOpenHistory: _showChat,
+                      onSendText: session.sendChat,
+                      onPickImage: () async {
+                        final image = await _chatMedia.pickImage();
+                        if (image == null) return;
+                        await session.sendChatImage(
+                          bytes: image.bytes,
+                          mimeType: image.mimeType,
+                          name: image.name,
+                        );
+                      },
                     ),
                   ),
                 const Spacer(),
@@ -416,7 +427,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     _InternetPttButton(
                       session: session,
                       accent: accent,
-                      size: compactHeight ? 118 : 166,
+                      size: compactHeight ? 108 : 166,
                     )
                   else
                     _AutomaticTalkStatus(session: session, accent: accent),
@@ -980,6 +991,8 @@ class _InternetChatSheet extends StatefulWidget {
 
 class _InternetChatSheetState extends State<_InternetChatSheet> {
   final _controller = TextEditingController();
+  final _chatMedia = ChatMediaService();
+  bool _sending = false;
   @override
   void initState() {
     super.initState();
@@ -998,9 +1011,26 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
   }
 
   Future<void> _send() async {
+    if (_sending) return;
     final text = _controller.text;
     _controller.clear();
     await widget.session.sendChat(text);
+  }
+
+  Future<void> _sendImage() async {
+    if (_sending) return;
+    setState(() => _sending = true);
+    try {
+      final image = await _chatMedia.pickImage();
+      if (image == null) return;
+      await widget.session.sendChatImage(
+        bytes: image.bytes,
+        mimeType: image.mimeType,
+        name: image.name,
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
@@ -1059,7 +1089,14 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
                               senderName,
                               style: Theme.of(context).textTheme.labelSmall,
                             ),
-                          Text(message.text),
+                          if (message.hasImage)
+                            ChatImageBubble(
+                              bytes: message.imageBytes!,
+                              name: message.imageName ?? 'DawnMesh_image',
+                              isMine: message.isMine,
+                            )
+                          else
+                            Text(message.text),
                         ],
                       ),
                     );
@@ -1086,6 +1123,11 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  tooltip: '发送图片',
+                  onPressed: _sending ? null : _sendImage,
+                  icon: const Icon(Icons.image_outlined),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _controller,

@@ -14,6 +14,9 @@ class ChatMessage {
   final bool isLocal;
   final bool isHost;
   final bool isRecalled;
+  final Uint8List? imageBytes;
+  final String? imageMimeType;
+  final String? imageName;
 
   const ChatMessage({
     required this.messageId,
@@ -27,7 +30,12 @@ class ChatMessage {
     required this.isLocal,
     this.isHost = false,
     this.isRecalled = false,
+    this.imageBytes,
+    this.imageMimeType,
+    this.imageName,
   });
+
+  bool get hasImage => imageBytes != null;
 
   ChatMessage copyWith({
     String? messageId,
@@ -41,6 +49,9 @@ class ChatMessage {
     bool? isLocal,
     bool? isHost,
     bool? isRecalled,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+    String? imageName,
   }) {
     return ChatMessage(
       messageId: messageId ?? this.messageId,
@@ -54,6 +65,9 @@ class ChatMessage {
       isLocal: isLocal ?? this.isLocal,
       isHost: isHost ?? this.isHost,
       isRecalled: isRecalled ?? this.isRecalled,
+      imageBytes: imageBytes ?? this.imageBytes,
+      imageMimeType: imageMimeType ?? this.imageMimeType,
+      imageName: imageName ?? this.imageName,
     );
   }
 
@@ -71,4 +85,3 @@ class ChatMessage {
   String toString() =>
       'ChatMessage(id: $messageId, sender: $senderId, code: $senderCode, nickname: $senderNickname, local: $isLocal)';
 }
-

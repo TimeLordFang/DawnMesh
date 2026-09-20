@@ -1,8 +1,10 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_delete.dart';
+import 'package:dawn_mesh/core/protocol/payloads/chat_image.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_sync.dart';
 import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
@@ -87,20 +89,45 @@ void main() {
       expect(decoded!.reason, 1);
     });
 
-    test(
-      'FrameType chat, chatSync, chatDelete values and existing types preserved',
-      () {
-        expect(FrameType.chat.value, 0x0c);
-        expect(FrameType.chatSync.value, 0x0d);
-        expect(FrameType.chatDelete.value, 0x0e);
-        expect(FrameType.fromValue(0x0c), FrameType.chat);
-        expect(FrameType.fromValue(0x0d), FrameType.chatSync);
-        expect(FrameType.fromValue(0x0e), FrameType.chatDelete);
-        expect(FrameType.audio.value, 0x01);
-        expect(FrameType.sealed.value, 0x0b);
-        expect(FrameType.fromValue(0x99), isNull);
-      },
-    );
+    test('FrameType chat, chatSync, chatDelete values and existing types preserved', () {
+      expect(FrameType.chat.value, 0x0c);
+      expect(FrameType.chatSync.value, 0x0d);
+      expect(FrameType.chatDelete.value, 0x0e);
+      expect(FrameType.chatImage.value, 0x0f);
+      expect(FrameType.fromValue(0x0c), FrameType.chat);
+      expect(FrameType.fromValue(0x0d), FrameType.chatSync);
+      expect(FrameType.fromValue(0x0e), FrameType.chatDelete);
+      expect(FrameType.fromValue(0x0f), FrameType.chatImage);
+      expect(FrameType.audio.value, 0x01);
+      expect(FrameType.sealed.value, 0x0b);
+      expect(FrameType.fromValue(0x99), isNull);
+    });
+
+    test('Chat image chunk roundtrip preserves metadata and bytes', () {
+      final bytes = Uint8List.fromList(
+        List<int>.generate(384, (i) => i & 0xff),
+      );
+      final payload = ChatImageChunkPayload(
+        transferId: 0x12345678,
+        timestampMs: 1725450000000,
+        senderCode: '0123',
+        chunkIndex: 1,
+        chunkCount: 3,
+        format: ChatImageFormat.jpeg,
+        name: 'DawnMesh_1.jpg',
+        data: bytes,
+      );
+      final encoded = payload.encode();
+      expect(encoded.length, lessThanOrEqualTo(478));
+      final decoded = ChatImageChunkPayload.decode(encoded);
+      expect(decoded, isNotNull);
+      expect(decoded!.transferId, payload.transferId);
+      expect(decoded.chunkIndex, 1);
+      expect(decoded.chunkCount, 3);
+      expect(decoded.format, ChatImageFormat.jpeg);
+      expect(decoded.name, 'DawnMesh_1.jpg');
+      expect(decoded.data, bytes);
+    });
 
     group('ChatMessagePayload Tests', () {
       test('Chat payload v2 roundtrip with timestamp and senderCode', () {
@@ -181,64 +208,58 @@ void main() {
         },
       );
 
-      test(
-        'Decode rejects invalid version, wrong length, trailing bytes, or malformed UTF-8',
-        () {
-          // Less than 3 bytes
-          expect(ChatMessagePayload.decode(Uint8List.fromList([1, 0])), isNull);
+      test('Decode rejects invalid version, wrong length, trailing bytes, or malformed UTF-8', () {
+        // Less than 3 bytes
+        expect(ChatMessagePayload.decode(Uint8List.fromList([1, 0])), isNull);
 
-          // Wrong version (e.g. 2)
-          // Wrong version (e.g. 99)
-          final valid = const ChatMessagePayload(text: 'Hello').encode();
-          final wrongVer = Uint8List.fromList(valid);
-          wrongVer[0] = 2;
-          wrongVer[0] = 99;
-          expect(ChatMessagePayload.decode(wrongVer), isNull);
+        // Wrong version (e.g. 2)
+        // Wrong version (e.g. 99)
+        final valid = const ChatMessagePayload(text: 'Hello').encode();
+        final wrongVer = Uint8List.fromList(valid);
+        wrongVer[0] = 2;
+        wrongVer[0] = 99;
+        expect(ChatMessagePayload.decode(wrongVer), isNull);
 
-          // Length mismatch (header says 10, actual data has 5)
-          final badLen = Uint8List.fromList(valid);
-          ByteData.sublistView(badLen).setUint16(1, 10, Endian.big);
-          ByteData.sublistView(badLen).setUint16(13, 10, Endian.big);
-          expect(ChatMessagePayload.decode(badLen), isNull);
+        // Length mismatch (header says 10, actual data has 5)
+        final badLen = Uint8List.fromList(valid);
+        ByteData.sublistView(badLen).setUint16(1, 10, Endian.big);
+        ByteData.sublistView(badLen).setUint16(13, 10, Endian.big);
+        expect(ChatMessagePayload.decode(badLen), isNull);
 
-          // Trailing extra bytes
-          final trailing = Uint8List.fromList([...valid, 99, 99]);
-          expect(ChatMessagePayload.decode(trailing), isNull);
+        // Trailing extra bytes
+        final trailing = Uint8List.fromList([...valid, 99, 99]);
+        expect(ChatMessagePayload.decode(trailing), isNull);
 
-          // Malformed UTF-8 sequence
-          final malformed = Uint8List.fromList([1, 0, 2, 0xFF, 0xFF]);
-          expect(ChatMessagePayload.decode(malformed), isNull);
-        },
-      );
+        // Malformed UTF-8 sequence
+        final malformed = Uint8List.fromList([1, 0, 2, 0xFF, 0xFF]);
+        expect(ChatMessagePayload.decode(malformed), isNull);
+      });
 
-      test(
-        'Frame with FrameType.chat encode and decode roundtrip within 512 bytes limit',
-        () {
-          const chatPayload = ChatMessagePayload(text: '曙光之声近场聊天测试');
-          final rawPayload = chatPayload.encode();
-          expect(rawPayload.length, lessThanOrEqualTo(Frame.maxPayloadSize));
+      test('Frame with FrameType.chat encode and decode roundtrip within 512 bytes limit', () {
+        const chatPayload = ChatMessagePayload(text: '曙光之声近场聊天测试');
+        final rawPayload = chatPayload.encode();
+        expect(rawPayload.length, lessThanOrEqualTo(Frame.maxPayloadSize));
 
-          final frame = Frame(
-            type: FrameType.chat,
-            senderId: 3,
-            seq: 42,
-            payload: rawPayload,
-          );
+        final frame = Frame(
+          type: FrameType.chat,
+          senderId: 3,
+          seq: 42,
+          payload: rawPayload,
+        );
 
-          final frameBytes = frame.encode();
-          expect(frameBytes.length, Frame.headerSize + rawPayload.length);
+        final frameBytes = frame.encode();
+        expect(frameBytes.length, Frame.headerSize + rawPayload.length);
 
-          final decodedFrame = Frame.decode(frameBytes);
-          expect(decodedFrame, isNotNull);
-          expect(decodedFrame!.type, FrameType.chat);
-          expect(decodedFrame.senderId, 3);
-          expect(decodedFrame.seq, 42);
+        final decodedFrame = Frame.decode(frameBytes);
+        expect(decodedFrame, isNotNull);
+        expect(decodedFrame!.type, FrameType.chat);
+        expect(decodedFrame.senderId, 3);
+        expect(decodedFrame.seq, 42);
 
-          final decodedChat = ChatMessagePayload.decode(decodedFrame.payload);
-          expect(decodedChat, isNotNull);
-          expect(decodedChat!.text, '曙光之声近场聊天测试');
-        },
-      );
+        final decodedChat = ChatMessagePayload.decode(decodedFrame.payload);
+        expect(decodedChat, isNotNull);
+        expect(decodedChat!.text, '曙光之声近场聊天测试');
+      });
     });
 
     group('ChatSyncPayload Tests', () {

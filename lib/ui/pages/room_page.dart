@@ -6,12 +6,13 @@ import '../../core/session/chat_message.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
+import '../../core/platform/chat_media_service.dart';
 import '../theme/app_theme.dart';
 import '../transitions/stage_choreography.dart';
 import '../widgets/audio_controls.dart';
 import '../widgets/member_orbit.dart';
 import '../widgets/ptt_button.dart';
-import '../widgets/recent_messages_strip.dart';
+import '../widgets/room_chat_dock.dart';
 import '../widgets/voice_mode_switch.dart';
 import '../../l10n/app_strings.dart';
 
@@ -45,6 +46,7 @@ class RoomContent extends StatefulWidget {
 
 class _RoomContentState extends State<RoomContent> {
   bool _isSpeakerOn = true;
+  final _chatMedia = ChatMediaService();
   StreamSubscription<void>? _controls;
   @override
   void initState() {
@@ -99,33 +101,38 @@ class _RoomContentState extends State<RoomContent> {
             initialData: widget.session.chatMessages,
             builder: (context, snapshot) {
               final messages = snapshot.data ?? const <ChatMessage>[];
-              if (messages.isEmpty || widget.onOpenChat == null) {
-                return const SizedBox.shrink();
-              }
               return StreamBuilder<int>(
                 stream: widget.session.unreadChatStream,
                 initialData: widget.session.unreadChatCount,
                 builder: (context, unreadSnapshot) => Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    compactHeight ? 2 : 5,
-                    20,
-                    compactHeight ? 5 : 8,
+                  padding: EdgeInsets.only(
+                    top: compactHeight ? 2 : 5,
+                    bottom: compactHeight ? 4 : 7,
                   ),
-                  child: RecentMessagesStrip(
+                  child: RoomChatDock(
                     messages: [
                       for (final message in messages)
-                        RecentMessagePreviewItem(
+                        RoomChatDockItem(
                           sender: DeviceCode.split(message.senderNickname).$1,
                           text: message.text,
                           isMine: message.isLocal,
+                          hasImage: message.hasImage,
                         ),
                     ],
                     unreadCount:
                         unreadSnapshot.data ?? widget.session.unreadChatCount,
-                    maxVisible: compactHeight ? 2 : 3,
                     isNight: isNight,
-                    onTap: widget.onOpenChat!,
+                    onOpenHistory: widget.onOpenChat ?? () {},
+                    onSendText: widget.session.sendChat,
+                    onPickImage: () async {
+                      final image = await _chatMedia.pickImage();
+                      if (image == null) return;
+                      await widget.session.sendChatImage(
+                        bytes: image.bytes,
+                        mimeType: image.mimeType,
+                        name: image.name,
+                      );
+                    },
                   ),
                 ),
               );

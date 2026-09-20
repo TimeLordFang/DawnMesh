@@ -14,6 +14,7 @@ enum FrameType {
   chat(0x0c),
   chatSync(0x0d),
   chatDelete(0x0e),
+  chatImage(0x0f),
   admission(0x10);
 
   final int value;

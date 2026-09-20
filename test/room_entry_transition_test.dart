@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/ui/pages/session_stage.dart';
 import 'package:dawn_mesh/ui/widgets/room_invite_row.dart';
+import 'package:dawn_mesh/ui/widgets/voice_mode_switch.dart';
 
 /// 进房转场的端到端验收：点「创建 WiFi 房」之后，首页那组 UI 要走干净，
 /// 房间那组要到齐，中途每一帧都不许溢出；返回时再原路退回首页。
@@ -179,12 +180,21 @@ void main() {
     final inviteRow = find.byType(RoomInviteRow);
     final invite = tester.widget<RoomInviteRow>(inviteRow).code;
 
+    await tester.enterText(
+      find.byKey(const ValueKey('room-chat-input')),
+      '退回首页前的消息 🌅',
+    );
+    await tester.tap(find.byKey(const ValueKey('send-chat-text')));
+    await tester.pump();
+
     await tester.binding.handlePopRoute();
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
 
     expect(find.byKey(const ValueKey('active-room-card')), findsOneWidget);
     expect(findCreateWifi(), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-chat-dock')), findsNothing);
+    expect(find.byType(VoiceModeSwitch), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('active-room-card')));
     await tester.pump();
