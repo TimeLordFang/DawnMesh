@@ -201,7 +201,6 @@ void main() {
 
   testWidgets('房间主界面输入框在键盘上方且不溢出', (tester) async {
     useSurface(tester, const Size(360, 640));
-    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
     addTearDown(tester.view.resetViewInsets);
     final session = RoomSession(
       audioIo: MockAudioIo(),
@@ -224,13 +223,21 @@ void main() {
     );
     await tester.pump();
 
+    final input = find.byKey(const ValueKey('room-chat-input'));
+    await tester.tap(input);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pump();
+    await tester.enterText(input, '键盘弹出后继续输入');
+    await tester.pump();
+
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const ValueKey('room-chat-input')), findsOneWidget);
+    expect(input, findsOneWidget);
+    expect(tester.testTextInput.isVisible, isTrue);
+    expect(find.text('键盘弹出后继续输入'), findsOneWidget);
     expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
-    expect(
-      tester.getBottomLeft(find.byKey(const ValueKey('room-chat-input'))).dy,
-      lessThanOrEqualTo(360),
-    );
+    expect(tester.getBottomLeft(input).dy, lessThanOrEqualTo(360));
 
     await session.dispose();
   });

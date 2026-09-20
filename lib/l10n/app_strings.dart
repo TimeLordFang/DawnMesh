@@ -166,6 +166,16 @@ class AppStrings {
   String get memberTag => isEn ? 'Member' : '成员';
   String get cancel => isEn ? 'Cancel' : '取消';
   String get confirm => isEn ? 'Confirm' : '确定';
+  String get leaveRoomTitle => isEn ? 'Leave this room?' : '退出房间？';
+  String get leaveRoomConfirmation => isEn
+      ? 'You will stop receiving audio and messages from this room.'
+      : '退出后将停止接收这个房间的语音和消息。';
+  String get leaveRoomAction => isEn ? 'Leave room' : '退出房间';
+  String get dissolveRoomTitle => isEn ? 'Dissolve this room?' : '解散房间？';
+  String get dissolveRoomConfirmation => isEn
+      ? 'The call will end for everyone in the room. This cannot be undone.'
+      : '房间内所有人的通话都会结束，此操作无法撤销。';
+  String get dissolveRoomAction => isEn ? 'Dissolve room' : '解散房间';
 
   // Status & Notifications
   String roomOnlineCount(int count) =>

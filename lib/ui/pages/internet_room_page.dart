@@ -366,6 +366,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   Padding(
                     padding: EdgeInsets.only(top: compactHeight ? 3 : 8),
                     child: RoomChatDock(
+                      key: const ValueKey('internet-room-chat-dock-widget'),
                       messages: [
                         for (final message in session.messages)
                           RoomChatDockItem(

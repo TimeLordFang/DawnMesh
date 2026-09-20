@@ -46,6 +46,20 @@ void main() {
         (w.data?.endsWith('的聊天室 · Wi-Fi') == true ||
             w.data?.endsWith("'s chat · Wi-Fi") == true),
   );
+  Finder findDissolveTitle() => find.byWidgetPredicate(
+    (w) => w is Text && (w.data == '解散房间？' || w.data == 'Dissolve this room?'),
+  );
+  Finder findDissolveAction() => find.byWidgetPredicate(
+    (w) => w is Text && (w.data == '解散房间' || w.data == 'Dissolve room'),
+  );
+
+  Future<void> confirmHostHangUp(WidgetTester tester) async {
+    await tester.tap(findHangUp());
+    await tester.pump();
+    expect(findDissolveTitle(), findsOneWidget);
+    await tester.tap(findDissolveAction());
+    await tester.pump();
+  }
 
   // Native-channel futures and real loopback sockets need both event loops.
   // Await observable room state instead of assuming one 500 ms sleep completes
@@ -112,8 +126,7 @@ void main() {
     expect(find.text(code), findsOneWidget);
 
     // 离开房间完成清理
-    await tester.tap(findHangUp());
-    await tester.pump();
+    await confirmHostHangUp(tester);
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -144,8 +157,7 @@ void main() {
     expect(findInCall(), findsOneWidget);
 
     // 退场清理
-    await tester.tap(findHangUp());
-    await tester.pump();
+    await confirmHostHangUp(tester);
     for (var i = 0; i < 14; i++) {
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull, reason: '退场第 ${i + 1} 帧溢出');
@@ -206,8 +218,7 @@ void main() {
       invite,
     );
 
-    await tester.tap(findHangUp());
-    await tester.pump();
+    await confirmHostHangUp(tester);
     await tester.pump(const Duration(seconds: 2));
     await waitForRoom(tester, false);
     expect(find.byKey(const ValueKey('active-room-card')), findsNothing);

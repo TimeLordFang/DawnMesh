@@ -16,6 +16,37 @@ import '../widgets/room_chat_dock.dart';
 import '../widgets/voice_mode_switch.dart';
 import '../../l10n/app_strings.dart';
 
+Future<bool> showLocalRoomLeaveConfirmation(
+  BuildContext context,
+  RoomSession session,
+) async {
+  final s = AppStrings.of(context);
+  final dissolving = session.isHost;
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(dissolving ? s.dissolveRoomTitle : s.leaveRoomTitle),
+          content: Text(
+            dissolving ? s.dissolveRoomConfirmation : s.leaveRoomConfirmation,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(s.cancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                dissolving ? s.dissolveRoomAction : s.leaveRoomAction,
+              ),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
 /// 房间前景：成员轨道、中央对讲盘、底部音频控制条。
 ///
 /// 房名、状态行与返回/诊断按钮压在背景上，由 `SessionStage` 绘制。这里每一块都
@@ -62,6 +93,13 @@ class _RoomContentState extends State<RoomContent> {
     super.dispose();
   }
 
+  Future<void> _confirmLeave() async {
+    if (await showLocalRoomLeaveConfirmation(context, widget.session) &&
+        mounted) {
+      widget.onLeave();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isNight = widget.isNight;
@@ -94,6 +132,7 @@ class _RoomContentState extends State<RoomContent> {
               bottom: compactHeight ? 4 : 7,
             ),
             child: RoomChatDock(
+              key: const ValueKey('local-room-chat-dock-widget'),
               messages: [
                 for (final message in messages)
                   RoomChatDockItem(
@@ -150,17 +189,9 @@ class _RoomContentState extends State<RoomContent> {
               ),
             ),
 
-          if (keyboardOpen)
-            Expanded(
-              child: SingleChildScrollView(
-                reverse: true,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: chatDock,
-              ),
-            )
-          else
-            chatDock,
+          // Keep the composer under the same Element while the keyboard opens.
+          // Reparenting it would recreate its TextField and drop IME focus.
+          chatDock,
 
           if (!keyboardOpen) const Spacer(),
 
@@ -232,7 +263,7 @@ class _RoomContentState extends State<RoomContent> {
                     );
                   });
                 },
-                onLeave: widget.onLeave,
+                onLeave: () => unawaited(_confirmLeave()),
                 compact: true,
               ),
             ),

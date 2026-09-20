@@ -164,6 +164,14 @@ class _SessionStageState extends State<SessionStage>
     });
   }
 
+  Future<void> _confirmEndActiveRoom() async {
+    final session = _session;
+    if (session == null || _leaving) return;
+    if (await showLocalRoomLeaveConfirmation(context, session) && mounted) {
+      _onLeaveRoom();
+    }
+  }
+
   void _onInternetSessionChanged(InternetRoomSession? session) {
     if (!mounted || identical(_internetSession, session)) return;
     setState(() => _internetSession = session);
@@ -241,7 +249,7 @@ class _SessionStageState extends State<SessionStage>
                   onOpenActiveChat: session == null
                       ? null
                       : () => _showChatSheet(session),
-                  onEndActiveRoom: _onLeaveRoom,
+                  onEndActiveRoom: () => unawaited(_confirmEndActiveRoom()),
                   activeInternetSession: _internetSession,
                   onInternetSessionChanged: _onInternetSessionChanged,
                 ),
