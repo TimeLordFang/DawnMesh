@@ -166,109 +166,119 @@ class _RoomContentState extends State<RoomContent> {
       },
     );
 
-    return SafeArea(
-      top: false,
-      child: Column(
-        children: [
-          SizedBox(height: keyboardOpen ? 2 : (compactHeight ? 4 : 12)),
+    return LayoutBuilder(
+      builder: (context, constraints) => SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            SizedBox(height: keyboardOpen ? 2 : (compactHeight ? 4 : 12)),
 
-          // 1. 成员轨道
-          if (!keyboardOpen)
-            StageEnterItem(
-              stage: stage,
-              index: 0,
-              child: StreamBuilder<List<Member>>(
-                stream: widget.session.membersStream,
-                initialData: widget.session.members,
-                builder: (context, snapshot) {
-                  return MemberOrbit(
-                    members: snapshot.data ?? [],
-                    isNight: isNight,
-                    compact: true,
-                  );
-                },
-              ),
-            ),
-
-          // Keep the composer under the same Element while the keyboard opens.
-          // Reparenting it would recreate its TextField and drop IME focus.
-          chatDock,
-
-          if (!keyboardOpen) const Spacer(),
-
-          if (!keyboardOpen)
-            Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
-              child: VoiceModeSwitch(
-                value: widget.session.voiceMode,
-                isNight: isNight,
-                dense: compactHeight,
-                onChanged: widget.session.setVoiceMode,
-              ),
-            ),
-          // Each device selects its own transmit mode; receiving stays enabled.
-          if (!keyboardOpen)
-            StageEnterItem(
-              stage: stage,
-              index: 1,
-              rise: 40,
-              fromScale: 0.84,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: widget.session.voiceMode == VoiceMode.automatic
-                    ? _buildAutomaticStatus(isNight)
-                    : PttButton(
-                        key: const ValueKey('push-to-talk-button'),
-                        isNight: isNight,
-                        size: discSize,
-                        isPressed: widget.session.isPttPressed,
-                        onStateChanged: (pressed) {
-                          setState(() {
-                            widget.session.setPtt(pressed);
-                          });
-                        },
-                      ),
-              ),
-            ),
-
-          if (!keyboardOpen) const Spacer(),
-
-          // 3. 底部控制条（静音 / 扬声器 / 离开）
-          if (!keyboardOpen)
-            StageEnterItem(
-              stage: stage,
-              index: 2,
-              rise: 36,
-              child: AudioControlsBar(
-                isNight: isNight,
-                isMuted: widget.session.isMuted,
-                isSpeakerOn: _isSpeakerOn,
-                useBuiltinMic: widget.session.useBuiltinMic,
-                onToggleMute: () {
-                  setState(() {
-                    widget.session.toggleMute();
-                  });
-                },
-                onToggleSpeaker: () {
-                  setState(() {
-                    _isSpeakerOn = !_isSpeakerOn;
-                    widget.session.setSpeakerphone(_isSpeakerOn);
-                  });
-                },
-                onToggleMicSource: () {
-                  setState(() {
-                    widget.session.setUseBuiltinMic(
-                      !widget.session.useBuiltinMic,
+            // 1. 成员轨道
+            if (!keyboardOpen)
+              StageEnterItem(
+                stage: stage,
+                index: 0,
+                child: StreamBuilder<List<Member>>(
+                  stream: widget.session.membersStream,
+                  initialData: widget.session.members,
+                  builder: (context, snapshot) {
+                    return MemberOrbit(
+                      members: snapshot.data ?? [],
+                      isNight: isNight,
+                      compact: true,
                     );
-                  });
-                },
-                onLeave: () => unawaited(_confirmLeave()),
-                compact: true,
+                  },
+                ),
+              ),
+
+            // Keep the composer under the same Element while the keyboard opens.
+            // Reparenting it would recreate its TextField and drop IME focus.
+            SizedBox(
+              key: const ValueKey('local-room-chat-dock-layout-slot'),
+              height: keyboardOpen ? constraints.maxHeight - 2 : null,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                heightFactor: keyboardOpen ? null : 1,
+                child: chatDock,
               ),
             ),
-        ],
+
+            if (!keyboardOpen) const Spacer(),
+
+            if (!keyboardOpen)
+              Padding(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
+                child: VoiceModeSwitch(
+                  value: widget.session.voiceMode,
+                  isNight: isNight,
+                  dense: compactHeight,
+                  onChanged: widget.session.setVoiceMode,
+                ),
+              ),
+            // Each device selects its own transmit mode; receiving stays enabled.
+            if (!keyboardOpen)
+              StageEnterItem(
+                stage: stage,
+                index: 1,
+                rise: 40,
+                fromScale: 0.84,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: widget.session.voiceMode == VoiceMode.automatic
+                      ? _buildAutomaticStatus(isNight)
+                      : PttButton(
+                          key: const ValueKey('push-to-talk-button'),
+                          isNight: isNight,
+                          size: discSize,
+                          isPressed: widget.session.isPttPressed,
+                          onStateChanged: (pressed) {
+                            setState(() {
+                              widget.session.setPtt(pressed);
+                            });
+                          },
+                        ),
+                ),
+              ),
+
+            if (!keyboardOpen) const Spacer(),
+
+            // 3. 底部控制条（静音 / 扬声器 / 离开）
+            if (!keyboardOpen)
+              StageEnterItem(
+                stage: stage,
+                index: 2,
+                rise: 36,
+                child: AudioControlsBar(
+                  isNight: isNight,
+                  isMuted: widget.session.isMuted,
+                  isSpeakerOn: _isSpeakerOn,
+                  useBuiltinMic: widget.session.useBuiltinMic,
+                  onToggleMute: () {
+                    setState(() {
+                      widget.session.toggleMute();
+                    });
+                  },
+                  onToggleSpeaker: () {
+                    setState(() {
+                      _isSpeakerOn = !_isSpeakerOn;
+                      widget.session.setSpeakerphone(_isSpeakerOn);
+                    });
+                  },
+                  onToggleMicSource: () {
+                    setState(() {
+                      widget.session.setUseBuiltinMic(
+                        !widget.session.useBuiltinMic,
+                      );
+                    });
+                  },
+                  onLeave: () => unawaited(_confirmLeave()),
+                  compact: true,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

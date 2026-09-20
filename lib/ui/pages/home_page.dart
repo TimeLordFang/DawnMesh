@@ -8,6 +8,7 @@ import '../../core/audio/audio_io.dart';
 import '../../core/diagnostics/app_log.dart';
 import '../../core/internet/internet_room_session.dart';
 import '../../core/preferences/nickname_store.dart';
+import '../../core/preferences/generated_nickname.dart';
 import '../../core/security/room_invite.dart';
 import '../widgets/room_invite_dialog.dart';
 import '../../core/session/device_code.dart';
@@ -72,14 +73,22 @@ class _HomeContentState extends State<HomeContent> {
   final _nicknameController = TextEditingController();
   String? _defaultNickname;
   final _nicknameStore = NicknameStore();
+  String? _generatedNickname;
   bool _nicknameEdited = false;
   bool _hasSavedNickname = false;
 
   Future<void> _restoreNickname() async {
     final saved = await _nicknameStore.load();
-    if (!mounted || _nicknameEdited || saved == null) return;
+    if (!mounted || _nicknameEdited) return;
+    final nickname = GeneratedNickname.needsGeneration(saved)
+        ? GeneratedNickname.generate(
+            isEnglish: Localizations.localeOf(context).languageCode == 'en',
+          )
+        : saved!.trim();
+    if (saved != nickname) unawaited(_nicknameStore.save(nickname));
     _hasSavedNickname = true;
-    _nicknameController.text = saved;
+    _generatedNickname = nickname;
+    _nicknameController.text = nickname;
   }
 
   void _saveNickname(String value) {
@@ -990,9 +999,11 @@ class _HomeContentState extends State<HomeContent> {
   String get _nickname {
     final s = AppStrings.of(context);
     final text = _nicknameController.text.trim();
-    if (text.isEmpty) return s.defaultNickname;
+    final source = GeneratedNickname.needsGeneration(text)
+        ? (_generatedNickname ??= GeneratedNickname.generate(isEnglish: s.isEn))
+        : text;
     var nickname = '';
-    for (final rune in text.runes) {
+    for (final rune in source.runes) {
       final candidate = nickname + String.fromCharCode(rune);
       if (utf8.encode(candidate).length > 48) break;
       nickname = candidate;

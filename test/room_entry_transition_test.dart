@@ -125,6 +125,25 @@ void main() {
     await tester.pump();
     expect(find.text(code), findsOneWidget);
 
+    // Exercise the real SessionStage -> Scaffold -> RoomContent hierarchy. The
+    // composer should stay focused and sit just above the Android keyboard.
+    final roomInput = find.byKey(const ValueKey('room-chat-input'));
+    final inputFocusNode = tester
+        .widget<EditableText>(
+          find.descendant(of: roomInput, matching: find.byType(EditableText)),
+        )
+        .focusNode;
+    await tester.tap(roomInput);
+    await tester.pump();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pump();
+    expect(inputFocusNode.hasFocus, isTrue);
+    expect(tester.getBottomLeft(roomInput).dy, inInclusiveRange(330, 360));
+    tester.view.resetViewInsets();
+    tester.testTextInput.hide();
+    inputFocusNode.unfocus();
+    await tester.pump();
+
     // 离开房间完成清理
     await confirmHostHangUp(tester);
     for (var i = 0; i < 14; i++) {

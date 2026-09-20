@@ -33,6 +33,7 @@ class RoomChatDock extends StatefulWidget {
     this.visibleMessageCount = 3,
     this.messageMaxLines = 2,
     this.compact = false,
+    this.margin = const EdgeInsets.symmetric(horizontal: 18),
   });
 
   final List<RoomChatDockItem> messages;
@@ -45,6 +46,7 @@ class RoomChatDock extends StatefulWidget {
   final int visibleMessageCount;
   final int messageMaxLines;
   final bool compact;
+  final EdgeInsetsGeometry margin;
 
   @override
   State<RoomChatDock> createState() => _RoomChatDockState();
@@ -116,188 +118,193 @@ class _RoomChatDockState extends State<RoomChatDock> {
             widget.messages.length - widget.visibleMessageCount,
           );
 
-    return Container(
-      key: const ValueKey('room-chat-dock'),
-      margin: const EdgeInsets.symmetric(horizontal: 18),
-      padding: EdgeInsets.fromLTRB(12, widget.compact ? 7 : 9, 8, 8),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: accent.withValues(alpha: .22)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            key: const ValueKey('open-chat-history'),
-            onTap: widget.onOpenHistory,
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(2, 0, 0, 5),
-              child: Row(
-                children: [
-                  Icon(Icons.forum_outlined, size: 16, color: accent),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      s.recentMessages,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    return Padding(
+      padding: widget.margin,
+      child: Container(
+        key: const ValueKey('room-chat-dock'),
+        padding: EdgeInsets.fromLTRB(12, widget.compact ? 7 : 9, 8, 8),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: accent.withValues(alpha: .22)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              key: const ValueKey('open-chat-history'),
+              onTap: widget.onOpenHistory,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(2, 0, 0, 5),
+                child: Row(
+                  children: [
+                    Icon(Icons.forum_outlined, size: 16, color: accent),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        s.recentMessages,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: primary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (widget.unreadCount > 0)
+                      Container(
+                        key: const ValueKey('chat-unread-dot'),
+                        width: 7,
+                        height: 7,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: widget.isNight
+                              ? AppTheme.darkLeaveRosePink
+                              : AppTheme.dawnCoral,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    Text(
+                      s.viewAllMessages,
                       style: TextStyle(
-                        color: primary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
+                        color: accent,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  if (widget.unreadCount > 0)
-                    Container(
-                      key: const ValueKey('chat-unread-dot'),
-                      width: 7,
-                      height: 7,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: BoxDecoration(
-                        color: widget.isNight
-                            ? AppTheme.darkLeaveRosePink
-                            : AppTheme.dawnCoral,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  Text(
-                    s.viewAllMessages,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, size: 17, color: accent),
-                ],
+                    Icon(Icons.chevron_right_rounded, size: 17, color: accent),
+                  ],
+                ),
               ),
             ),
-          ),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: widget.compact ? 30 : 42,
-              maxHeight: widget.compact ? 58 : 96,
-            ),
-            child: visible.isEmpty
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      s.chatDockEmpty,
-                      style: TextStyle(color: secondary, fontSize: 12),
-                    ),
-                  )
-                : ClipRect(
-                    child: SingleChildScrollView(
-                      reverse: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          for (final message in visible)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 1),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 72,
-                                    ),
-                                    child: Text(
-                                      message.isMine
-                                          ? s.chatSelfBadge
-                                          : message.sender,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: secondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: widget.compact ? 30 : 42,
+                maxHeight: widget.compact ? 58 : 96,
+              ),
+              child: visible.isEmpty
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        s.chatDockEmpty,
+                        style: TextStyle(color: secondary, fontSize: 12),
+                      ),
+                    )
+                  : ClipRect(
+                      child: SingleChildScrollView(
+                        reverse: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            for (final message in visible)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 1,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 72,
+                                      ),
+                                      child: Text(
+                                        message.isMine
+                                            ? s.chatSelfBadge
+                                            : message.sender,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: secondary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                  Expanded(
-                                    child: Text(
-                                      message.hasImage
-                                          ? '📷 ${s.chatImage}'
-                                          : message.text,
-                                      maxLines: widget.messageMaxLines,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: primary,
-                                        fontSize: 12,
+                                    const SizedBox(width: 7),
+                                    Expanded(
+                                      child: Text(
+                                        message.hasImage
+                                            ? '📷 ${s.chatImage}'
+                                            : message.text,
+                                        maxLines: widget.messageMaxLines,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: primary,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-          ),
-          Row(
-            children: [
-              IconButton(
-                key: const ValueKey('pick-chat-image'),
-                tooltip: s.chatSendImage,
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.enabled && !_busy ? _pickImage : null,
-                icon: Icon(Icons.image_outlined, color: accent, size: 21),
-              ),
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('room-chat-input'),
-                  controller: _controller,
-                  enabled: widget.enabled && !_busy,
-                  minLines: 1,
-                  maxLines: 2,
-                  scrollPadding: EdgeInsets.only(
-                    bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
-                  ),
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(),
-                  decoration: InputDecoration(
-                    hintText: s.chatInputPlaceholder,
-                    isDense: true,
-                    filled: true,
-                    fillColor: widget.isNight
-                        ? const Color(0xFF121B2B)
-                        : const Color(0xFFF1ECE5),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide.none,
+            ),
+            Row(
+              children: [
+                IconButton(
+                  key: const ValueKey('pick-chat-image'),
+                  tooltip: s.chatSendImage,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: widget.enabled && !_busy ? _pickImage : null,
+                  icon: Icon(Icons.image_outlined, color: accent, size: 21),
+                ),
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('room-chat-input'),
+                    controller: _controller,
+                    enabled: widget.enabled && !_busy,
+                    minLines: 1,
+                    maxLines: 2,
+                    // The surrounding Scaffold already resizes above the IME.
+                    // Adding viewInsets again makes ensureVisible lift the field
+                    // by a second keyboard height on real Android devices.
+                    scrollPadding: const EdgeInsets.only(bottom: 16),
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: InputDecoration(
+                      hintText: s.chatInputPlaceholder,
+                      isDense: true,
+                      filled: true,
+                      fillColor: widget.isNight
+                          ? const Color(0xFF121B2B)
+                          : const Color(0xFFF1ECE5),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                key: const ValueKey('send-chat-text'),
-                tooltip: s.chatSend,
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.enabled && !_busy ? _send : null,
-                icon: _busy
-                    ? SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: accent,
-                        ),
-                      )
-                    : Icon(Icons.send_rounded, color: accent, size: 21),
-              ),
-            ],
-          ),
-        ],
+                IconButton(
+                  key: const ValueKey('send-chat-text'),
+                  tooltip: s.chatSend,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: widget.enabled && !_busy ? _send : null,
+                  icon: _busy
+                      ? SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: accent,
+                          ),
+                        )
+                      : Icon(Icons.send_rounded, color: accent, size: 21),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

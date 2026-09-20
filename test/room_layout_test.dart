@@ -210,18 +210,17 @@ void main() {
     await session.createRoom(startAudio: false);
     await session.sendChat('一条需要显示完整一些的长消息，用来验证聊天区域会跟随文字扩展。');
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RoomContent(
-            session: session,
-            isNight: false,
-            stage: const AlwaysStoppedAnimation(1),
-            onLeave: () {},
-          ),
+    Widget buildKeyboardRoom() => MaterialApp(
+      home: Scaffold(
+        body: RoomContent(
+          session: session,
+          isNight: false,
+          stage: const AlwaysStoppedAnimation(1),
+          onLeave: () {},
         ),
       ),
     );
+    await tester.pumpWidget(buildKeyboardRoom());
     await tester.pump();
 
     final input = find.byKey(const ValueKey('room-chat-input'));
@@ -235,7 +234,10 @@ void main() {
     await tester.pump();
     expect(tester.testTextInput.isVisible, isTrue);
     tester.view.viewInsets = const FakeViewPadding(bottom: 280);
-    await tester.pump();
+    // SessionStage rebuilds from the root MediaQuery when Android animates the
+    // keyboard. Re-pump the same tree to model that outer rebuild while keeping
+    // the existing RoomChatDock state alive.
+    await tester.pumpWidget(buildKeyboardRoom());
     await tester.enterText(input, '键盘弹出后继续输入');
     await tester.pump();
 
@@ -258,7 +260,17 @@ void main() {
     expect(tester.testTextInput.isVisible, isTrue);
     expect(find.text('键盘弹出后继续输入'), findsOneWidget);
     expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
-    expect(tester.getBottomLeft(input).dy, lessThanOrEqualTo(360));
+    final inputBottom = tester.getBottomLeft(input).dy;
+    expect(inputBottom, lessThanOrEqualTo(360));
+    expect(
+      inputBottom,
+      greaterThanOrEqualTo(330),
+      reason: '输入框应贴近键盘，不能在下方留下大片空白',
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('room-chat-dock'))).dx,
+      closeTo(18, 0.1),
+    );
 
     await session.dispose();
   });

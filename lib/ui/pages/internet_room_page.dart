@@ -307,9 +307,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              compactHeight ? 16 : 22,
+              18,
               compactHeight ? 6 : 12,
-              compactHeight ? 16 : 22,
+              18,
               compactHeight ? 10 : 20,
             ),
             child: Column(
@@ -362,12 +362,17 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       onError: _showError,
                     ),
                   ),
+                if (keyboardOpen && !session.roomEnded) const Spacer(),
                 if (!session.roomEnded)
                   Padding(
                     key: const ValueKey('internet-room-chat-dock-slot'),
-                    padding: EdgeInsets.only(top: compactHeight ? 3 : 8),
+                    padding: EdgeInsets.only(
+                      top: compactHeight ? 2 : 5,
+                      bottom: compactHeight ? 4 : 7,
+                    ),
                     child: RoomChatDock(
                       key: const ValueKey('internet-room-chat-dock-widget'),
+                      margin: EdgeInsets.zero,
                       messages: [
                         for (final message in session.messages)
                           RoomChatDockItem(
@@ -380,7 +385,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       isNight: widget.isNight,
                       unreadCount: session.unreadChatCount,
                       visibleMessageCount: keyboardOpen
-                          ? 3
+                          ? 4
                           : (compactHeight ? 2 : 3),
                       messageMaxLines: compactHeight ? 1 : 2,
                       compact: keyboardOpen || compactHeight,
@@ -397,7 +402,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       },
                     ),
                   ),
-                const Spacer(),
+                if (!keyboardOpen) const Spacer(),
                 if (!keyboardOpen && !session.canSpeak) ...[
                   const Icon(
                     Icons.mic_off_rounded,
@@ -443,7 +448,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   else
                     _AutomaticTalkStatus(session: session, accent: accent),
                 ],
-                const Spacer(),
+                if (!keyboardOpen) const Spacer(),
                 if (!keyboardOpen && !session.roomEnded)
                   Container(
                     padding: const EdgeInsets.symmetric(

@@ -218,7 +218,13 @@ void main() {
       same(inputFocusNode),
     );
     expect(tester.testTextInput.isVisible, isTrue);
-    expect(tester.getBottomLeft(input).dy, lessThanOrEqualTo(360));
+    final inputBottom = tester.getBottomLeft(input).dy;
+    expect(inputBottom, lessThanOrEqualTo(360));
+    expect(inputBottom, greaterThanOrEqualTo(330), reason: '公网房输入框应与近场房一样贴近键盘');
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('room-chat-dock'))).dx,
+      closeTo(18, 0.1),
+    );
     expect(find.text('按住对讲'), findsNothing);
   });
 }
