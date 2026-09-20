@@ -125,24 +125,35 @@ void main() {
     await tester.pump();
     expect(find.text(code), findsOneWidget);
 
-    // Exercise the real SessionStage -> Scaffold -> RoomContent hierarchy. The
-    // composer should stay focused and sit just above the Android keyboard.
+    // 点主界面的输入框会展开完整聊天；第一次返回只收键盘，不能把房间退到首页。
     final roomInput = find.byKey(const ValueKey('room-chat-input'));
-    final inputFocusNode = tester
-        .widget<EditableText>(
-          find.descendant(of: roomInput, matching: find.byType(EditableText)),
-        )
-        .focusNode;
     await tester.tap(roomInput);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final fullInput = find.byKey(const ValueKey('full-chat-input'));
+    expect(fullInput, findsOneWidget);
+    final inputFocusNode = tester
+        .widget<EditableText>(
+          find.descendant(of: fullInput, matching: find.byType(EditableText)),
+        )
+        .focusNode;
+    expect(inputFocusNode.hasFocus, isTrue);
     tester.view.viewInsets = const FakeViewPadding(bottom: 280);
     await tester.pump();
-    expect(inputFocusNode.hasFocus, isTrue);
-    expect(tester.getBottomLeft(roomInput).dy, inInclusiveRange(330, 360));
-    tester.view.resetViewInsets();
-    tester.testTextInput.hide();
-    inputFocusNode.unfocus();
+
+    await tester.binding.handlePopRoute();
     await tester.pump();
+    tester.view.resetViewInsets();
+    await tester.pump();
+    expect(fullInput, findsOneWidget);
+    expect(inputFocusNode.hasFocus, isFalse);
+    expect(findInCall(), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(fullInput, findsNothing);
+    expect(findInCall(), findsOneWidget);
 
     // 离开房间完成清理
     await confirmHostHangUp(tester);
@@ -211,12 +222,20 @@ void main() {
     final inviteRow = find.byType(RoomInviteRow);
     final invite = tester.widget<RoomInviteRow>(inviteRow).code;
 
+    await tester.tap(find.byKey(const ValueKey('room-chat-input')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.enterText(
-      find.byKey(const ValueKey('room-chat-input')),
+      find.byKey(const ValueKey('full-chat-input')),
       '退回首页前的消息 🌅',
     );
-    await tester.tap(find.byKey(const ValueKey('send-chat-text')));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const ValueKey('full-chat-input')), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pump();

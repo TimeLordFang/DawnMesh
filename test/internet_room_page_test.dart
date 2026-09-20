@@ -3,7 +3,6 @@ import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/internet_room_page.dart';
 import 'package:dawn_mesh/ui/pages/internet_home_page.dart';
-import 'package:dawn_mesh/ui/widgets/room_chat_dock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -175,56 +174,57 @@ void main() {
     expect(retained, same(session));
   });
 
-  testWidgets('public-room composer stays above the keyboard', (tester) async {
-    tester.view.physicalSize = const Size(360, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final session = makeSession();
-    addTearDown(session.disposeSession);
-    session.receiveChatForTesting(text: '公网房间里的一条长消息，键盘弹出后仍应尽量显示内容并保留输入框。');
+  testWidgets(
+    'public-room dock opens full chat and back closes keyboard first',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final session = makeSession();
+      addTearDown(session.disposeSession);
+      session.receiveChatForTesting(text: '公网房间里的一条长消息，键盘弹出后仍应尽量显示内容并保留输入框。');
 
-    await tester.pumpWidget(
-      MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
+      );
+      await tester.pump();
 
-    expect(tester.takeException(), isNull);
-    final input = find.byKey(const ValueKey('room-chat-input'));
-    final dockStateBeforeKeyboard = tester.state(find.byType(RoomChatDock));
-    final inputFocusNode = tester
-        .widget<EditableText>(
-          find.descendant(of: input, matching: find.byType(EditableText)),
-        )
-        .focusNode;
-    await tester.tap(input);
-    await tester.pump();
-    expect(tester.testTextInput.isVisible, isTrue);
-    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
-    await tester.pump();
+      expect(tester.takeException(), isNull);
+      final dockInput = find.byKey(const ValueKey('room-chat-input'));
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('room-chat-dock'))).dx,
+        closeTo(18, 0.1),
+      );
+      await tester.tap(dockInput);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    expect(input, findsOneWidget);
-    expect(
-      tester.state(find.byType(RoomChatDock)),
-      same(dockStateBeforeKeyboard),
-      reason: '键盘弹出时公网房聊天区也必须保留同一个 State',
-    );
-    expect(inputFocusNode.hasFocus, isTrue);
-    expect(
-      tester
+      final fullInput = find.byKey(const ValueKey('full-chat-input'));
+      expect(fullInput, findsOneWidget);
+      final inputFocusNode = tester
           .widget<EditableText>(
-            find.descendant(of: input, matching: find.byType(EditableText)),
+            find.descendant(of: fullInput, matching: find.byType(EditableText)),
           )
-          .focusNode,
-      same(inputFocusNode),
-    );
-    expect(tester.testTextInput.isVisible, isTrue);
-    final inputBottom = tester.getBottomLeft(input).dy;
-    expect(inputBottom, lessThanOrEqualTo(360));
-    expect(inputBottom, greaterThanOrEqualTo(330), reason: '公网房输入框应与近场房一样贴近键盘');
-    expect(
-      tester.getTopLeft(find.byKey(const ValueKey('room-chat-dock'))).dx,
-      closeTo(18, 0.1),
-    );
-    expect(find.text('按住对讲'), findsNothing);
-  });
+          .focusNode;
+      expect(inputFocusNode.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      await tester.pump();
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      tester.view.resetViewInsets();
+      await tester.pump();
+
+      expect(fullInput, findsOneWidget, reason: '第一次返回只应收起输入法，不能关闭聊天或退出房间');
+      expect(find.byType(InternetRoomPage), findsOneWidget);
+      expect(inputFocusNode.hasFocus, isFalse);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(fullInput, findsNothing);
+      expect(find.byType(InternetRoomPage), findsOneWidget);
+      expect(dockInput, findsOneWidget);
+    },
+  );
 }

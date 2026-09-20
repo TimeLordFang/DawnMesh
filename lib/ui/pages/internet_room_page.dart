@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/internet/internet_audio_profile.dart';
 import '../../core/internet/internet_models.dart';
@@ -219,20 +220,29 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ),
   );
 
-  Future<void> _showChat() async {
+  Future<void> _showChat({bool autofocusComposer = false}) async {
     widget.session.markChatRead();
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      builder: (_) => _InternetChatSheet(session: widget.session),
+      builder: (_) => _InternetChatSheet(
+        session: widget.session,
+        autofocusComposer: autofocusComposer,
+      ),
     );
     widget.session.markChatRead();
   }
 
   void _minimize() {
+    _dismissKeyboard();
     unawaited(widget.session.setPtt(false));
     Navigator.of(context).pop(false);
+  }
+
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
   }
 
   void _showError(String value) => ScaffoldMessenger.of(context).showSnackBar(
@@ -257,9 +267,14 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             InternetConnectionState.disconnected => '连接未能恢复',
           };
     return PopScope(
-      canPop: session.roomEnded,
+      canPop: session.roomEnded && !keyboardOpen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !session.roomEnded) _minimize();
+        if (didPop) return;
+        if (keyboardOpen) {
+          _dismissKeyboard();
+        } else if (!session.roomEnded) {
+          _minimize();
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -384,13 +399,19 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       ],
                       isNight: widget.isNight,
                       unreadCount: session.unreadChatCount,
-                      visibleMessageCount: keyboardOpen
-                          ? 4
+                      visibleMessageCount:
+                          session.voiceMode == VoiceMode.automatic
+                          ? (compactHeight ? 4 : 6)
                           : (compactHeight ? 2 : 3),
-                      messageMaxLines: compactHeight ? 1 : 2,
-                      compact: keyboardOpen || compactHeight,
+                      messageMaxLines:
+                          session.voiceMode == VoiceMode.automatic ||
+                              !compactHeight
+                          ? 2
+                          : 1,
+                      compact: compactHeight,
+                      expandedPreview: session.voiceMode == VoiceMode.automatic,
                       onOpenHistory: _showChat,
-                      onSendText: session.sendChat,
+                      onOpenComposer: () => _showChat(autofocusComposer: true),
                       onPickImage: () async {
                         final image = await _chatMedia.pickImage();
                         if (image == null) return;
@@ -999,8 +1020,12 @@ class _MemberSheetState extends State<_MemberSheet> {
 }
 
 class _InternetChatSheet extends StatefulWidget {
-  const _InternetChatSheet({required this.session});
+  const _InternetChatSheet({
+    required this.session,
+    this.autofocusComposer = false,
+  });
   final InternetRoomSession session;
+  final bool autofocusComposer;
   @override
   State<_InternetChatSheet> createState() => _InternetChatSheetState();
 }
@@ -1050,121 +1075,138 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
-    expand: false,
-    initialChildSize: .82,
-    builder: (_, scroll) => Column(
-      children: [
-        const Padding(
-          padding: EdgeInsets.all(18),
-          child: Text(
-            '加密消息',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(
-          child: widget.session.messages.isEmpty
-              ? const Center(child: Text('还没人说第一句'))
-              : ListView.builder(
-                  controller: scroll,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: widget.session.messages.length,
-                  itemBuilder: (_, index) {
-                    final message = widget.session.messages[index];
-                    final member = widget.session.members
-                        .where((item) => item.id == message.senderId)
-                        .firstOrNull;
-                    final (senderName, senderCode) = DeviceCode.split(
-                      message.senderName,
-                    );
-                    final avatar = AvatarFrame(
-                      senderCode: senderCode ?? message.senderId,
-                      nickname: senderName,
-                      isHost: member?.isHost ?? false,
-                      size: 34,
-                      isNight: Theme.of(context).brightness == Brightness.dark,
-                    );
-                    final bubble = Container(
-                      margin: const EdgeInsets.only(bottom: 9),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      constraints: const BoxConstraints(maxWidth: 270),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (!message.isMine)
-                            Text(
-                              senderName,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          if (message.hasImage)
-                            ChatImageBubble(
-                              bytes: message.imageBytes!,
-                              name: message.imageName ?? 'DawnMesh_image',
-                              isMine: message.isMine,
-                            )
-                          else
-                            Text(message.text),
-                        ],
-                      ),
-                    );
-                    return Row(
-                      mainAxisAlignment: message.isMine
-                          ? MainAxisAlignment.end
-                          : MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: message.isMine
-                          ? [bubble, const SizedBox(width: 8), avatar]
-                          : [avatar, const SizedBox(width: 8), bubble],
-                    );
-                  },
-                ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              14,
-              8,
-              8,
-              MediaQuery.viewInsetsOf(context).bottom + 8,
+  Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return PopScope(
+      canPop: !keyboardOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !keyboardOpen) return;
+        FocusManager.instance.primaryFocus?.unfocus();
+        unawaited(
+          SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
+        );
+      },
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .82,
+        builder: (_, scroll) => Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(18),
+              child: Text(
+                '加密消息',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+              ),
             ),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: '发送图片',
-                  onPressed: _sending ? null : _sendImage,
-                  icon: const Icon(Icons.image_outlined),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    maxLength: 1000,
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: '说点什么…',
-                      counterText: '',
+            Expanded(
+              child: widget.session.messages.isEmpty
+                  ? const Center(child: Text('还没人说第一句'))
+                  : ListView.builder(
+                      controller: scroll,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: widget.session.messages.length,
+                      itemBuilder: (_, index) {
+                        final message = widget.session.messages[index];
+                        final member = widget.session.members
+                            .where((item) => item.id == message.senderId)
+                            .firstOrNull;
+                        final (senderName, senderCode) = DeviceCode.split(
+                          message.senderName,
+                        );
+                        final avatar = AvatarFrame(
+                          senderCode: senderCode ?? message.senderId,
+                          nickname: senderName,
+                          isHost: member?.isHost ?? false,
+                          size: 34,
+                          isNight:
+                              Theme.of(context).brightness == Brightness.dark,
+                        );
+                        final bubble = Container(
+                          margin: const EdgeInsets.only(bottom: 9),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          constraints: const BoxConstraints(maxWidth: 270),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!message.isMine)
+                                Text(
+                                  senderName,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              if (message.hasImage)
+                                ChatImageBubble(
+                                  bytes: message.imageBytes!,
+                                  name: message.imageName ?? 'DawnMesh_image',
+                                  isMine: message.isMine,
+                                )
+                              else
+                                Text(message.text),
+                            ],
+                          ),
+                        );
+                        return Row(
+                          mainAxisAlignment: message.isMine
+                              ? MainAxisAlignment.end
+                              : MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: message.isMine
+                              ? [bubble, const SizedBox(width: 8), avatar]
+                              : [avatar, const SizedBox(width: 8), bubble],
+                        );
+                      },
                     ),
-                  ),
-                ),
-                IconButton.filled(
-                  onPressed: _send,
-                  icon: const Icon(Icons.send_rounded),
-                ),
-              ],
             ),
-          ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  14,
+                  8,
+                  8,
+                  MediaQuery.viewInsetsOf(context).bottom + 8,
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: '发送图片',
+                      onPressed: _sending ? null : _sendImage,
+                      icon: const Icon(Icons.image_outlined),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('full-chat-input'),
+                        controller: _controller,
+                        autofocus: widget.autofocusComposer,
+                        maxLength: 1000,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          hintText: '说点什么…',
+                          counterText: '',
+                        ),
+                      ),
+                    ),
+                    IconButton.filled(
+                      key: const ValueKey('full-chat-send'),
+                      onPressed: _send,
+                      icon: const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

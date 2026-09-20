@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/audio/audio_io.dart';
 import '../../core/internet/internet_room_session.dart';
@@ -134,9 +135,15 @@ class _SessionStageState extends State<SessionStage>
     final session = _session;
     if (session == null || !_roomVisible || _leaving) return;
     // 返回首页只收起房间界面；音频、传输、聊天和邀请码都继续保留。
+    _dismissKeyboard();
     if (session.isPttPressed) session.setPtt(false);
     setState(() => _roomVisible = false);
     _stage.reverse();
+  }
+
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
   }
 
   void _onLeaveRoom() {
@@ -197,14 +204,18 @@ class _SessionStageState extends State<SessionStage>
     );
   }
 
-  void _showChatSheet(RoomSession session) {
+  void _showChatSheet(RoomSession session, {bool autofocusComposer = false}) {
     session.markChatRead();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => RoomChatSheet(session: session, isNight: widget.isNight),
+      builder: (_) => RoomChatSheet(
+        session: session,
+        isNight: widget.isNight,
+        autofocusComposer: autofocusComposer,
+      ),
     ).then((_) {
       session.markChatRead();
     });
@@ -222,9 +233,14 @@ class _SessionStageState extends State<SessionStage>
 
     return PopScope(
       // 在房间里时，系统返回键走的是退场动画，而不是直接弹出路由。
-      canPop: !_roomVisible,
+      canPop: !_roomVisible && !keyboardOpen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _roomVisible) _minimizeRoom();
+        if (didPop) return;
+        if (keyboardOpen) {
+          _dismissKeyboard();
+        } else if (_roomVisible) {
+          _minimizeRoom();
+        }
       },
       child: Scaffold(
         body: Stack(
@@ -284,6 +300,8 @@ class _SessionStageState extends State<SessionStage>
                     stage: _stage,
                     onLeave: _onLeaveRoom,
                     onOpenChat: () => _showChatSheet(session),
+                    onOpenComposer: () =>
+                        _showChatSheet(session, autofocusComposer: true),
                   ),
                   builder: (context, child) => Offstage(
                     offstage: !_roomVisible && _stage.value == 0,

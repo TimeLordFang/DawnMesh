@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.10\nChat composers now sit naturally above the keyboard and share one visual style across nearby and public rooms. New users receive a friendly generated nickname instead of a shared default.'
-      : '1.0.0-beta.10\n聊天输入框现在会自然贴近键盘，近场房与公网房统一使用同一套样式；新用户会自动获得易区分的昵称，不再共用默认名称。';
+      ? '1.0.0-beta.11\nAutomatic-talk mode now shows a larger recent-message preview. Tapping the room composer opens the full chat with the keyboard ready, and Back dismisses the keyboard before leaving chat or minimizing nearby rooms.'
+      : '1.0.0-beta.11\n自动通话模式现在会展示更大的最近消息区域；点击房间输入框会直接展开完整聊天并唤起键盘，返回键会先收起键盘，再关闭聊天或最小化近场房间。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

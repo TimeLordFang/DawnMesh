@@ -7,7 +7,6 @@ import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/room_page.dart';
 import 'package:dawn_mesh/ui/pages/session_stage.dart';
-import 'package:dawn_mesh/ui/widgets/room_chat_dock.dart';
 import 'package:dawn_mesh/ui/widgets/room_chat_sheet.dart';
 
 /// 这轮把房内 UI 整体放大过（对讲盘 212、头像 64、控制条图标 24、正文 +2~4pt），
@@ -200,77 +199,45 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('房间主界面输入框在键盘上方且不溢出', (tester) async {
+  testWidgets('切到自动通话后主界面展示更多聊天内容', (tester) async {
     useSurface(tester, const Size(360, 640));
-    addTearDown(tester.view.resetViewInsets);
     final session = RoomSession(
       audioIo: MockAudioIo(),
       selfNickname: '测试者#1234',
     );
     await session.createRoom(startAudio: false);
-    await session.sendChat('一条需要显示完整一些的长消息，用来验证聊天区域会跟随文字扩展。');
+    session.setVoiceMode(VoiceMode.pushToTalk);
+    for (var i = 1; i <= 6; i++) {
+      await session.sendChat('消息 $i：用来验证自动通话会展示更多聊天内容。');
+    }
 
-    Widget buildKeyboardRoom() => MaterialApp(
-      home: Scaffold(
-        body: RoomContent(
-          session: session,
-          isNight: false,
-          stage: const AlwaysStoppedAnimation(1),
-          onLeave: () {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RoomContent(
+            session: session,
+            isNight: false,
+            stage: const AlwaysStoppedAnimation(1),
+            onLeave: () {},
+          ),
         ),
       ),
     );
-    await tester.pumpWidget(buildKeyboardRoom());
     await tester.pump();
 
-    final input = find.byKey(const ValueKey('room-chat-input'));
-    final dockStateBeforeKeyboard = tester.state(find.byType(RoomChatDock));
-    final inputFocusNode = tester
-        .widget<EditableText>(
-          find.descendant(of: input, matching: find.byType(EditableText)),
-        )
-        .focusNode;
-    await tester.tap(input);
+    final dock = find.byKey(const ValueKey('room-chat-dock'));
+    final preview = find.byKey(const ValueKey('room-chat-preview'));
+    final pushToTalkHeight = tester.getSize(preview).height;
+
+    session.setVoiceMode(VoiceMode.automatic);
     await tester.pump();
-    expect(tester.testTextInput.isVisible, isTrue);
-    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
-    // SessionStage rebuilds from the root MediaQuery when Android animates the
-    // keyboard. Re-pump the same tree to model that outer rebuild while keeping
-    // the existing RoomChatDock state alive.
-    await tester.pumpWidget(buildKeyboardRoom());
-    await tester.enterText(input, '键盘弹出后继续输入');
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    final automaticHeight = tester.getSize(preview).height;
 
     expect(tester.takeException(), isNull);
-    expect(input, findsOneWidget);
-    expect(
-      tester.state(find.byType(RoomChatDock)),
-      same(dockStateBeforeKeyboard),
-      reason: '键盘弹出时聊天区不能被销毁重建，否则真机输入法会立即失焦',
-    );
-    expect(inputFocusNode.hasFocus, isTrue);
-    expect(
-      tester
-          .widget<EditableText>(
-            find.descendant(of: input, matching: find.byType(EditableText)),
-          )
-          .focusNode,
-      same(inputFocusNode),
-    );
-    expect(tester.testTextInput.isVisible, isTrue);
-    expect(find.text('键盘弹出后继续输入'), findsOneWidget);
-    expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
-    final inputBottom = tester.getBottomLeft(input).dy;
-    expect(inputBottom, lessThanOrEqualTo(360));
-    expect(
-      inputBottom,
-      greaterThanOrEqualTo(330),
-      reason: '输入框应贴近键盘，不能在下方留下大片空白',
-    );
-    expect(
-      tester.getTopLeft(find.byKey(const ValueKey('room-chat-dock'))).dx,
-      closeTo(18, 0.1),
-    );
+    expect(automaticHeight, greaterThan(pushToTalkHeight));
+    expect(find.byKey(const ValueKey('automatic-talk-status')), findsOneWidget);
+    expect(tester.getTopLeft(dock).dx, closeTo(18, 0.1));
 
     await session.dispose();
   });

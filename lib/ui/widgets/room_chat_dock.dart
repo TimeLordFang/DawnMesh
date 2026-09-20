@@ -26,26 +26,28 @@ class RoomChatDock extends StatefulWidget {
     required this.messages,
     required this.isNight,
     required this.onOpenHistory,
-    required this.onSendText,
+    required this.onOpenComposer,
     required this.onPickImage,
     this.unreadCount = 0,
     this.enabled = true,
     this.visibleMessageCount = 3,
     this.messageMaxLines = 2,
     this.compact = false,
+    this.expandedPreview = false,
     this.margin = const EdgeInsets.symmetric(horizontal: 18),
   });
 
   final List<RoomChatDockItem> messages;
   final bool isNight;
   final VoidCallback onOpenHistory;
-  final Future<void> Function(String text) onSendText;
+  final VoidCallback onOpenComposer;
   final Future<void> Function() onPickImage;
   final int unreadCount;
   final bool enabled;
   final int visibleMessageCount;
   final int messageMaxLines;
   final bool compact;
+  final bool expandedPreview;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -53,28 +55,7 @@ class RoomChatDock extends StatefulWidget {
 }
 
 class _RoomChatDockState extends State<RoomChatDock> {
-  final _controller = TextEditingController();
   bool _busy = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _busy || !widget.enabled) return;
-    setState(() => _busy = true);
-    try {
-      await widget.onSendText(text);
-      if (mounted) _controller.clear();
-    } catch (error) {
-      if (mounted) _showError('$error');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 
   Future<void> _pickImage() async {
     if (_busy || !widget.enabled) return;
@@ -122,7 +103,12 @@ class _RoomChatDockState extends State<RoomChatDock> {
       padding: widget.margin,
       child: Container(
         key: const ValueKey('room-chat-dock'),
-        padding: EdgeInsets.fromLTRB(12, widget.compact ? 7 : 9, 8, 8),
+        padding: EdgeInsets.fromLTRB(
+          12,
+          widget.compact ? 5 : 9,
+          8,
+          widget.compact ? 6 : 8,
+        ),
         decoration: BoxDecoration(
           color: surface,
           borderRadius: BorderRadius.circular(17),
@@ -180,9 +166,14 @@ class _RoomChatDockState extends State<RoomChatDock> {
               ),
             ),
             ConstrainedBox(
+              key: const ValueKey('room-chat-preview'),
               constraints: BoxConstraints(
-                minHeight: widget.compact ? 30 : 42,
-                maxHeight: widget.compact ? 58 : 96,
+                minHeight: widget.expandedPreview
+                    ? 64
+                    : (widget.compact ? 30 : 42),
+                maxHeight: widget.expandedPreview
+                    ? 132
+                    : (widget.compact ? 58 : 96),
               ),
               child: visible.isEmpty
                   ? Align(
@@ -258,16 +249,11 @@ class _RoomChatDockState extends State<RoomChatDock> {
                 Expanded(
                   child: TextField(
                     key: const ValueKey('room-chat-input'),
-                    controller: _controller,
                     enabled: widget.enabled && !_busy,
-                    minLines: 1,
-                    maxLines: 2,
-                    // The surrounding Scaffold already resizes above the IME.
-                    // Adding viewInsets again makes ensureVisible lift the field
-                    // by a second keyboard height on real Android devices.
-                    scrollPadding: const EdgeInsets.only(bottom: 16),
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
+                    readOnly: true,
+                    showCursor: false,
+                    enableInteractiveSelection: false,
+                    onTap: widget.onOpenComposer,
                     decoration: InputDecoration(
                       hintText: s.chatInputPlaceholder,
                       isDense: true,
@@ -287,19 +273,17 @@ class _RoomChatDockState extends State<RoomChatDock> {
                   ),
                 ),
                 IconButton(
-                  key: const ValueKey('send-chat-text'),
-                  tooltip: s.chatSend,
+                  key: const ValueKey('open-chat-composer'),
+                  tooltip: s.viewAllMessages,
                   visualDensity: VisualDensity.compact,
-                  onPressed: widget.enabled && !_busy ? _send : null,
-                  icon: _busy
-                      ? SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: accent,
-                          ),
-                        )
-                      : Icon(Icons.send_rounded, color: accent, size: 21),
+                  onPressed: widget.enabled && !_busy
+                      ? widget.onOpenComposer
+                      : null,
+                  icon: Icon(
+                    Icons.open_in_full_rounded,
+                    color: accent,
+                    size: 19,
+                  ),
                 ),
               ],
             ),

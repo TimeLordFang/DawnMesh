@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/session/chat_message.dart';
 import '../../core/session/device_code.dart';
@@ -16,11 +17,13 @@ import 'chat_image_bubble.dart';
 class RoomChatSheet extends StatefulWidget {
   final RoomSession session;
   final bool isNight;
+  final bool autofocusComposer;
 
   const RoomChatSheet({
     super.key,
     required this.session,
     required this.isNight,
+    this.autofocusComposer = false,
   });
 
   @override
@@ -383,350 +386,367 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
         ? maxAvailableHeight
         : defaultHeight.clamp(280.0, screenHeight - topPadding - 16);
 
-    return Material(
-      color: Colors.transparent,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: keyboardHeight),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: isTablet ? 620 : double.infinity,
-              maxHeight: targetHeight,
-            ),
-            child: Container(
-              height: targetHeight,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
+    return PopScope(
+      canPop: keyboardHeight == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || keyboardHeight == 0) return;
+        FocusManager.instance.primaryFocus?.unfocus();
+        unawaited(
+          SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
+        );
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: keyboardHeight),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isTablet ? 620 : double.infinity,
+                maxHeight: targetHeight,
               ),
-              child: SafeArea(
-                top: false,
-                bottom: keyboardHeight == 0,
-                child: Column(
-                  children: [
-                    // 1. 顶部把手与标题栏
-                    const SizedBox(height: 10),
-                    Container(
-                      width: 38,
-                      height: 4.5,
-                      decoration: BoxDecoration(
-                        color: textSecondary.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(2.5),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 20,
-                            color: accentColor,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            s.chatTitle,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: textPrimary,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: textSecondary,
-                              size: 22,
-                            ),
-                            tooltip: s.chatCloseSheet,
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1, thickness: 0.8),
-
-                    // 2. 消息气泡列表
-                    Expanded(
-                      child: messages.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
-                                child: Text(
-                                  s.chatEmptyHint,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: textSecondary.withValues(
-                                      alpha: 0.75,
-                                    ),
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              itemCount: messages.length,
-                              itemBuilder: (context, index) {
-                                final msg = messages[index];
-                                final isLocal = msg.isLocal;
-                                final isFormer =
-                                    !isLocal &&
-                                    !activeMemberIds.contains(msg.senderId);
-
-                                final (baseName, _) = DeviceCode.split(
-                                  msg.senderNickname,
-                                );
-                                final hasConflict =
-                                    (baseNameToCodes[baseName]?.length ?? 0) >
-                                    1;
-
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: isLocal
-                                        ? MainAxisAlignment.end
-                                        : MainAxisAlignment.start,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // 远端消息头像框
-                                      if (!isLocal) ...[
-                                        AvatarFrame(
-                                          senderCode: msg.senderCode,
-                                          nickname: msg.senderNickname,
-                                          isHost: msg.isHost,
-                                          size: 34,
-                                          isNight: isNight,
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-
-                                      // 气泡与名字栏
-                                      Flexible(
-                                        child: Column(
-                                          crossAxisAlignment: isLocal
-                                              ? CrossAxisAlignment.end
-                                              : CrossAxisAlignment.start,
-                                          children: [
-                                            // 署名与身份标签（Wrap 结构自适应折行）
-                                            _buildBubbleHeader(
-                                              context: context,
-                                              msg: msg,
-                                              isLocal: isLocal,
-                                              isFormer: isFormer,
-                                              hasConflict: hasConflict,
-                                              s: s,
-                                              textSecondary: textSecondary,
-                                              accentColor: accentColor,
-                                              isNight: isNight,
-                                            ),
-
-                                            // 气泡本体（长按支持撤回）
-                                            GestureDetector(
-                                              onLongPress: isLocal
-                                                  ? () => _handleRecall(msg)
-                                                  : null,
-                                              child: Container(
-                                                constraints: BoxConstraints(
-                                                  maxWidth: isTablet
-                                                      ? 440
-                                                      : (screenWidth * 0.70)
-                                                            .clamp(
-                                                              200.0,
-                                                              420.0,
-                                                            ),
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 13,
-                                                      vertical: 9,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: isLocal
-                                                      ? (isNight
-                                                            ? AppTheme
-                                                                  .nightSkyBlue
-                                                            : AppTheme
-                                                                  .dawnCoral)
-                                                      : (isNight
-                                                            ? const Color(
-                                                                0xFF1E2D44,
-                                                              )
-                                                            : const Color(
-                                                                0xFFEFE7DE,
-                                                              )),
-                                                  borderRadius: BorderRadius.only(
-                                                    topLeft:
-                                                        const Radius.circular(
-                                                          16,
-                                                        ),
-                                                    topRight:
-                                                        const Radius.circular(
-                                                          16,
-                                                        ),
-                                                    bottomLeft: Radius.circular(
-                                                      isLocal ? 16 : 4,
-                                                    ),
-                                                    bottomRight:
-                                                        Radius.circular(
-                                                          isLocal ? 4 : 16,
-                                                        ),
-                                                  ),
-                                                  border: isLocal
-                                                      ? null
-                                                      : Border.all(
-                                                          color: textSecondary
-                                                              .withValues(
-                                                                alpha: 0.15,
-                                                              ),
-                                                          width: 0.6,
-                                                        ),
-                                                ),
-                                                child: msg.hasImage
-                                                    ? ChatImageBubble(
-                                                        bytes: msg.imageBytes!,
-                                                        name:
-                                                            msg.imageName ??
-                                                            'DawnMesh_image',
-                                                        isMine: isLocal,
-                                                      )
-                                                    : Text(
-                                                        msg.text,
-                                                        softWrap: true,
-                                                        style: TextStyle(
-                                                          fontSize: 14.5,
-                                                          color: isLocal
-                                                              ? Colors.white
-                                                              : textPrimary,
-                                                          height: 1.35,
-                                                        ),
-                                                      ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      // 本机消息头像框
-                                      if (isLocal) ...[
-                                        const SizedBox(width: 8),
-                                        AvatarFrame(
-                                          senderCode: msg.senderCode,
-                                          nickname: msg.senderNickname,
-                                          isHost: msg.isHost,
-                                          size: 34,
-                                          isNight: isNight,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-
-                    // 3. 底部输入与发送栏
-                    const Divider(height: 1, thickness: 0.8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            tooltip: '发送图片',
-                            onPressed: _isSending ? null : _handleImage,
-                            icon: Icon(
-                              Icons.image_outlined,
-                              color: accentColor,
-                            ),
-                          ),
-                          Expanded(
-                            child: Semantics(
-                              label: s.chatInputPlaceholder,
-                              textField: true,
-                              child: TextField(
-                                controller: _textController,
-                                maxLines: 3,
-                                minLines: 1,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: textPrimary,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: s.chatInputPlaceholder,
-                                  hintStyle: TextStyle(
-                                    fontSize: 13.5,
-                                    color: textSecondary.withValues(
-                                      alpha: 0.65,
-                                    ),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  filled: true,
-                                  fillColor: isNight
-                                      ? const Color(0xFF121B2B)
-                                      : const Color(0xFFF1ECE5),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                                onSubmitted: (_) => _handleSend(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Semantics(
-                            label: _isSending ? s.chatSending : s.chatSend,
-                            liveRegion: _isSending,
-                            button: true,
-                            child: IconButton(
-                              icon: _isSending
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Icon(
-                                      Icons.send_rounded,
-                                      color: accentColor,
-                                    ),
-                              tooltip: _isSending ? s.chatSending : s.chatSend,
-                              onPressed: _isSending ? null : _handleSend,
-                            ),
-                          ),
-                        ],
-                      ),
+              child: Container(
+                height: targetHeight,
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
                     ),
                   ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  bottom: keyboardHeight == 0,
+                  child: Column(
+                    children: [
+                      // 1. 顶部把手与标题栏
+                      const SizedBox(height: 10),
+                      Container(
+                        width: 38,
+                        height: 4.5,
+                        decoration: BoxDecoration(
+                          color: textSecondary.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(2.5),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 20,
+                              color: accentColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              s.chatTitle,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: textPrimary,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(
+                                Icons.close_rounded,
+                                color: textSecondary,
+                                size: 22,
+                              ),
+                              tooltip: s.chatCloseSheet,
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, thickness: 0.8),
+
+                      // 2. 消息气泡列表
+                      Expanded(
+                        child: messages.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    s.chatEmptyHint,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: textSecondary.withValues(
+                                        alpha: 0.75,
+                                      ),
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                itemCount: messages.length,
+                                itemBuilder: (context, index) {
+                                  final msg = messages[index];
+                                  final isLocal = msg.isLocal;
+                                  final isFormer =
+                                      !isLocal &&
+                                      !activeMemberIds.contains(msg.senderId);
+
+                                  final (baseName, _) = DeviceCode.split(
+                                    msg.senderNickname,
+                                  );
+                                  final hasConflict =
+                                      (baseNameToCodes[baseName]?.length ?? 0) >
+                                      1;
+
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: isLocal
+                                          ? MainAxisAlignment.end
+                                          : MainAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // 远端消息头像框
+                                        if (!isLocal) ...[
+                                          AvatarFrame(
+                                            senderCode: msg.senderCode,
+                                            nickname: msg.senderNickname,
+                                            isHost: msg.isHost,
+                                            size: 34,
+                                            isNight: isNight,
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+
+                                        // 气泡与名字栏
+                                        Flexible(
+                                          child: Column(
+                                            crossAxisAlignment: isLocal
+                                                ? CrossAxisAlignment.end
+                                                : CrossAxisAlignment.start,
+                                            children: [
+                                              // 署名与身份标签（Wrap 结构自适应折行）
+                                              _buildBubbleHeader(
+                                                context: context,
+                                                msg: msg,
+                                                isLocal: isLocal,
+                                                isFormer: isFormer,
+                                                hasConflict: hasConflict,
+                                                s: s,
+                                                textSecondary: textSecondary,
+                                                accentColor: accentColor,
+                                                isNight: isNight,
+                                              ),
+
+                                              // 气泡本体（长按支持撤回）
+                                              GestureDetector(
+                                                onLongPress: isLocal
+                                                    ? () => _handleRecall(msg)
+                                                    : null,
+                                                child: Container(
+                                                  constraints: BoxConstraints(
+                                                    maxWidth: isTablet
+                                                        ? 440
+                                                        : (screenWidth * 0.70)
+                                                              .clamp(
+                                                                200.0,
+                                                                420.0,
+                                                              ),
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 13,
+                                                        vertical: 9,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: isLocal
+                                                        ? (isNight
+                                                              ? AppTheme
+                                                                    .nightSkyBlue
+                                                              : AppTheme
+                                                                    .dawnCoral)
+                                                        : (isNight
+                                                              ? const Color(
+                                                                  0xFF1E2D44,
+                                                                )
+                                                              : const Color(
+                                                                  0xFFEFE7DE,
+                                                                )),
+                                                    borderRadius: BorderRadius.only(
+                                                      topLeft:
+                                                          const Radius.circular(
+                                                            16,
+                                                          ),
+                                                      topRight:
+                                                          const Radius.circular(
+                                                            16,
+                                                          ),
+                                                      bottomLeft:
+                                                          Radius.circular(
+                                                            isLocal ? 16 : 4,
+                                                          ),
+                                                      bottomRight:
+                                                          Radius.circular(
+                                                            isLocal ? 4 : 16,
+                                                          ),
+                                                    ),
+                                                    border: isLocal
+                                                        ? null
+                                                        : Border.all(
+                                                            color: textSecondary
+                                                                .withValues(
+                                                                  alpha: 0.15,
+                                                                ),
+                                                            width: 0.6,
+                                                          ),
+                                                  ),
+                                                  child: msg.hasImage
+                                                      ? ChatImageBubble(
+                                                          bytes:
+                                                              msg.imageBytes!,
+                                                          name:
+                                                              msg.imageName ??
+                                                              'DawnMesh_image',
+                                                          isMine: isLocal,
+                                                        )
+                                                      : Text(
+                                                          msg.text,
+                                                          softWrap: true,
+                                                          style: TextStyle(
+                                                            fontSize: 14.5,
+                                                            color: isLocal
+                                                                ? Colors.white
+                                                                : textPrimary,
+                                                            height: 1.35,
+                                                          ),
+                                                        ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        // 本机消息头像框
+                                        if (isLocal) ...[
+                                          const SizedBox(width: 8),
+                                          AvatarFrame(
+                                            senderCode: msg.senderCode,
+                                            nickname: msg.senderNickname,
+                                            isHost: msg.isHost,
+                                            size: 34,
+                                            isNight: isNight,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+
+                      // 3. 底部输入与发送栏
+                      const Divider(height: 1, thickness: 0.8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              tooltip: '发送图片',
+                              onPressed: _isSending ? null : _handleImage,
+                              icon: Icon(
+                                Icons.image_outlined,
+                                color: accentColor,
+                              ),
+                            ),
+                            Expanded(
+                              child: Semantics(
+                                label: s.chatInputPlaceholder,
+                                textField: true,
+                                child: TextField(
+                                  key: const ValueKey('full-chat-input'),
+                                  controller: _textController,
+                                  autofocus: widget.autofocusComposer,
+                                  maxLines: 3,
+                                  minLines: 1,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: s.chatInputPlaceholder,
+                                    hintStyle: TextStyle(
+                                      fontSize: 13.5,
+                                      color: textSecondary.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
+                                    ),
+                                    filled: true,
+                                    fillColor: isNight
+                                        ? const Color(0xFF121B2B)
+                                        : const Color(0xFFF1ECE5),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _handleSend(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Semantics(
+                              label: _isSending ? s.chatSending : s.chatSend,
+                              liveRegion: _isSending,
+                              button: true,
+                              child: IconButton(
+                                key: const ValueKey('full-chat-send'),
+                                icon: _isSending
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.send_rounded,
+                                        color: accentColor,
+                                      ),
+                                tooltip: _isSending
+                                    ? s.chatSending
+                                    : s.chatSend,
+                                onPressed: _isSending ? null : _handleSend,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

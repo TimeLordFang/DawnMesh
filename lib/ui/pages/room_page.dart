@@ -61,6 +61,7 @@ class RoomContent extends StatefulWidget {
 
   final VoidCallback onLeave;
   final VoidCallback? onOpenChat;
+  final VoidCallback? onOpenComposer;
 
   const RoomContent({
     super.key,
@@ -69,6 +70,7 @@ class RoomContent extends StatefulWidget {
     required this.stage,
     required this.onLeave,
     this.onOpenChat,
+    this.onOpenComposer,
   });
 
   @override
@@ -113,6 +115,8 @@ class _RoomContentState extends State<RoomContent> {
         view.viewInsets.bottom / view.devicePixelRatio > 0;
     final compactHeight =
         MediaQuery.sizeOf(context).height < 700 || keyboardOpen;
+    final expandedChatPreview =
+        widget.session.voiceMode == VoiceMode.automatic && !keyboardOpen;
     // 最近消息进入主界面后，按住说话盘主动收紧，避免挤占文字信息。
     final discSize = (MediaQuery.of(context).size.height * 0.15).clamp(
       94.0,
@@ -146,11 +150,15 @@ class _RoomContentState extends State<RoomContent> {
               unreadCount:
                   unreadSnapshot.data ?? widget.session.unreadChatCount,
               isNight: isNight,
-              visibleMessageCount: keyboardOpen ? 4 : (compactHeight ? 2 : 3),
-              messageMaxLines: compactHeight ? 1 : 2,
-              compact: keyboardOpen || compactHeight,
+              visibleMessageCount: expandedChatPreview
+                  ? (compactHeight ? 4 : 6)
+                  : (compactHeight ? 2 : 3),
+              messageMaxLines: expandedChatPreview || !compactHeight ? 2 : 1,
+              compact: compactHeight,
+              expandedPreview: expandedChatPreview,
               onOpenHistory: widget.onOpenChat ?? () {},
-              onSendText: widget.session.sendChat,
+              onOpenComposer:
+                  widget.onOpenComposer ?? widget.onOpenChat ?? () {},
               onPickImage: () async {
                 final image = await _chatMedia.pickImage();
                 if (image == null) return;
