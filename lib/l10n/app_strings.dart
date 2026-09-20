@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.8\nNickname changes now sync into active rooms without interrupting calls. Public-room lock-screen controls can switch talk mode, and the compact chat layout keeps the composer above the keyboard while showing more message content.'
-      : '1.0.0-beta.8\n通话保持期间修改昵称会立即同步到房间。公网房锁屏界面现可切换对讲模式；聊天布局也进一步收紧，输入框会避开键盘并显示更多消息内容。';
+      ? '1.0.0-beta.9\nThe in-room chat composer now keeps its state and focus throughout the keyboard animation, preventing the keyboard from closing immediately after the input is tapped.'
+      : '1.0.0-beta.9\n修复房间主界面聊天输入框在键盘弹出过程中被重建的问题，点击输入框后可持续保持焦点和输入法。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

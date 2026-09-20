@@ -3,6 +3,7 @@ import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/internet_room_page.dart';
 import 'package:dawn_mesh/ui/pages/internet_home_page.dart';
+import 'package:dawn_mesh/ui/widgets/room_chat_dock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,7 +178,6 @@ void main() {
   testWidgets('public-room composer stays above the keyboard', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
-    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
     addTearDown(tester.view.reset);
     final session = makeSession();
     addTearDown(session.disposeSession);
@@ -190,7 +190,34 @@ void main() {
 
     expect(tester.takeException(), isNull);
     final input = find.byKey(const ValueKey('room-chat-input'));
+    final dockStateBeforeKeyboard = tester.state(find.byType(RoomChatDock));
+    final inputFocusNode = tester
+        .widget<EditableText>(
+          find.descendant(of: input, matching: find.byType(EditableText)),
+        )
+        .focusNode;
+    await tester.tap(input);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pump();
+
     expect(input, findsOneWidget);
+    expect(
+      tester.state(find.byType(RoomChatDock)),
+      same(dockStateBeforeKeyboard),
+      reason: '键盘弹出时公网房聊天区也必须保留同一个 State',
+    );
+    expect(inputFocusNode.hasFocus, isTrue);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: input, matching: find.byType(EditableText)),
+          )
+          .focusNode,
+      same(inputFocusNode),
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
     expect(tester.getBottomLeft(input).dy, lessThanOrEqualTo(360));
     expect(find.text('按住对讲'), findsNothing);
   });

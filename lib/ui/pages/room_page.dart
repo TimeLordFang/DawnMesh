@@ -119,6 +119,7 @@ class _RoomContentState extends State<RoomContent> {
       166.0,
     );
     final chatDock = StreamBuilder<List<ChatMessage>>(
+      key: const ValueKey('local-room-chat-dock-slot'),
       stream: widget.session.chatListStream,
       initialData: widget.session.chatMessages,
       builder: (context, snapshot) {

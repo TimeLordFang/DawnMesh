@@ -7,6 +7,7 @@ import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/ui/pages/room_page.dart';
 import 'package:dawn_mesh/ui/pages/session_stage.dart';
+import 'package:dawn_mesh/ui/widgets/room_chat_dock.dart';
 import 'package:dawn_mesh/ui/widgets/room_chat_sheet.dart';
 
 /// 这轮把房内 UI 整体放大过（对讲盘 212、头像 64、控制条图标 24、正文 +2~4pt），
@@ -224,6 +225,12 @@ void main() {
     await tester.pump();
 
     final input = find.byKey(const ValueKey('room-chat-input'));
+    final dockStateBeforeKeyboard = tester.state(find.byType(RoomChatDock));
+    final inputFocusNode = tester
+        .widget<EditableText>(
+          find.descendant(of: input, matching: find.byType(EditableText)),
+        )
+        .focusNode;
     await tester.tap(input);
     await tester.pump();
     expect(tester.testTextInput.isVisible, isTrue);
@@ -234,6 +241,20 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(input, findsOneWidget);
+    expect(
+      tester.state(find.byType(RoomChatDock)),
+      same(dockStateBeforeKeyboard),
+      reason: '键盘弹出时聊天区不能被销毁重建，否则真机输入法会立即失焦',
+    );
+    expect(inputFocusNode.hasFocus, isTrue);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: input, matching: find.byType(EditableText)),
+          )
+          .focusNode,
+      same(inputFocusNode),
+    );
     expect(tester.testTextInput.isVisible, isTrue);
     expect(find.text('键盘弹出后继续输入'), findsOneWidget);
     expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
