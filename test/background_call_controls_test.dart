@@ -1,7 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/internet/internet_models.dart';
+import 'package:dawn_mesh/core/internet/internet_room_api.dart';
+import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/core/platform/platform_audio_channel.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
 
@@ -102,4 +106,35 @@ void main() {
       expect(room.audioIo.isRecording, isFalse);
     },
   );
+
+  test('public-room lock-screen control switches voice mode', () async {
+    const profile = ServerProfile(
+      id: 'server-test',
+      name: '测试服务器',
+      baseUrl: 'https://talk.example.test',
+    );
+    final session = InternetRoomSession.forTesting(
+      api: InternetRoomApi(profile),
+      profile: profile,
+      nickname: '成员',
+      roomId: 'room-test',
+      memberId: 'member-test',
+      summary: const InternetRoomSummary(
+        id: 'room-test',
+        name: '测试房间',
+        memberCount: 1,
+        maxParticipants: 25,
+        hostNickname: '群主',
+      ),
+    );
+
+    await session.handleBackgroundCommandForTesting('automatic', true);
+    expect(session.voiceMode, VoiceMode.automatic);
+    await session.handleBackgroundCommandForTesting('automatic', false);
+    expect(session.voiceMode, VoiceMode.pushToTalk);
+    await session.updateNickname('新昵称');
+    expect(session.nickname, '新昵称');
+
+    await session.disposeSession();
+  });
 }

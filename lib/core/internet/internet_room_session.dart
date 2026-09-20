@@ -56,7 +56,8 @@ class InternetRoomSession extends ChangeNotifier {
   InternetRoomSession._({
     required this.api,
     required this.profile,
-    required this.nickname,
+    // Keep call sites readable as `nickname:` rather than exposing storage.
+    required String nickname,
     required this.roomId,
     required this.memberId,
     required this.resumeToken,
@@ -65,18 +66,22 @@ class InternetRoomSession extends ChangeNotifier {
     required this._roomKey,
     required this._audioProfile,
     required this._meteredNetwork,
-  });
+    // ignore: prefer_initializing_formals
+  }) : _nickname = nickname;
 
   @visibleForTesting
   InternetRoomSession.forTesting({
     required this.api,
     required this.profile,
-    required this.nickname,
+    // Public test factory mirrors the production constructor's named API.
+    required String nickname,
     required this.roomId,
     required this.memberId,
     required InternetRoomSummary summary,
     this.isHost = false,
-  }) : resumeToken = 'test-resume-token',
+    // ignore: prefer_initializing_formals
+  }) : _nickname = nickname,
+       resumeToken = 'test-resume-token',
        _inviteCode = '123456',
        _roomKey = Uint8List(32),
        _audioProfile = InternetAudioProfile.clarity,
@@ -87,7 +92,8 @@ class InternetRoomSession extends ChangeNotifier {
 
   final InternetRoomApi api;
   final ServerProfile profile;
-  final String nickname;
+  String _nickname;
+  String get nickname => _nickname;
   final String roomId;
   final String memberId;
   String resumeToken;
@@ -120,6 +126,7 @@ class InternetRoomSession extends ChangeNotifier {
   InternetRoomSummary? _summary;
   final List<InternetMember> _members = [];
   final Map<String, int> _memberSortOrders = {};
+  final Map<String, String> _profileNames = {};
   final List<InternetChatMessage> _messages = [];
   int _unreadChatCount = 0;
   final Map<String, _IncomingInternetImage> _incomingImages = {};
@@ -452,8 +459,13 @@ class InternetRoomSession extends ChangeNotifier {
       ..on<RoomDisconnectedEvent>((event) {
         if (!_closed) _beginFullReconnect('${event.reason ?? 'unknown'}');
       })
-      ..on<ParticipantConnectedEvent>((_) => _refreshMembers())
+      ..on<ParticipantConnectedEvent>((_) {
+        _refreshMembers();
+        // A newcomer may have joined after this user last changed names.
+        unawaited(_broadcastProfile());
+      })
       ..on<ParticipantDisconnectedEvent>((_) => _refreshMembers())
+      ..on<ParticipantNameUpdatedEvent>((_) => _refreshMembers())
       ..on<ParticipantPermissionsUpdatedEvent>((event) {
         if (event.participant.identity == memberId) {
           _canSpeak = event.permissions.canPublish;
@@ -489,6 +501,7 @@ class InternetRoomSession extends ChangeNotifier {
     );
     await _applyAudioBitrate();
     _refreshMembers();
+    unawaited(_broadcastProfile());
     AppLog.info(
       'DawnInternet',
       '已连接公网房「${summary.name}」，E2EE 已启用；音频=${_audioProfile.label}，'
@@ -592,7 +605,7 @@ class InternetRoomSession extends ChangeNotifier {
           _memberSortOrders[id] = sortOrder;
           return InternetMember(
             id: id,
-            nickname: value['nickname'] as String? ?? id,
+            nickname: _profileNames[id] ?? value['nickname'] as String? ?? id,
             isHost: value['isHost'] as bool? ?? false,
             canSpeak: value['canSpeak'] as bool? ?? true,
             // DawnMesh Server emits this array in immutable join order. Older
@@ -763,9 +776,11 @@ class InternetRoomSession extends ChangeNotifier {
           final managed = management[participant.identity];
           return InternetMember(
             id: participant.identity,
-            nickname: participant.name.isEmpty
-                ? (managed?.nickname ?? participant.identity)
-                : participant.name,
+            nickname:
+                _profileNames[participant.identity] ??
+                (participant.name.isEmpty
+                    ? (managed?.nickname ?? participant.identity)
+                    : participant.name),
             isHost:
                 managed?.isHost ?? (participant.identity == memberId && isHost),
             canSpeak: managed?.canSpeak ?? participant.permissions.canPublish,
@@ -788,7 +803,49 @@ class InternetRoomSession extends ChangeNotifier {
       unawaited(_decryptChat(event));
     } else if (event.topic == 'dawnmesh.image.v1') {
       unawaited(_decryptImageChunk(event));
+    } else if (event.topic == 'dawnmesh.profile.v1') {
+      unawaited(_decryptProfile(event));
     }
+  }
+
+  Future<void> _decryptProfile(DataReceivedEvent event) async {
+    try {
+      final senderId = event.participant?.identity;
+      final cipher = _chatCipher;
+      if (senderId == null || cipher == null || event.data.length < 29) return;
+      final clear = await cipher.decrypt(
+        EncryptedPacket(
+          nonce: Uint8List.fromList(event.data.sublist(0, 12)),
+          ciphertext: Uint8List.fromList(event.data.sublist(12)),
+        ),
+        associatedData: Uint8List.fromList(
+          utf8.encode('dawnmesh.profile.v1\u0000$senderId'),
+        ),
+      );
+      final name = utf8.decode(clear).trim();
+      if (name.isEmpty || utf8.encode(name).length > 64) return;
+      _profileNames[senderId] = name;
+      _refreshMembers();
+    } catch (error) {
+      AppLog.warn('DawnInternet', '忽略无效昵称更新：$error');
+    }
+  }
+
+  Future<void> _broadcastProfile() async {
+    final cipher = _chatCipher;
+    final participant = _livekitRoom?.localParticipant;
+    if (cipher == null || participant == null || _closed) return;
+    final encrypted = await cipher.encrypt(
+      Uint8List.fromList(utf8.encode(_nickname)),
+      associatedData: Uint8List.fromList(
+        utf8.encode('dawnmesh.profile.v1\u0000$memberId'),
+      ),
+    );
+    await participant.publishData(
+      [...encrypted.nonce, ...encrypted.ciphertext],
+      reliable: true,
+      topic: 'dawnmesh.profile.v1',
+    );
   }
 
   Future<void> _decryptChat(DataReceivedEvent event) async {
@@ -1035,6 +1092,31 @@ class InternetRoomSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Changes the visible identity while keeping the media session alive.
+  Future<void> updateNickname(String value) async {
+    final name = value.trim();
+    if (_closed || name.isEmpty || utf8.encode(name).length > 64) return;
+    if (_nickname == name) return;
+    _nickname = name;
+    _profileNames[memberId] = name;
+    _refreshMembers();
+    // The room-level encrypted packet is the compatibility path and reaches
+    // current peers immediately, so never wait for an optional SDK feature.
+    await _broadcastProfile();
+    unawaited(_updateLiveKitName(name));
+  }
+
+  Future<void> _updateLiveKitName(String name) async {
+    try {
+      // Newer servers grant this LiveKit permission, giving late joiners the
+      // updated name directly. Existing servers continue through the profile
+      // packet above without making nickname editing feel delayed.
+      await _livekitRoom?.localParticipant?.setName(name);
+    } catch (error) {
+      AppLog.warn('DawnInternet', '媒体服务暂不支持直接改名，使用房间内同步：$error');
+    }
+  }
+
   Future<void> setAudioProfile(InternetAudioProfile value) async {
     if (_closed) return;
     _audioProfileManuallySelected = true;
@@ -1154,12 +1236,22 @@ class InternetRoomSession extends ChangeNotifier {
 
   Future<void> _handleBackgroundCommand(String method, dynamic value) async {
     switch (method) {
+      case 'automatic':
+        await setVoiceMode(
+          value == true ? VoiceMode.automatic : VoiceMode.pushToTalk,
+        );
       case 'ptt':
         await setPtt(value == true);
       case 'mute':
         if ((value == true) != _muted) await toggleMute();
     }
   }
+
+  @visibleForTesting
+  Future<void> handleBackgroundCommandForTesting(
+    String method,
+    dynamic value,
+  ) => _handleBackgroundCommand(method, value);
 
   Future<void> _syncBackgroundControls() => _backgroundControls.update(
     bluetooth: false,

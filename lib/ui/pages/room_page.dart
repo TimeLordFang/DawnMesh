@@ -66,150 +66,176 @@ class _RoomContentState extends State<RoomContent> {
   Widget build(BuildContext context) {
     final isNight = widget.isNight;
     final stage = widget.stage;
-    final compactHeight = MediaQuery.sizeOf(context).height < 700;
+    // Scaffold removes the bottom viewInset from its body MediaQuery after it
+    // resizes. Read the underlying view as well so the room can still enter
+    // its focused composer layout while the IME is visible.
+    final view = View.of(context);
+    final keyboardOpen =
+        MediaQuery.viewInsetsOf(context).bottom > 0 ||
+        view.viewInsets.bottom / view.devicePixelRatio > 0;
+    final compactHeight =
+        MediaQuery.sizeOf(context).height < 700 || keyboardOpen;
     // 最近消息进入主界面后，按住说话盘主动收紧，避免挤占文字信息。
     final discSize = (MediaQuery.of(context).size.height * 0.15).clamp(
       94.0,
       166.0,
+    );
+    final chatDock = StreamBuilder<List<ChatMessage>>(
+      stream: widget.session.chatListStream,
+      initialData: widget.session.chatMessages,
+      builder: (context, snapshot) {
+        final messages = snapshot.data ?? const <ChatMessage>[];
+        return StreamBuilder<int>(
+          stream: widget.session.unreadChatStream,
+          initialData: widget.session.unreadChatCount,
+          builder: (context, unreadSnapshot) => Padding(
+            padding: EdgeInsets.only(
+              top: compactHeight ? 2 : 5,
+              bottom: compactHeight ? 4 : 7,
+            ),
+            child: RoomChatDock(
+              messages: [
+                for (final message in messages)
+                  RoomChatDockItem(
+                    sender: DeviceCode.split(message.senderNickname).$1,
+                    text: message.text,
+                    isMine: message.isLocal,
+                    hasImage: message.hasImage,
+                  ),
+              ],
+              unreadCount:
+                  unreadSnapshot.data ?? widget.session.unreadChatCount,
+              isNight: isNight,
+              visibleMessageCount: keyboardOpen ? 4 : (compactHeight ? 2 : 3),
+              messageMaxLines: compactHeight ? 1 : 2,
+              compact: keyboardOpen || compactHeight,
+              onOpenHistory: widget.onOpenChat ?? () {},
+              onSendText: widget.session.sendChat,
+              onPickImage: () async {
+                final image = await _chatMedia.pickImage();
+                if (image == null) return;
+                await widget.session.sendChatImage(
+                  bytes: image.bytes,
+                  mimeType: image.mimeType,
+                  name: image.name,
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
 
     return SafeArea(
       top: false,
       child: Column(
         children: [
-          SizedBox(height: compactHeight ? 4 : 18),
+          SizedBox(height: keyboardOpen ? 2 : (compactHeight ? 4 : 12)),
 
           // 1. 成员轨道
-          StageEnterItem(
-            stage: stage,
-            index: 0,
-            child: StreamBuilder<List<Member>>(
-              stream: widget.session.membersStream,
-              initialData: widget.session.members,
-              builder: (context, snapshot) {
-                return MemberOrbit(
-                  members: snapshot.data ?? [],
-                  isNight: isNight,
-                  compact: compactHeight,
-                );
-              },
-            ),
-          ),
-
-          StreamBuilder<List<ChatMessage>>(
-            stream: widget.session.chatListStream,
-            initialData: widget.session.chatMessages,
-            builder: (context, snapshot) {
-              final messages = snapshot.data ?? const <ChatMessage>[];
-              return StreamBuilder<int>(
-                stream: widget.session.unreadChatStream,
-                initialData: widget.session.unreadChatCount,
-                builder: (context, unreadSnapshot) => Padding(
-                  padding: EdgeInsets.only(
-                    top: compactHeight ? 2 : 5,
-                    bottom: compactHeight ? 4 : 7,
-                  ),
-                  child: RoomChatDock(
-                    messages: [
-                      for (final message in messages)
-                        RoomChatDockItem(
-                          sender: DeviceCode.split(message.senderNickname).$1,
-                          text: message.text,
-                          isMine: message.isLocal,
-                          hasImage: message.hasImage,
-                        ),
-                    ],
-                    unreadCount:
-                        unreadSnapshot.data ?? widget.session.unreadChatCount,
+          if (!keyboardOpen)
+            StageEnterItem(
+              stage: stage,
+              index: 0,
+              child: StreamBuilder<List<Member>>(
+                stream: widget.session.membersStream,
+                initialData: widget.session.members,
+                builder: (context, snapshot) {
+                  return MemberOrbit(
+                    members: snapshot.data ?? [],
                     isNight: isNight,
-                    onOpenHistory: widget.onOpenChat ?? () {},
-                    onSendText: widget.session.sendChat,
-                    onPickImage: () async {
-                      final image = await _chatMedia.pickImage();
-                      if (image == null) return;
-                      await widget.session.sendChatImage(
-                        bytes: image.bytes,
-                        mimeType: image.mimeType,
-                        name: image.name,
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
-
-          const Spacer(),
-
-          Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
-            child: VoiceModeSwitch(
-              value: widget.session.voiceMode,
-              isNight: isNight,
-              dense: compactHeight,
-              onChanged: widget.session.setVoiceMode,
+                    compact: true,
+                  );
+                },
+              ),
             ),
-          ),
+
+          if (keyboardOpen)
+            Expanded(
+              child: SingleChildScrollView(
+                reverse: true,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                child: chatDock,
+              ),
+            )
+          else
+            chatDock,
+
+          if (!keyboardOpen) const Spacer(),
+
+          if (!keyboardOpen)
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
+              child: VoiceModeSwitch(
+                value: widget.session.voiceMode,
+                isNight: isNight,
+                dense: compactHeight,
+                onChanged: widget.session.setVoiceMode,
+              ),
+            ),
           // Each device selects its own transmit mode; receiving stays enabled.
-          StageEnterItem(
-            stage: stage,
-            index: 1,
-            rise: 40,
-            fromScale: 0.84,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: widget.session.voiceMode == VoiceMode.automatic
-                  ? _buildAutomaticStatus(isNight)
-                  : PttButton(
-                      key: const ValueKey('push-to-talk-button'),
-                      isNight: isNight,
-                      size: discSize,
-                      isPressed: widget.session.isPttPressed,
-                      onStateChanged: (pressed) {
-                        setState(() {
-                          widget.session.setPtt(pressed);
-                        });
-                      },
-                    ),
+          if (!keyboardOpen)
+            StageEnterItem(
+              stage: stage,
+              index: 1,
+              rise: 40,
+              fromScale: 0.84,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: widget.session.voiceMode == VoiceMode.automatic
+                    ? _buildAutomaticStatus(isNight)
+                    : PttButton(
+                        key: const ValueKey('push-to-talk-button'),
+                        isNight: isNight,
+                        size: discSize,
+                        isPressed: widget.session.isPttPressed,
+                        onStateChanged: (pressed) {
+                          setState(() {
+                            widget.session.setPtt(pressed);
+                          });
+                        },
+                      ),
+              ),
             ),
-          ),
 
-          const Spacer(),
+          if (!keyboardOpen) const Spacer(),
 
           // 3. 底部控制条（静音 / 扬声器 / 离开）
-          StageEnterItem(
-            stage: stage,
-            index: 2,
-            rise: 36,
-            child: AudioControlsBar(
-              isNight: isNight,
-              isMuted: widget.session.isMuted,
-              isSpeakerOn: _isSpeakerOn,
-              useBuiltinMic: widget.session.useBuiltinMic,
-              onToggleMute: () {
-                setState(() {
-                  widget.session.toggleMute();
-                });
-              },
-              onToggleSpeaker: () {
-                setState(() {
-                  _isSpeakerOn = !_isSpeakerOn;
-                  widget.session.setSpeakerphone(_isSpeakerOn);
-                });
-              },
-              onToggleMicSource: () {
-                setState(() {
-                  widget.session.setUseBuiltinMic(
-                    !widget.session.useBuiltinMic,
-                  );
-                });
-              },
-              onLeave: widget.onLeave,
-              compact: true,
+          if (!keyboardOpen)
+            StageEnterItem(
+              stage: stage,
+              index: 2,
+              rise: 36,
+              child: AudioControlsBar(
+                isNight: isNight,
+                isMuted: widget.session.isMuted,
+                isSpeakerOn: _isSpeakerOn,
+                useBuiltinMic: widget.session.useBuiltinMic,
+                onToggleMute: () {
+                  setState(() {
+                    widget.session.toggleMute();
+                  });
+                },
+                onToggleSpeaker: () {
+                  setState(() {
+                    _isSpeakerOn = !_isSpeakerOn;
+                    widget.session.setSpeakerphone(_isSpeakerOn);
+                  });
+                },
+                onToggleMicSource: () {
+                  setState(() {
+                    widget.session.setUseBuiltinMic(
+                      !widget.session.useBuiltinMic,
+                    );
+                  });
+                },
+                onLeave: widget.onLeave,
+                compact: true,
+              ),
             ),
-          ),
         ],
       ),
     );

@@ -89,15 +89,18 @@ void main() {
       expect(decoded!.reason, 1);
     });
 
-    test('FrameType chat, chatSync, chatDelete values and existing types preserved', () {
+    test('FrameType chat and profile values preserve the wire protocol', () {
       expect(FrameType.chat.value, 0x0c);
       expect(FrameType.chatSync.value, 0x0d);
       expect(FrameType.chatDelete.value, 0x0e);
       expect(FrameType.chatImage.value, 0x0f);
+      expect(FrameType.admission.value, 0x10);
+      expect(FrameType.nicknameUpdate.value, 0x11);
       expect(FrameType.fromValue(0x0c), FrameType.chat);
       expect(FrameType.fromValue(0x0d), FrameType.chatSync);
       expect(FrameType.fromValue(0x0e), FrameType.chatDelete);
       expect(FrameType.fromValue(0x0f), FrameType.chatImage);
+      expect(FrameType.fromValue(0x11), FrameType.nicknameUpdate);
       expect(FrameType.audio.value, 0x01);
       expect(FrameType.sealed.value, 0x0b);
       expect(FrameType.fromValue(0x99), isNull);

@@ -208,8 +208,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.6\nRoom chat is now always visible and supports emoji, encrypted image sharing, previews, and saving received images. Room navigation and dissolve notices are more predictable, while lock-screen controls now have matching day and night themes.'
-      : '1.0.0-beta.6\n房间聊天现在常驻显示，支持 emoji、加密图片收发、预览和保存。房间返回与解散提示更加清晰，锁屏操控界面也新增了配套的白天与夜间主题。';
+      ? '1.0.0-beta.7\nNickname changes now sync into active rooms without interrupting calls. Public-room lock-screen controls can switch talk mode, and the compact chat layout keeps the composer above the keyboard while showing more message content.'
+      : '1.0.0-beta.7\n通话保持期间修改昵称会立即同步到房间。公网房锁屏界面现可切换对讲模式；聊天布局也进一步收紧，输入框会避开键盘并显示更多消息内容。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

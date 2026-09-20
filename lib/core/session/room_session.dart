@@ -58,7 +58,8 @@ class RoomSession {
   static const Duration _hostSilenceBeforeReconnect = Duration(seconds: 12);
 
   final AudioIo audioIo;
-  final String selfNickname;
+  String _selfNickname;
+  String get selfNickname => _selfNickname;
   final Uint8List sessionToken;
   final RoomMode mode;
   late VoiceMode _voiceMode = mode == RoomMode.wifiFullDuplex
@@ -208,10 +209,13 @@ class RoomSession {
   /// 不再默认全零：全零令牌会让所有客户端在房主侧长得一模一样，令牌判定就失效了。
   RoomSession({
     required this.audioIo,
-    required this.selfNickname,
+    // Public constructor keeps the established `selfNickname:` API.
+    required String selfNickname,
     this.mode = RoomMode.wifiFullDuplex,
     Uint8List? sessionToken,
-  }) : sessionToken = sessionToken ?? _generateSessionToken() {
+    // ignore: prefer_initializing_formals
+  }) : _selfNickname = selfNickname,
+       sessionToken = sessionToken ?? _generateSessionToken() {
     _reconnectController = ReconnectController(
       onAttemptReconnect: _attemptReconnect,
       onMaxRetriesReached: () {
@@ -489,6 +493,9 @@ class RoomSession {
       case FrameType.chatImage:
         _handleChatImageFrame(frame);
         break;
+      case FrameType.nicknameUpdate:
+        _handleNicknameUpdate(frame);
+        break;
       case FrameType.handshakeHello:
       case FrameType.handshakeConfirm:
       case FrameType.sealed:
@@ -694,6 +701,25 @@ class RoomSession {
     if (_isHost) {
       _broadcastRoster();
     }
+  }
+
+  void _handleNicknameUpdate(Frame frame) {
+    if (!_isHost || frame.senderId == _selfMemberId) return;
+    final member = _members[frame.senderId];
+    if (member == null || frame.payload.isEmpty || frame.payload.length > 64) {
+      return;
+    }
+    String nickname;
+    try {
+      nickname = utf8.decode(frame.payload).trim();
+    } on FormatException {
+      return;
+    }
+    if (nickname.isEmpty || utf8.encode(nickname).length > 64) return;
+    _members[frame.senderId] = member.copyWith(nickname: nickname);
+    _recordMemberIdentity(frame.senderId, nickname);
+    _notifyMembers();
+    _broadcastRoster();
   }
 
   /// 收到交接帧（0x07）：立刻执行迁移。
@@ -1278,6 +1304,37 @@ class RoomSession {
   void setUseBuiltinMic(bool useBuiltin) {
     audioIo.setUseBuiltinMic(useBuiltin);
     _notifyControls();
+  }
+
+  /// Updates the identity shown in the active room without interrupting audio.
+  /// Guests notify the host, which validates the sender and rebroadcasts the
+  /// authoritative roster; hosts can publish the new roster immediately.
+  Future<void> updateNickname(String value) async {
+    final nickname = value.trim();
+    if (_closed || nickname.isEmpty || utf8.encode(nickname).length > 64) {
+      return;
+    }
+    if (_selfNickname == nickname) return;
+    _selfNickname = nickname;
+    final current = _members[_selfMemberId];
+    if (current != null) {
+      _members[_selfMemberId] = current.copyWith(nickname: nickname);
+      _recordMemberIdentity(_selfMemberId, nickname);
+      _notifyMembers();
+    }
+    if (_state != RoomState.inRoom) return;
+    if (_isHost) {
+      _broadcastRoster();
+      return;
+    }
+    await sendFrame(
+      Frame(
+        type: FrameType.nicknameUpdate,
+        senderId: _selfMemberId,
+        seq: _nextSeq(),
+        payload: Uint8List.fromList(utf8.encode(nickname)),
+      ),
+    );
   }
 
   /// 将未读数重置归零（面板打开或用户浏览时调用）

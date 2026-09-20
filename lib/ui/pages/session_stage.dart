@@ -65,7 +65,7 @@ class _SessionStageState extends State<SessionStage>
       (screenHeight * 0.30).clamp(196.0, 260.0);
 
   static double _roomHeaderFor(double screenHeight) =>
-      (screenHeight * 0.38).clamp(224.0, 348.0);
+      (screenHeight * 0.33).clamp(208.0, 300.0);
 
   late final AnimationController _stage;
   late final AudioIo _audioIo;
@@ -207,7 +207,10 @@ class _SessionStageState extends State<SessionStage>
     final session = _session;
     final screenHeight = MediaQuery.of(context).size.height;
     final homeHeader = _homeHeaderFor(screenHeight);
-    final roomHeader = _roomHeaderFor(screenHeight);
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final roomHeader = keyboardOpen && _roomVisible
+        ? 108.0
+        : _roomHeaderFor(screenHeight);
 
     return PopScope(
       // 在房间里时，系统返回键走的是退场动画，而不是直接弹出路由。
@@ -489,6 +492,41 @@ class _SessionStageState extends State<SessionStage>
       ),
     );
 
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    if (keyboardOpen) {
+      return [
+        Positioned(
+          top: 7,
+          left: 4,
+          child: rise(
+            IconButton(
+              tooltip: s.tooltipLeaveRoom,
+              iconSize: 25,
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: _minimizeRoom,
+            ),
+          ),
+        ),
+        Positioned(
+          left: 54,
+          right: 16,
+          bottom: 13,
+          child: rise(
+            Text(
+              _roomName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
     return [
       Positioned(
         top: 40,
@@ -545,12 +583,12 @@ class _SessionStageState extends State<SessionStage>
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 27,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.6,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               StreamBuilder<RoomState>(
                 stream: session.stateStream,
                 initialData: session.state,

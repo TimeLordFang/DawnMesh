@@ -173,4 +173,25 @@ void main() {
     expect(find.text('App 主界面'), findsOneWidget);
     expect(retained, same(session));
   });
+
+  testWidgets('public-room composer stays above the keyboard', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    addTearDown(tester.view.reset);
+    final session = makeSession();
+    addTearDown(session.disposeSession);
+    session.receiveChatForTesting(text: '公网房间里的一条长消息，键盘弹出后仍应尽量显示内容并保留输入框。');
+
+    await tester.pumpWidget(
+      MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final input = find.byKey(const ValueKey('room-chat-input'));
+    expect(input, findsOneWidget);
+    expect(tester.getBottomLeft(input).dy, lessThanOrEqualTo(360));
+    expect(find.text('按住对讲'), findsNothing);
+  });
 }

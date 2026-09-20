@@ -247,6 +247,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
         ? AppTheme.nightSkyBlue
         : AppTheme.dawnBurgundy;
     final compactHeight = MediaQuery.sizeOf(context).height < 720;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final stateText = session.roomEnded
         ? '房间已解散 · 10 秒后返回'
         : switch (session.connectionState) {
@@ -262,6 +263,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       },
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: keyboardOpen ? 48 : 58,
           leading: IconButton(
             tooltip: '返回房间列表（保持通话）',
             onPressed: _minimize,
@@ -274,25 +276,27 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 session.summary.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: keyboardOpen ? 17 : 19),
               ),
-              Text(
-                '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: session.roomEnded
-                      ? Colors.redAccent
-                      : session.connectionState ==
-                            InternetConnectionState.connected
-                      ? Colors.green
-                      : Colors.orange,
+              if (!keyboardOpen)
+                Text(
+                  '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: session.roomEnded
+                        ? Colors.redAccent
+                        : session.connectionState ==
+                              InternetConnectionState.connected
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
                 ),
-              ),
             ],
           ),
           actions: [
-            if (session.isHost && !session.roomEnded)
+            if (!keyboardOpen && session.isHost && !session.roomEnded)
               IconButton(
                 tooltip: '修改房间名',
                 onPressed: _rename,
@@ -310,13 +314,13 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ),
             child: Column(
               children: [
-                if (inviteCode != null)
+                if (!keyboardOpen && inviteCode != null)
                   _InviteCard(
                     code: inviteCode,
                     visible: _inviteVisible,
                     onToggle: _toggleInvite,
                   ),
-                if (session.adminListening)
+                if (!keyboardOpen && session.adminListening)
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(top: 8),
@@ -344,12 +348,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       ],
                     ),
                   ),
-                SizedBox(height: compactHeight ? 4 : 12),
-                if (!session.roomEnded)
+                SizedBox(height: keyboardOpen ? 0 : (compactHeight ? 4 : 8)),
+                if (!keyboardOpen && !session.roomEnded)
                   SizedBox(
                     height: compactHeight
-                        ? (session.isHost ? 92 : 72)
-                        : (session.isHost ? 112 : 82),
+                        ? (session.isHost ? 68 : 58)
+                        : (session.isHost ? 96 : 76),
                     child: _InternetMemberStrip(
                       session: session,
                       accent: accent,
@@ -373,6 +377,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       ],
                       isNight: widget.isNight,
                       unreadCount: session.unreadChatCount,
+                      visibleMessageCount: keyboardOpen
+                          ? 3
+                          : (compactHeight ? 2 : 3),
+                      messageMaxLines: compactHeight ? 1 : 2,
+                      compact: keyboardOpen || compactHeight,
                       onOpenHistory: _showChat,
                       onSendText: session.sendChat,
                       onPickImage: () async {
@@ -387,7 +396,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     ),
                   ),
                 const Spacer(),
-                if (!session.canSpeak) ...[
+                if (!keyboardOpen && !session.canSpeak) ...[
                   const Icon(
                     Icons.mic_off_rounded,
                     size: 36,
@@ -400,7 +409,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   ),
                   const SizedBox(height: 22),
                 ],
-                if (session.roomEnded) ...[
+                if (!keyboardOpen && session.roomEnded) ...[
                   const Icon(
                     Icons.call_end_rounded,
                     size: 42,
@@ -413,7 +422,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   ),
                   const SizedBox(height: 6),
                   const Text('10 秒后自动返回房间列表'),
-                ] else ...[
+                ] else if (!keyboardOpen) ...[
                   VoiceModeSwitch(
                     value: session.voiceMode,
                     isNight: widget.isNight,
@@ -427,13 +436,13 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     _InternetPttButton(
                       session: session,
                       accent: accent,
-                      size: compactHeight ? 108 : 166,
+                      size: compactHeight ? 90 : 148,
                     )
                   else
                     _AutomaticTalkStatus(session: session, accent: accent),
                 ],
                 const Spacer(),
-                if (!session.roomEnded)
+                if (!keyboardOpen && !session.roomEnded)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,

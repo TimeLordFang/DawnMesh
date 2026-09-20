@@ -1,4 +1,4 @@
-/// 11 supported binary frame types in DawnMesh protocol.
+/// Supported binary frame types in DawnMesh protocol.
 enum FrameType {
   audio(0x01),
   joinReq(0x02),
@@ -15,7 +15,8 @@ enum FrameType {
   chatSync(0x0d),
   chatDelete(0x0e),
   chatImage(0x0f),
-  admission(0x10);
+  admission(0x10),
+  nicknameUpdate(0x11);
 
   final int value;
   const FrameType(this.value);

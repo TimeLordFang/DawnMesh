@@ -198,4 +198,40 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
+
+  testWidgets('房间主界面输入框在键盘上方且不溢出', (tester) async {
+    useSurface(tester, const Size(360, 640));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    addTearDown(tester.view.resetViewInsets);
+    final session = RoomSession(
+      audioIo: MockAudioIo(),
+      selfNickname: '测试者#1234',
+    );
+    await session.createRoom(startAudio: false);
+    await session.sendChat('一条需要显示完整一些的长消息，用来验证聊天区域会跟随文字扩展。');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RoomContent(
+            session: session,
+            isNight: false,
+            stage: const AlwaysStoppedAnimation(1),
+            onLeave: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('room-chat-input')), findsOneWidget);
+    expect(find.byKey(const ValueKey('push-to-talk-button')), findsNothing);
+    expect(
+      tester.getBottomLeft(find.byKey(const ValueKey('room-chat-input'))).dy,
+      lessThanOrEqualTo(360),
+    );
+
+    await session.dispose();
+  });
 }

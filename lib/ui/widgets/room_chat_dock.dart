@@ -30,6 +30,9 @@ class RoomChatDock extends StatefulWidget {
     required this.onPickImage,
     this.unreadCount = 0,
     this.enabled = true,
+    this.visibleMessageCount = 3,
+    this.messageMaxLines = 2,
+    this.compact = false,
   });
 
   final List<RoomChatDockItem> messages;
@@ -39,6 +42,9 @@ class RoomChatDock extends StatefulWidget {
   final Future<void> Function() onPickImage;
   final int unreadCount;
   final bool enabled;
+  final int visibleMessageCount;
+  final int messageMaxLines;
+  final bool compact;
 
   @override
   State<RoomChatDock> createState() => _RoomChatDockState();
@@ -104,14 +110,16 @@ class _RoomChatDockState extends State<RoomChatDock> {
     final surface = widget.isNight
         ? AppTheme.darkCardBg.withValues(alpha: .82)
         : AppTheme.lightCardBg.withValues(alpha: .88);
-    final visible = widget.messages.length <= 2
+    final visible = widget.messages.length <= widget.visibleMessageCount
         ? widget.messages
-        : widget.messages.sublist(widget.messages.length - 2);
+        : widget.messages.sublist(
+            widget.messages.length - widget.visibleMessageCount,
+          );
 
     return Container(
       key: const ValueKey('room-chat-dock'),
       margin: const EdgeInsets.symmetric(horizontal: 18),
-      padding: const EdgeInsets.fromLTRB(12, 9, 8, 8),
+      padding: EdgeInsets.fromLTRB(12, widget.compact ? 7 : 9, 8, 8),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(17),
@@ -168,8 +176,11 @@ class _RoomChatDockState extends State<RoomChatDock> {
               ),
             ),
           ),
-          SizedBox(
-            height: 39,
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: widget.compact ? 30 : 42,
+              maxHeight: widget.compact ? 58 : 96,
+            ),
             child: visible.isEmpty
                 ? Align(
                     alignment: Alignment.centerLeft,
@@ -178,41 +189,56 @@ class _RoomChatDockState extends State<RoomChatDock> {
                       style: TextStyle(color: secondary, fontSize: 12),
                     ),
                   )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (final message in visible)
-                        Row(
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 72),
-                              child: Text(
-                                message.isMine
-                                    ? s.chatSelfBadge
-                                    : message.sender,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: secondary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                : ClipRect(
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          for (final message in visible)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 1),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 72,
+                                    ),
+                                    child: Text(
+                                      message.isMine
+                                          ? s.chatSelfBadge
+                                          : message.sender,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: secondary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Expanded(
+                                    child: Text(
+                                      message.hasImage
+                                          ? '📷 ${s.chatImage}'
+                                          : message.text,
+                                      maxLines: widget.messageMaxLines,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: primary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                message.hasImage
-                                    ? '📷 ${s.chatImage}'
-                                    : message.text,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: primary, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
           ),
           Row(
@@ -231,6 +257,9 @@ class _RoomChatDockState extends State<RoomChatDock> {
                   enabled: widget.enabled && !_busy,
                   minLines: 1,
                   maxLines: 2,
+                  scrollPadding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+                  ),
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(

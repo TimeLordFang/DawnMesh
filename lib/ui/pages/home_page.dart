@@ -86,6 +86,8 @@ class _HomeContentState extends State<HomeContent> {
     _nicknameEdited = true;
     _hasSavedNickname = true;
     unawaited(_nicknameStore.save(value));
+    unawaited(widget.activeSession?.updateNickname(_identityNickname));
+    unawaited(widget.activeInternetSession?.updateNickname(_nickname));
   }
 
   final _lanDiscovery = LanRoomDiscovery();
