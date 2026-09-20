@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # versionName 取 `+` 前半段，versionCode 取后半段。
 # DawnMesh 1.0.0-beta.7 / versionCode 31
-version: 1.0.0-beta.7+31
+version: 1.0.0-beta.8+32
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
