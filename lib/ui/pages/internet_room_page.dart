@@ -9,7 +9,9 @@ import '../../core/internet/internet_room_session.dart';
 import '../../core/platform/chat_media_service.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart' show VoiceMode;
+import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
+import '../widgets/audio_controls.dart';
 import '../widgets/avatar_frame.dart';
 import '../widgets/chat_image_bubble.dart';
 import '../widgets/room_chat_dock.dart';
@@ -220,6 +222,23 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ),
   );
 
+  Future<void> _showAudioProfilePicker() async {
+    final selected = await showModalBottomSheet<InternetAudioProfile>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _InternetAudioProfileSheet(
+        session: widget.session,
+        accent: widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy,
+      ),
+    );
+    if (selected != null &&
+        mounted &&
+        selected != widget.session.audioProfile) {
+      unawaited(widget.session.setAudioProfile(selected));
+    }
+  }
+
   Future<void> _showChat({bool autofocusComposer = false}) async {
     widget.session.markChatRead();
     await showModalBottomSheet<void>(
@@ -423,7 +442,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       },
                     ),
                   ),
-                if (!keyboardOpen) const Spacer(),
+                if (!keyboardOpen && session.isHost) const Spacer(),
+                if (!keyboardOpen && !session.isHost && !session.roomEnded)
+                  SizedBox(height: compactHeight ? 8 : 12),
                 if (!keyboardOpen && !session.canSpeak) ...[
                   const Icon(
                     Icons.mic_off_rounded,
@@ -471,58 +492,83 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 ],
                 if (!keyboardOpen) const Spacer(),
                 if (!keyboardOpen && !session.roomEnded)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: .72),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        IconButton.filledTonal(
-                          tooltip: session.isMuted ? '开启麦克风' : '静音',
-                          onPressed: session.canSpeak
-                              ? () => unawaited(session.toggleMute())
-                              : null,
-                          icon: Icon(
-                            session.isMuted || !session.canSpeak
-                                ? Icons.mic_off_rounded
-                                : Icons.mic_rounded,
-                          ),
+                  RoomControlsBar(
+                    key: const ValueKey('internet-room-controls'),
+                    compact: true,
+                    children: [
+                      RoomControlButton(
+                        icon: session.isMuted || !session.canSpeak
+                            ? Icons.mic_off_rounded
+                            : Icons.mic_rounded,
+                        label: session.isMuted || !session.canSpeak
+                            ? '静音'
+                            : AppStrings.of(context).microphone,
+                        isNight: widget.isNight,
+                        onTap: session.canSpeak
+                            ? () => unawaited(session.toggleMute())
+                            : null,
+                        bgColor: widget.isNight
+                            ? AppTheme.darkCardBg
+                            : AppTheme.lightCardBg,
+                        textColor: widget.isNight
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.lightTextPrimary,
+                        compact: true,
+                      ),
+                      RoomControlButton(
+                        icon: session.isSpeakerOn
+                            ? Icons.volume_up_rounded
+                            : Icons.phone_in_talk_rounded,
+                        label: session.isSpeakerOn
+                            ? AppStrings.of(context).speaker
+                            : AppStrings.of(context).earpiece,
+                        isNight: widget.isNight,
+                        onTap: () => unawaited(
+                          session.setSpeakerphone(!session.isSpeakerOn),
                         ),
-                        IconButton.filledTonal(
-                          tooltip: session.isSpeakerOn ? '切换到听筒/耳机' : '打开扬声器',
-                          onPressed: () => unawaited(
-                            session.setSpeakerphone(!session.isSpeakerOn),
-                          ),
-                          icon: Icon(
-                            session.isSpeakerOn
-                                ? Icons.volume_up_rounded
-                                : Icons.hearing_rounded,
-                          ),
-                        ),
-                        _InternetAudioProfileMenu(
-                          session: session,
-                          accent: accent,
-                        ),
-                        IconButton.filled(
-                          tooltip: '挂断',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _leave,
-                          icon: const Icon(Icons.call_end_rounded),
-                        ),
-                      ],
-                    ),
+                        bgColor: widget.isNight
+                            ? AppTheme.darkCardBg
+                            : AppTheme.lightCardBg,
+                        textColor: widget.isNight
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.lightTextPrimary,
+                        compact: true,
+                      ),
+                      RoomControlButton(
+                        key: const ValueKey('internet-audio-profile-button'),
+                        icon: _audioProfileIcon(session.audioProfile),
+                        label: '音质',
+                        isNight: widget.isNight,
+                        onTap: _showAudioProfilePicker,
+                        bgColor: widget.isNight
+                            ? AppTheme.darkCardBg
+                            : AppTheme.lightCardBg,
+                        textColor: widget.isNight
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.lightTextPrimary,
+                        compact: true,
+                      ),
+                      RoomControlButton(
+                        icon: Icons.call_end_rounded,
+                        label: AppStrings.of(context).hangUp,
+                        isNight: widget.isNight,
+                        onTap: _leave,
+                        bgColor:
+                            (widget.isNight
+                                    ? AppTheme.darkLeaveRosePink
+                                    : AppTheme.lightLeaveAccent)
+                                .withValues(alpha: .15),
+                        borderColor:
+                            (widget.isNight
+                                    ? AppTheme.darkLeaveRosePink
+                                    : AppTheme.lightLeaveAccent)
+                                .withValues(alpha: .62),
+                        textColor: widget.isNight
+                            ? AppTheme.darkLeaveRosePink
+                            : AppTheme.lightLeaveAccent,
+                        compact: true,
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -533,8 +579,14 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   }
 }
 
-class _InternetAudioProfileMenu extends StatelessWidget {
-  const _InternetAudioProfileMenu({
+IconData _audioProfileIcon(InternetAudioProfile profile) => switch (profile) {
+  InternetAudioProfile.clarity => Icons.high_quality_rounded,
+  InternetAudioProfile.balanced => Icons.tune_rounded,
+  InternetAudioProfile.dataSaver => Icons.data_saver_on_rounded,
+};
+
+class _InternetAudioProfileSheet extends StatelessWidget {
+  const _InternetAudioProfileSheet({
     required this.session,
     required this.accent,
   });
@@ -542,69 +594,50 @@ class _InternetAudioProfileMenu extends StatelessWidget {
   final InternetRoomSession session;
   final Color accent;
 
-  IconData _icon(InternetAudioProfile profile) => switch (profile) {
-    InternetAudioProfile.clarity => Icons.high_quality_rounded,
-    InternetAudioProfile.balanced => Icons.tune_rounded,
-    InternetAudioProfile.dataSaver => Icons.data_saver_on_rounded,
-  };
-
   @override
-  Widget build(BuildContext context) => PopupMenuButton<InternetAudioProfile>(
-    tooltip:
-        '音频档位：${session.audioProfile.label} · '
-        '${session.isMeteredNetwork ? '移动/计费网络' : 'Wi-Fi/有线网络'} · '
-        '${session.audioBitrate ~/ 1000}kbps',
-    initialValue: session.audioProfile,
-    onSelected: (value) => unawaited(session.setAudioProfile(value)),
-    itemBuilder: (context) => [
-      for (final profile in InternetAudioProfile.values)
-        PopupMenuItem(
-          value: profile,
-          child: SizedBox(
-            width: 238,
-            child: Row(
-              children: [
-                Icon(
-                  _icon(profile),
-                  color: profile == session.audioProfile ? accent : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${profile.label} · '
-                        '${profile.bitrateFor(metered: session.isMeteredNetwork) ~/ 1000}kbps',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        profile.description,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                if (profile == session.audioProfile)
-                  Icon(Icons.check_rounded, color: accent),
-              ],
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(6, 0, 6, 12),
+            child: Text(
+              '语音质量',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
           ),
-        ),
-    ],
-    child: Tooltip(
-      message: '公网音频档位',
-      child: Material(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        shape: const CircleBorder(),
-        child: SizedBox.square(
-          dimension: 40,
-          child: Icon(
-            _icon(session.audioProfile),
-            color: Theme.of(context).colorScheme.onSecondaryContainer,
-          ),
-        ),
+          for (final profile in InternetAudioProfile.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: profile == session.audioProfile
+                    ? accent.withValues(alpha: .12)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest
+                          .withValues(alpha: .55),
+                borderRadius: BorderRadius.circular(16),
+                child: ListTile(
+                  key: ValueKey('audio-profile-${profile.name}'),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  leading: Icon(_audioProfileIcon(profile), color: accent),
+                  title: Text(
+                    '${profile.label} · ${profile.bitrateFor(metered: session.isMeteredNetwork) ~/ 1000}kbps',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(profile.description),
+                  trailing: profile == session.audioProfile
+                      ? Icon(Icons.check_circle_rounded, color: accent)
+                      : null,
+                  onTap: () => Navigator.pop(context, profile),
+                ),
+              ),
+            ),
+        ],
       ),
     ),
   );

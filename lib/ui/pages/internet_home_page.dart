@@ -11,6 +11,7 @@ import '../../core/internet/server_profile_store.dart';
 import '../../core/security/room_invite.dart';
 import '../theme/app_theme.dart';
 import '../widgets/room_invite_dialog.dart';
+import '../widgets/server_profile_picker.dart';
 import 'internet_room_page.dart';
 
 class InternetHomePage extends StatefulWidget {
@@ -424,23 +425,12 @@ class _InternetHomePageState extends State<InternetHomePage> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  DropdownButtonFormField<ServerProfile>(
-                    initialValue: _selected,
-                    decoration: const InputDecoration(
-                      labelText: '当前服务器',
-                      prefixIcon: Icon(Icons.dns_outlined),
-                    ),
-                    items: _profiles
-                        .map(
-                          (profile) => DropdownMenuItem(
-                            value: profile,
-                            child: Text(profile.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _loading || _activeSession != null
-                        ? null
-                        : _selectProfile,
+                  ServerProfilePicker(
+                    profiles: _profiles,
+                    selected: _selected,
+                    isNight: widget.isNight,
+                    enabled: !_loading && _activeSession == null,
+                    onSelected: _selectProfile,
                   ),
                   const SizedBox(height: 12),
                   if (_loading) const LinearProgressIndicator(),

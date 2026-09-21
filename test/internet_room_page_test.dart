@@ -1,6 +1,9 @@
 import 'package:dawn_mesh/core/internet/internet_models.dart';
+import 'package:dawn_mesh/core/internet/internet_audio_profile.dart';
 import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
+import 'package:dawn_mesh/ui/widgets/audio_controls.dart';
+import 'package:dawn_mesh/ui/widgets/voice_mode_switch.dart';
 import 'package:dawn_mesh/ui/pages/internet_room_page.dart';
 import 'package:dawn_mesh/ui/pages/internet_home_page.dart';
 import 'package:flutter/material.dart';
@@ -227,4 +230,60 @@ void main() {
       expect(dockInput, findsOneWidget);
     },
   );
+
+  for (final size in [const Size(360, 640), const Size(411, 892)]) {
+    testWidgets(
+      'member room ${size.width}x${size.height} keeps chat close to mode controls',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final session = makeSession();
+        addTearDown(session.disposeSession);
+        await tester.pumpWidget(
+          MaterialApp(home: InternetRoomPage(session: session, isNight: false)),
+        );
+        await tester.pump();
+
+        final dock = find.byKey(const ValueKey('internet-room-chat-dock-slot'));
+        final mode = find.byType(VoiceModeSwitch);
+        final gap = tester.getTopLeft(mode).dy - tester.getBottomLeft(dock).dy;
+        expect(gap, lessThanOrEqualTo(12));
+        expect(find.byType(RoomControlsBar), findsOneWidget);
+        expect(find.byType(RoomControlButton), findsNWidgets(4));
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(
+          find.byKey(const ValueKey('internet-audio-profile-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('语音质量'), findsOneWidget);
+        for (final profile in InternetAudioProfile.values) {
+          expect(
+            find.byKey(ValueKey('audio-profile-${profile.name}')),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('host dark room keeps the shared controls on a narrow screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final session = makeSession(isHost: true);
+    addTearDown(session.disposeSession);
+    await tester.pumpWidget(
+      MaterialApp(home: InternetRoomPage(session: session, isNight: true)),
+    );
+    await tester.pump();
+
+    expect(find.byType(RoomControlsBar), findsOneWidget);
+    expect(find.byType(RoomControlButton), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+  });
 }

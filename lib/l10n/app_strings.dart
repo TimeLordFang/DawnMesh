@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.11\nAutomatic-talk mode now shows a larger recent-message preview. Tapping the room composer opens the full chat with the keyboard ready, and Back dismisses the keyboard before leaving chat or minimizing nearby rooms.'
-      : '1.0.0-beta.11\n自动通话模式现在会展示更大的最近消息区域；点击房间输入框会直接展开完整聊天并唤起键盘，返回键会先收起键盘，再关闭聊天或最小化近场房间。';
+      ? '1.0.0-beta.12\nServer and voice-quality choices now open in clear bottom sheets. Internet-room controls match nearby rooms, and member chat stays close to the talk-mode switch.'
+      : '1.0.0-beta.12\n服务器与语音质量改为底部选择列表；网络房底部按钮与近场房统一，成员房的消息框也更贴近通话模式开关。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
