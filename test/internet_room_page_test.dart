@@ -49,7 +49,7 @@ void main() {
   }
 
   testWidgets(
-    'a dissolved room notifies the member and returns after ten seconds',
+    'a dissolved room preserves chat until the member explicitly exits',
     (tester) async {
       final session = makeSession();
 
@@ -75,18 +75,21 @@ void main() {
       await tester.tap(find.text('房间列表'));
       await tester.pumpAndSettle();
 
+      session.receiveChatForTesting(text: '解散前的消息');
       await session.receiveRoomEndedForTesting();
       await tester.pump();
-      expect(find.text('房间已被群主解散，10 秒后自动返回房间列表'), findsOneWidget);
-      expect(find.text('10 秒后自动返回房间列表'), findsOneWidget);
+      expect(find.text('房间已被群主解散'), findsOneWidget);
+      expect(find.text('解散前的消息'), findsOneWidget);
 
-      await tester.pump(const Duration(seconds: 9));
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
       expect(find.byType(InternetRoomPage), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('exit-ended-internet-room')));
       await tester.pumpAndSettle();
 
       expect(find.byType(InternetRoomPage), findsNothing);
       expect(find.text('房间列表'), findsOneWidget);
+      expect(session.messages, isEmpty);
     },
   );
 
@@ -114,7 +117,7 @@ void main() {
     expect(find.text('有新消息'), findsWidgets);
   });
 
-  testWidgets('host does not see the dissolved-by-owner countdown', (
+  testWidgets('host sees a neutral dissolved notice and remains in room', (
     tester,
   ) async {
     final session = makeSession(isHost: true);
@@ -126,7 +129,12 @@ void main() {
     await session.receiveRoomEndedForTesting();
     await tester.pump();
 
-    expect(find.text('房间已被群主解散，10 秒后自动返回房间列表'), findsNothing);
+    expect(find.text('房间已被群主解散'), findsNothing);
+    expect(find.text('房间已解散'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('exit-ended-internet-room')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('room back opens network list and the next back opens app home', (
@@ -249,6 +257,14 @@ void main() {
         final mode = find.byType(VoiceModeSwitch);
         final gap = tester.getTopLeft(mode).dy - tester.getBottomLeft(dock).dy;
         expect(gap, lessThanOrEqualTo(12));
+        if (size.height > 800) {
+          expect(tester.getSize(dock).height, greaterThan(200));
+        }
+        final pttBottom = tester
+            .getBottomLeft(find.byKey(const ValueKey('internet-ptt-button')))
+            .dy;
+        final controlsTop = tester.getTopLeft(find.byType(RoomControlsBar)).dy;
+        expect(controlsTop - pttBottom, lessThanOrEqualTo(12));
         expect(find.byType(RoomControlsBar), findsOneWidget);
         expect(find.byType(RoomControlButton), findsNWidgets(4));
         expect(tester.takeException(), isNull);
@@ -257,13 +273,24 @@ void main() {
           find.byKey(const ValueKey('internet-audio-profile-button')),
         );
         await tester.pumpAndSettle();
-        expect(find.text('语音质量'), findsOneWidget);
+        expect(find.byType(BottomSheet), findsNothing);
         for (final profile in InternetAudioProfile.values) {
           expect(
             find.byKey(ValueKey('audio-profile-${profile.name}')),
             findsOneWidget,
           );
         }
+        final menuBottom = tester
+            .getBottomLeft(
+              find.byKey(const ValueKey('audio-profile-dataSaver')),
+            )
+            .dy;
+        final buttonTop = tester
+            .getTopLeft(
+              find.byKey(const ValueKey('internet-audio-profile-button')),
+            )
+            .dy;
+        expect(menuBottom, lessThanOrEqualTo(buttonTop + 5));
         expect(tester.takeException(), isNull);
       },
     );

@@ -10,6 +10,7 @@ import 'package:dawn_mesh/core/protocol/payloads/chat_image.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_sync.dart';
 import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
+import 'package:dawn_mesh/core/protocol/payloads/leave.dart';
 import 'package:dawn_mesh/core/protocol/payloads/roster.dart';
 import 'package:dawn_mesh/core/session/chat_message.dart';
 import 'package:dawn_mesh/core/session/host_transfer.dart';
@@ -36,6 +37,66 @@ void main() {
   });
 
   group('房主生命周期', () {
+    test('解散房间保留消息，只有主动退出才清空', () async {
+      session = build();
+      await session.createRoom();
+      await session.sendChat('解散前的消息');
+      sent.clear();
+
+      await session.endRoom();
+
+      expect(session.state, RoomState.ended);
+      expect(session.roomEnded, isTrue);
+      expect(session.chatMessages.single.text, '解散前的消息');
+      final leave = sent.singleWhere((frame) => frame.type == FrameType.leave);
+      expect(LeavePayload.decode(leave.payload)?.reason, 3);
+
+      await session.leave();
+      expect(session.chatMessages, isEmpty);
+      expect(session.state, RoomState.idle);
+    });
+
+    test('成员收到房主解散帧后留在只读会话并保留聊天', () async {
+      session = build(mode: RoomMode.bluetoothPtt);
+      await session.joinRoom();
+      await session.handleIncomingFrame(
+        Frame(
+          type: FrameType.roster,
+          senderId: 1,
+          seq: 1,
+          payload: RosterPayload(
+            hostId: 1,
+            members: [
+              RosterMember(memberId: 1, flags: 0x01, nickname: '房主'),
+              RosterMember(memberId: 3, flags: 0x00, nickname: '测试者'),
+            ],
+          ).encode(),
+        ),
+      );
+      await session.handleIncomingFrame(
+        Frame(
+          type: FrameType.chat,
+          senderId: 1,
+          seq: 2,
+          payload: const ChatMessagePayload(text: '蓝牙房的消息').encode(),
+        ),
+      );
+      await session.handleIncomingFrame(
+        Frame(
+          type: FrameType.leave,
+          senderId: 1,
+          seq: 3,
+          payload: LeavePayload(reason: 3).encode(),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(session.state, RoomState.ended);
+      expect(session.chatMessages.single.text, '蓝牙房的消息');
+      await session.leave();
+      expect(session.chatMessages, isEmpty);
+    });
+
     test('createRoom 进入房间并把自己登记为房主', () async {
       session = build();
       await session.createRoom();

@@ -33,7 +33,7 @@ enum RoomMode { wifiFullDuplex, bluetoothPtt }
 
 enum VoiceMode { pushToTalk, automatic }
 
-enum RoomState { idle, connecting, inRoom, reconnecting, disconnected }
+enum RoomState { idle, connecting, inRoom, reconnecting, disconnected, ended }
 
 /// Full Feature-Parity Central Room Session Controller.
 class RoomSession {
@@ -73,7 +73,7 @@ class RoomSession {
   BackgroundCallControls? _backgroundControls;
 
   void setVoiceMode(VoiceMode value) {
-    if (_closed || _voiceMode == value) return;
+    if (_closed || _roomEnded || _voiceMode == value) return;
     setPtt(false);
     _voiceMode = value;
     _voiceGate.reset();
@@ -99,6 +99,8 @@ class RoomSession {
   RoomAdmission? _admission;
   bool _admitted = false;
   bool _closed = false;
+  bool _roomEnded = false;
+  bool get roomEnded => _roomEnded;
   Future<void> _incomingQueue = Future.value();
   Future<void> _outgoingQueue = Future.value();
   int _pendingIncoming = 0;
@@ -359,7 +361,7 @@ class RoomSession {
 
   /// Process incoming binary frames
   Future<void> handleIncomingFrame(Frame frame) {
-    if (_closed) return Future.value();
+    if (_closed || _roomEnded) return Future.value();
     if (secureCodec == null && roomInvite == null) {
       return _handleIncomingFrame(frame);
     }
@@ -693,6 +695,11 @@ class RoomSession {
   }
 
   void _handleLeave(Frame frame) {
+    final reason = LeavePayload.decode(frame.payload)?.reason;
+    if (!_isHost && _members[frame.senderId]?.isHost == true && reason == 3) {
+      unawaited(_finishEndedRoom());
+      return;
+    }
     _members.remove(frame.senderId);
     _lastAudioAt.remove(frame.senderId);
     audioIo.removeRemoteMember(frame.senderId);
@@ -1153,7 +1160,7 @@ class RoomSession {
   }
 
   void _beginReconnect(String reason) {
-    if (_closed || _isHost || _state == RoomState.idle) return;
+    if (_closed || _roomEnded || _isHost || _state == RoomState.idle) return;
     if (_reconnectTransport == null) {
       AppLog.error('重连', '$reason；当前传输层没有恢复入口');
       _updateState(RoomState.disconnected);
@@ -1841,6 +1848,46 @@ class RoomSession {
     }
   }
 
+  /// The host dissolves the room, but keeps the in-memory transcript visible
+  /// until the user explicitly exits. Guests receive leave reason 3.
+  Future<void> endRoom() async {
+    if (!_isHost || _roomEnded || _closed) return;
+    final frame = Frame(
+      type: FrameType.leave,
+      senderId: _selfMemberId,
+      seq: _nextSeq(),
+      payload: LeavePayload(reason: 3).encode(),
+    );
+    await sendFrame(frame);
+    await transport?.flush();
+    await _finishEndedRoom();
+  }
+
+  Future<void> _finishEndedRoom() async {
+    if (_roomEnded || _closed) return;
+    _roomEnded = true;
+    _audioStarted = false;
+    isPttPressed = false;
+    _voiceGate.reset();
+    _reconnectController.cancel();
+    _speakingWatchTimer?.cancel();
+    _speakingWatchTimer = null;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _updateState(RoomState.ended);
+    _notifyControls();
+    await _backgroundControls?.close();
+    _backgroundControls = null;
+    await _transportDisconnectSubscription?.cancel();
+    _transportDisconnectSubscription = null;
+    await _transportIncomingSubscription?.cancel();
+    _transportIncomingSubscription = null;
+    await audioIo.stopCapture();
+    await audioIo.stopPlayback();
+    await audioIo.clearRemoteMembers();
+    await transport?.stop();
+  }
+
   Future<void> leave() async {
     _audioStarted = false;
     isPttPressed = false;
@@ -1858,8 +1905,10 @@ class RoomSession {
     // 的发送缓冲，下面的 stop() 会销毁链路、连缓冲一起丢弃。flush 是
     // I/O 完成事件，不用定时器——定时器等待在测试的 FakeAsync 时区里
     // 会永远挂起。
-    await sendFrame(frame);
-    await transport?.flush();
+    if (!_roomEnded) {
+      await sendFrame(frame);
+      await transport?.flush();
+    }
 
     _speakingWatchTimer?.cancel();
     _speakingWatchTimer = null;
@@ -1878,6 +1927,7 @@ class RoomSession {
     await audioIo.clearRemoteMembers();
     await transport?.stop();
     _closed = true;
+    _roomEnded = false;
     _admission?.close();
     _admission = null;
     secureCodec = null;

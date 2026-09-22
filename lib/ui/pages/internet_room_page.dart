@@ -36,10 +36,8 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   bool _inviteVisible = true;
   String? _shownInviteCode;
   Timer? _inviteTimer;
-  Timer? _roomEndedTimer;
-  bool _roomEndedCountdownStarted = false;
-  bool _roomEndedReturnStarted = false;
-  bool _endingRoomByHost = false;
+  bool _roomEndedNoticeShown = false;
+  bool _exiting = false;
   final _chatMedia = ChatMediaService();
 
   @override
@@ -52,7 +50,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     _scheduleInviteHide();
     if (widget.session.roomEnded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _startRoomEndedCountdown();
+        if (mounted) _showRoomEndedNotice();
       });
     }
   }
@@ -82,9 +80,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   void _onSessionChanged() {
     if (!mounted) return;
     if (widget.session.roomEnded) {
-      if (!_endingRoomByHost && !widget.session.isHost) {
-        _startRoomEndedCountdown();
-      }
+      _showRoomEndedNotice();
       setState(() {});
       return;
     }
@@ -101,38 +97,27 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     setState(() {});
   }
 
-  void _startRoomEndedCountdown() {
-    if (_roomEndedCountdownStarted ||
-        !mounted ||
-        _endingRoomByHost ||
-        widget.session.isHost) {
-      return;
-    }
-    _roomEndedCountdownStarted = true;
+  void _showRoomEndedNotice() {
+    if (_roomEndedNoticeShown || !mounted) return;
+    _roomEndedNoticeShown = true;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('房间已被群主解散，10 秒后自动返回房间列表'),
-        duration: const Duration(seconds: 10),
-        action: SnackBarAction(
-          label: '立即返回',
-          onPressed: () => unawaited(_returnFromRoomEndedRoom()),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        content: Text(
+          widget.session.isHost ? '房间已解散，消息会保留到你退出房间' : '房间已被群主解散，消息会保留到你退出房间',
         ),
       ),
     );
-    _roomEndedTimer = Timer(
-      const Duration(seconds: 10),
-      () => unawaited(_returnFromRoomEndedRoom()),
-    );
   }
 
-  Future<void> _returnFromRoomEndedRoom() async {
-    if (_roomEndedReturnStarted || !mounted) return;
-    _roomEndedReturnStarted = true;
-    _roomEndedTimer?.cancel();
-    _roomEndedTimer = null;
+  Future<void> _exitRoom() async {
+    if (_exiting || !mounted) return;
+    _exiting = true;
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    await widget.session.disposeSession();
+    if (!mounted) return;
     Navigator.of(context).pop(true);
-    unawaited(widget.session.disposeSession());
   }
 
   @override
@@ -140,13 +125,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     WidgetsBinding.instance.removeObserver(this);
     widget.session.removeListener(_onSessionChanged);
     _inviteTimer?.cancel();
-    _roomEndedTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _leave() async {
     if (widget.session.roomEnded) {
-      await _returnFromRoomEndedRoom();
+      await _exitRoom();
       return;
     }
     var endRoom = false;
@@ -174,10 +158,17 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       );
       if (action == null) return;
       endRoom = action == 'end';
-      _endingRoomByHost = endRoom;
     }
-    await widget.session.leave(endRoom: endRoom);
-    if (mounted) Navigator.pop(context, true);
+    try {
+      if (endRoom) {
+        await widget.session.endRoom();
+      } else {
+        await widget.session.leave();
+        if (mounted) Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) _showError('$error');
+    }
   }
 
   Future<void> _rename() async {
@@ -222,23 +213,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ),
   );
 
-  Future<void> _showAudioProfilePicker() async {
-    final selected = await showModalBottomSheet<InternetAudioProfile>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _InternetAudioProfileSheet(
-        session: widget.session,
-        accent: widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy,
-      ),
-    );
-    if (selected != null &&
-        mounted &&
-        selected != widget.session.audioProfile) {
-      unawaited(widget.session.setAudioProfile(selected));
-    }
-  }
-
   Future<void> _showChat({bool autofocusComposer = false}) async {
     widget.session.markChatRead();
     await showModalBottomSheet<void>(
@@ -278,7 +252,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     final compactHeight = MediaQuery.sizeOf(context).height < 720;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final stateText = session.roomEnded
-        ? '房间已解散 · 10 秒后返回'
+        ? '房间已解散 · 消息暂存中'
         : switch (session.connectionState) {
             InternetConnectionState.connecting => '正在安全连接',
             InternetConnectionState.connected => '网络良好 · E2EE',
@@ -286,12 +260,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             InternetConnectionState.disconnected => '连接未能恢复',
           };
     return PopScope(
-      canPop: session.roomEnded && !keyboardOpen,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (keyboardOpen) {
           _dismissKeyboard();
-        } else if (!session.roomEnded) {
+        } else {
           _minimize();
         }
       },
@@ -348,13 +322,15 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ),
             child: Column(
               children: [
-                if (!keyboardOpen && inviteCode != null)
+                if (!keyboardOpen && !session.roomEnded && inviteCode != null)
                   _InviteCard(
                     code: inviteCode,
                     visible: _inviteVisible,
                     onToggle: _toggleInvite,
                   ),
-                if (!keyboardOpen && session.adminListening)
+                if (!keyboardOpen &&
+                    !session.roomEnded &&
+                    session.adminListening)
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(top: 8),
@@ -397,55 +373,16 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     ),
                   ),
                 if (keyboardOpen && !session.roomEnded) const Spacer(),
-                if (!session.roomEnded)
-                  Padding(
-                    key: const ValueKey('internet-room-chat-dock-slot'),
-                    padding: EdgeInsets.only(
-                      top: compactHeight ? 2 : 5,
-                      bottom: compactHeight ? 4 : 7,
-                    ),
-                    child: RoomChatDock(
-                      key: const ValueKey('internet-room-chat-dock-widget'),
-                      margin: EdgeInsets.zero,
-                      messages: [
-                        for (final message in session.messages)
-                          RoomChatDockItem(
-                            sender: DeviceCode.split(message.senderName).$1,
-                            text: message.text,
-                            isMine: message.isMine,
-                            hasImage: message.hasImage,
-                          ),
-                      ],
-                      isNight: widget.isNight,
-                      unreadCount: session.unreadChatCount,
-                      visibleMessageCount:
-                          session.voiceMode == VoiceMode.automatic
-                          ? (compactHeight ? 4 : 6)
-                          : (compactHeight ? 2 : 3),
-                      messageMaxLines:
-                          session.voiceMode == VoiceMode.automatic ||
-                              !compactHeight
-                          ? 2
-                          : 1,
-                      compact: compactHeight,
-                      expandedPreview: session.voiceMode == VoiceMode.automatic,
-                      onOpenHistory: _showChat,
-                      onOpenComposer: () => _showChat(autofocusComposer: true),
-                      onPickImage: () async {
-                        final image = await _chatMedia.pickImage();
-                        if (image == null) return;
-                        await session.sendChatImage(
-                          bytes: image.bytes,
-                          mimeType: image.mimeType,
-                          name: image.name,
-                        );
-                      },
-                    ),
-                  ),
+                if (!keyboardOpen && !session.isHost)
+                  Expanded(child: _buildChatDock(session, compactHeight))
+                else
+                  _buildChatDock(session, compactHeight),
                 if (!keyboardOpen && session.isHost) const Spacer(),
                 if (!keyboardOpen && !session.isHost && !session.roomEnded)
-                  SizedBox(height: compactHeight ? 8 : 12),
-                if (!keyboardOpen && !session.canSpeak) ...[
+                  SizedBox(height: compactHeight ? 5 : 8),
+                if (!keyboardOpen &&
+                    !session.canSpeak &&
+                    !session.roomEnded) ...[
                   const Icon(
                     Icons.mic_off_rounded,
                     size: 36,
@@ -459,18 +396,24 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   const SizedBox(height: 22),
                 ],
                 if (!keyboardOpen && session.roomEnded) ...[
-                  const Icon(
+                  const SizedBox(height: 8),
+                  Icon(
                     Icons.call_end_rounded,
-                    size: 42,
+                    size: 25,
                     color: Colors.redAccent,
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    '房间已被群主解散',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  Text(
+                    session.isHost ? '房间已解散' : '房间已被群主解散',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 6),
-                  const Text('10 秒后自动返回房间列表'),
+                  const Text('聊天记录会保留到退出房间'),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    key: const ValueKey('exit-ended-internet-room'),
+                    onPressed: _exitRoom,
+                    icon: const Icon(Icons.exit_to_app_rounded),
+                    label: const Text('退出房间'),
+                  ),
                 ] else if (!keyboardOpen) ...[
                   VoiceModeSwitch(
                     value: session.voiceMode,
@@ -483,6 +426,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   SizedBox(height: compactHeight ? 10 : 16),
                   if (session.voiceMode == VoiceMode.pushToTalk)
                     _InternetPttButton(
+                      key: const ValueKey('internet-ptt-button'),
                       session: session,
                       accent: accent,
                       size: compactHeight ? 90 : 148,
@@ -490,7 +434,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                   else
                     _AutomaticTalkStatus(session: session, accent: accent),
                 ],
-                if (!keyboardOpen) const Spacer(),
+                if (!keyboardOpen && session.isHost) const Spacer(),
+                if (!keyboardOpen && !session.isHost && !session.roomEnded)
+                  SizedBox(height: compactHeight ? 7 : 10),
                 if (!keyboardOpen && !session.roomEnded)
                   RoomControlsBar(
                     key: const ValueKey('internet-room-controls'),
@@ -534,19 +480,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                             : AppTheme.lightTextPrimary,
                         compact: true,
                       ),
-                      RoomControlButton(
+                      _InternetAudioProfileMenu(
                         key: const ValueKey('internet-audio-profile-button'),
-                        icon: _audioProfileIcon(session.audioProfile),
-                        label: '音质',
+                        session: session,
                         isNight: widget.isNight,
-                        onTap: _showAudioProfilePicker,
-                        bgColor: widget.isNight
-                            ? AppTheme.darkCardBg
-                            : AppTheme.lightCardBg,
-                        textColor: widget.isNight
-                            ? AppTheme.darkTextPrimary
-                            : AppTheme.lightTextPrimary,
-                        compact: true,
+                        accent: accent,
                       ),
                       RoomControlButton(
                         icon: Icons.call_end_rounded,
@@ -577,6 +515,56 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       ),
     );
   }
+
+  Widget _buildChatDock(InternetRoomSession session, bool compactHeight) =>
+      Padding(
+        key: const ValueKey('internet-room-chat-dock-slot'),
+        padding: EdgeInsets.only(
+          top: compactHeight ? 2 : 5,
+          bottom: compactHeight ? 4 : 7,
+        ),
+        child: RoomChatDock(
+          key: const ValueKey('internet-room-chat-dock-widget'),
+          margin: EdgeInsets.zero,
+          messages: [
+            for (final message in session.messages)
+              RoomChatDockItem(
+                sender: DeviceCode.split(message.senderName).$1,
+                text: message.text,
+                isMine: message.isMine,
+                hasImage: message.hasImage,
+              ),
+          ],
+          isNight: widget.isNight,
+          unreadCount: session.unreadChatCount,
+          visibleMessageCount:
+              !session.isHost && MediaQuery.viewInsetsOf(context).bottom == 0
+              ? (compactHeight ? 8 : 14)
+              : session.voiceMode == VoiceMode.automatic
+              ? (compactHeight ? 4 : 6)
+              : (compactHeight ? 2 : 3),
+          messageMaxLines:
+              session.voiceMode == VoiceMode.automatic || !compactHeight
+              ? 2
+              : 1,
+          compact: compactHeight,
+          expandedPreview: session.voiceMode == VoiceMode.automatic,
+          fillAvailableSpace:
+              !session.isHost && MediaQuery.viewInsetsOf(context).bottom == 0,
+          enabled: !session.roomEnded,
+          onOpenHistory: _showChat,
+          onOpenComposer: () => _showChat(autofocusComposer: true),
+          onPickImage: () async {
+            final image = await _chatMedia.pickImage();
+            if (image == null) return;
+            await session.sendChatImage(
+              bytes: image.bytes,
+              mimeType: image.mimeType,
+              name: image.name,
+            );
+          },
+        ),
+      );
 }
 
 IconData _audioProfileIcon(InternetAudioProfile profile) => switch (profile) {
@@ -585,60 +573,65 @@ IconData _audioProfileIcon(InternetAudioProfile profile) => switch (profile) {
   InternetAudioProfile.dataSaver => Icons.data_saver_on_rounded,
 };
 
-class _InternetAudioProfileSheet extends StatelessWidget {
-  const _InternetAudioProfileSheet({
+class _InternetAudioProfileMenu extends StatelessWidget {
+  const _InternetAudioProfileMenu({
+    super.key,
     required this.session,
+    required this.isNight,
     required this.accent,
   });
 
   final InternetRoomSession session;
+  final bool isNight;
   final Color accent;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(6, 0, 6, 12),
-            child: Text(
-              '语音质量',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-          ),
-          for (final profile in InternetAudioProfile.values)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: profile == session.audioProfile
-                    ? accent.withValues(alpha: .12)
-                    : Theme.of(context).colorScheme.surfaceContainerHighest
-                          .withValues(alpha: .55),
-                borderRadius: BorderRadius.circular(16),
-                child: ListTile(
-                  key: ValueKey('audio-profile-${profile.name}'),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  leading: Icon(_audioProfileIcon(profile), color: accent),
-                  title: Text(
-                    '${profile.label} · ${profile.bitrateFor(metered: session.isMeteredNetwork) ~/ 1000}kbps',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(profile.description),
-                  trailing: profile == session.audioProfile
-                      ? Icon(Icons.check_circle_rounded, color: accent)
-                      : null,
-                  onTap: () => Navigator.pop(context, profile),
+  Widget build(BuildContext context) => PopupMenuButton<InternetAudioProfile>(
+    tooltip: '语音质量',
+    position: PopupMenuPosition.over,
+    offset: const Offset(0, -212),
+    constraints: const BoxConstraints(minWidth: 238, maxWidth: 280),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    onSelected: (profile) => unawaited(session.setAudioProfile(profile)),
+    itemBuilder: (context) => [
+      for (final profile in InternetAudioProfile.values)
+        PopupMenuItem<InternetAudioProfile>(
+          key: ValueKey('audio-profile-${profile.name}'),
+          value: profile,
+          child: Row(
+            children: [
+              Icon(_audioProfileIcon(profile), color: accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${profile.label} · ${profile.bitrateFor(metered: session.isMeteredNetwork) ~/ 1000}kbps',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      profile.description,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ),
-            ),
-        ],
-      ),
+              if (profile == session.audioProfile)
+                Icon(Icons.check_rounded, color: accent),
+            ],
+          ),
+        ),
+    ],
+    child: RoomControlButton(
+      icon: _audioProfileIcon(session.audioProfile),
+      label: '音质',
+      isNight: isNight,
+      onTap: null,
+      bgColor: isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg,
+      textColor: isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+      compact: true,
     ),
   );
 }
@@ -877,6 +870,7 @@ class _MoreMembersPill extends StatelessWidget {
 
 class _InternetPttButton extends StatelessWidget {
   const _InternetPttButton({
+    super.key,
     required this.session,
     required this.accent,
     required this.size,
@@ -1085,14 +1079,14 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
   }
 
   Future<void> _send() async {
-    if (_sending) return;
+    if (_sending || widget.session.roomEnded) return;
     final text = _controller.text;
     _controller.clear();
     await widget.session.sendChat(text);
   }
 
   Future<void> _sendImage() async {
-    if (_sending) return;
+    if (_sending || widget.session.roomEnded) return;
     setState(() => _sending = true);
     try {
       final image = await _chatMedia.pickImage();
@@ -1198,45 +1192,54 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
                       },
                     ),
             ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  14,
-                  8,
-                  8,
-                  MediaQuery.viewInsetsOf(context).bottom + 8,
+            if (widget.session.roomEnded)
+              const SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('房间已解散 · 可继续查看和保存消息'),
                 ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: '发送图片',
-                      onPressed: _sending ? null : _sendImage,
-                      icon: const Icon(Icons.image_outlined),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        key: const ValueKey('full-chat-input'),
-                        controller: _controller,
-                        autofocus: widget.autofocusComposer,
-                        maxLength: 1000,
-                        minLines: 1,
-                        maxLines: 4,
-                        decoration: const InputDecoration(
-                          hintText: '说点什么…',
-                          counterText: '',
+              )
+            else
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    14,
+                    8,
+                    8,
+                    MediaQuery.viewInsetsOf(context).bottom + 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: '发送图片',
+                        onPressed: _sending ? null : _sendImage,
+                        icon: const Icon(Icons.image_outlined),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('full-chat-input'),
+                          controller: _controller,
+                          autofocus: widget.autofocusComposer,
+                          maxLength: 1000,
+                          minLines: 1,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            hintText: '说点什么…',
+                            counterText: '',
+                          ),
                         ),
                       ),
-                    ),
-                    IconButton.filled(
-                      key: const ValueKey('full-chat-send'),
-                      onPressed: _send,
-                      icon: const Icon(Icons.send_rounded),
-                    ),
-                  ],
+                      IconButton.filled(
+                        key: const ValueKey('full-chat-send'),
+                        onPressed: _send,
+                        icon: const Icon(Icons.send_rounded),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

@@ -1314,7 +1314,9 @@ class _ActiveRoomCard extends StatelessWidget {
                         stream: session.stateStream,
                         initialData: session.state,
                         builder: (_, snapshot) => Text(
-                          snapshot.data == RoomState.reconnecting
+                          snapshot.data == RoomState.ended
+                              ? '房间已解散 · 点按查看消息'
+                              : snapshot.data == RoomState.reconnecting
                               ? s.roomReconnecting
                               : s.activeRoomKept,
                           maxLines: 1,

@@ -84,15 +84,8 @@ class _InternetHomePageState extends State<InternetHomePage> {
     final session = _activeSession;
     if (!mounted || session == null) return;
     if (session.roomEnded) {
-      if (_roomPageOpen) return;
       _rememberedInvites.remove(_inviteKey(session.profile, session.roomId));
-      _setActiveSession(null);
-      unawaited(session.disposeSession());
-      if (!session.isHost) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('房间已被群主解散，已从进入记录中移除')));
-      }
-      unawaited(_refresh());
+      setState(() {});
       return;
     }
     setState(() {});
@@ -340,7 +333,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
     if (!mounted) return;
     setState(() => _roomPageOpen = false);
     if (!identical(_activeSession, session)) return;
-    if (ended == true || session.roomEnded) {
+    if (ended == true) {
       if (session.roomEnded) {
         _rememberedInvites.remove(_inviteKey(session.profile, session.roomId));
       }

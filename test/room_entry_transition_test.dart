@@ -59,6 +59,23 @@ void main() {
     expect(findDissolveTitle(), findsOneWidget);
     await tester.tap(findDissolveAction());
     await tester.pump();
+    for (
+      var i = 0;
+      i < 100 &&
+          find
+              .byKey(const ValueKey('exit-ended-local-room'))
+              .evaluate()
+              .isEmpty;
+      i++
+    ) {
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    expect(find.byKey(const ValueKey('exit-ended-local-room')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('exit-ended-local-room')));
+    await tester.pump();
   }
 
   // Native-channel futures and real loopback sockets need both event loops.
@@ -71,7 +88,12 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
       expect(tester.takeException(), isNull);
-      if (findInCall().evaluate().isNotEmpty == inRoom) return;
+      if (inRoom && findInCall().evaluate().isNotEmpty) return;
+      if (!inRoom &&
+          findCreateWifi().evaluate().isNotEmpty &&
+          find.byKey(const ValueKey('active-room-card')).evaluate().isEmpty) {
+        return;
+      }
     }
     fail('Room transition did not complete');
   }

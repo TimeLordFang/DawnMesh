@@ -72,6 +72,7 @@ class _SessionStageState extends State<SessionStage>
   late final AudioIo _audioIo;
 
   RoomSession? _session;
+  StreamSubscription<RoomState>? _roomStateSubscription;
   InternetRoomSession? _internetSession;
   bool _roomVisible = false;
   bool _leaving = false;
@@ -94,6 +95,7 @@ class _SessionStageState extends State<SessionStage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_roomStateSubscription?.cancel());
     unawaited(_session?.dispose());
     unawaited(_internetSession?.disposeSession());
     _stage.dispose();
@@ -108,6 +110,18 @@ class _SessionStageState extends State<SessionStage>
   }
 
   void _onEnterRoom(RoomSession session, String roomName) {
+    unawaited(_roomStateSubscription?.cancel());
+    _roomStateSubscription = session.stateStream.listen((state) {
+      if (state == RoomState.ended && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.fromLTRB(16, 0, 16, 120),
+            content: Text('房间已解散，消息会保留到你退出房间'),
+          ),
+        );
+      }
+    });
     setState(() {
       _session = session;
       _roomName = roomName;
@@ -150,6 +164,8 @@ class _SessionStageState extends State<SessionStage>
     final session = _session;
     if (session == null || _leaving) return;
     setState(() => _leaving = true);
+    unawaited(_roomStateSubscription?.cancel());
+    _roomStateSubscription = null;
 
     // 点了就走：退场动画立刻起，音频与 socket 的收尾在后台并行做。
     // 早先这里是 `await session.leave()` 再反演动画，等于让用户干等一次
@@ -171,11 +187,25 @@ class _SessionStageState extends State<SessionStage>
     });
   }
 
+  void _onDissolveRoom() {
+    final session = _session;
+    if (session == null || _leaving || session.roomEnded) return;
+    unawaited(session.endRoom());
+  }
+
   Future<void> _confirmEndActiveRoom() async {
     final session = _session;
     if (session == null || _leaving) return;
-    if (await showLocalRoomLeaveConfirmation(context, session) && mounted) {
+    if (session.roomEnded) {
       _onLeaveRoom();
+      return;
+    }
+    if (await showLocalRoomLeaveConfirmation(context, session) && mounted) {
+      if (session.isHost) {
+        _onDissolveRoom();
+      } else {
+        _onLeaveRoom();
+      }
     }
   }
 
@@ -299,6 +329,7 @@ class _SessionStageState extends State<SessionStage>
                     isNight: widget.isNight,
                     stage: _stage,
                     onLeave: _onLeaveRoom,
+                    onDissolve: _onDissolveRoom,
                     onOpenChat: () => _showChatSheet(session),
                     onOpenComposer: () =>
                         _showChatSheet(session, autofocusComposer: true),
@@ -622,7 +653,9 @@ class _SessionStageState extends State<SessionStage>
                   final state = snapshot.data ?? session.state;
                   final reconnecting = state == RoomState.reconnecting;
                   final disconnected = state == RoomState.disconnected;
-                  final status = reconnecting
+                  final status = state == RoomState.ended
+                      ? '房间已解散 · 消息暂存中'
+                      : reconnecting
                       ? s.roomReconnecting
                       : disconnected
                       ? s.roomDisconnected
@@ -669,7 +702,7 @@ class _SessionStageState extends State<SessionStage>
                 builder: (context, _) {
                   final invite = session.roomInvite;
                   return HostRoomInviteRow(
-                    isHost: session.isHost,
+                    isHost: session.isHost && !session.roomEnded,
                     code: invite?.code,
                   );
                 },

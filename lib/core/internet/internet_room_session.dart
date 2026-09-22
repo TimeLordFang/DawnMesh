@@ -544,30 +544,7 @@ class InternetRoomSession extends ChangeNotifier {
           isHost = event['hostMemberId'] == memberId;
           _applyMembers(event['members']);
         case 'room_ended':
-          if (_roomEnded) return;
-          _roomEnded = true;
-          _eventReconnectTimer?.cancel();
-          _pttPressed = false;
-          if (_connectionState == InternetConnectionState.disconnected) {
-            notifyListeners();
-          } else {
-            _setConnectionState(InternetConnectionState.disconnected);
-          }
-          await _applyMicrophone(false);
-          final listener = _listener;
-          _listener = null;
-          await listener?.dispose();
-          final room = _livekitRoom;
-          _livekitRoom = null;
-          await room?.disconnect();
-          await room?.dispose();
-          final subscription = _eventSubscription;
-          _eventSubscription = null;
-          await subscription?.cancel();
-          final socket = _eventsSocket;
-          _eventsSocket = null;
-          await socket?.close();
-          AppLog.warn('DawnInternet', '房间已被房主解散或因超时关闭');
+          await _finishEndedRoom();
         case 'pake_hello':
           if (isHost) await _handlePakeHello(event);
         case 'pake_confirm':
@@ -891,6 +868,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> sendChat(String text) async {
+    if (_closed || _roomEnded) return;
     final value = text.trim();
     if (value.isEmpty || utf8.encode(value).length > 1000) return;
     final now = DateTime.now();
@@ -933,6 +911,7 @@ class InternetRoomSession extends ChangeNotifier {
     required String mimeType,
     required String name,
   }) async {
+    if (_closed || _roomEnded) return;
     if (bytes.isEmpty || bytes.length > ChatImageChunkPayload.maxImageBytes) {
       throw ArgumentError('图片不能超过 192 KB。');
     }
@@ -1082,7 +1061,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> setVoiceMode(VoiceMode value) async {
-    if (_voiceMode == value || _closed) return;
+    if (_voiceMode == value || _closed || _roomEnded) return;
     _voiceMode = value;
     _pttPressed = false;
     await _applyMicrophone(
@@ -1118,7 +1097,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> setAudioProfile(InternetAudioProfile value) async {
-    if (_closed) return;
+    if (_closed || _roomEnded) return;
     _audioProfileManuallySelected = true;
     if (_audioProfile == value) return;
     _audioProfile = value;
@@ -1131,7 +1110,11 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> setPtt(bool pressed) async {
-    if (_voiceMode != VoiceMode.pushToTalk || _closed || !_canSpeak || _muted) {
+    if (_voiceMode != VoiceMode.pushToTalk ||
+        _closed ||
+        _roomEnded ||
+        !_canSpeak ||
+        _muted) {
       pressed = false;
     }
     if (_pttPressed == pressed) return;
@@ -1206,7 +1189,7 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> _handleConnectivityChanged(
     List<ConnectivityResult> results,
   ) async {
-    if (_closed) return;
+    if (_closed || _roomEnded) return;
     final metered = _isMeteredConnection(results);
     final recommended = InternetAudioProfileDetails.recommended(
       metered: metered,
@@ -1283,6 +1266,42 @@ class InternetRoomSession extends ChangeNotifier {
     await disposeSession();
   }
 
+  /// Ends the server room while keeping its in-memory chat readable until the
+  /// user explicitly exits the ended room page.
+  Future<void> endRoom() async {
+    if (_closed || _roomEnded || !isHost) return;
+    await api.leave(roomId, memberId, resumeToken, endRoom: true);
+    await _finishEndedRoom();
+  }
+
+  Future<void> _finishEndedRoom() async {
+    if (_closed || _roomEnded) return;
+    _roomEnded = true;
+    _eventReconnectTimer?.cancel();
+    _pttPressed = false;
+    if (_connectionState == InternetConnectionState.disconnected) {
+      notifyListeners();
+    } else {
+      _setConnectionState(InternetConnectionState.disconnected);
+    }
+    await _applyMicrophone(false);
+    await _backgroundControls.close();
+    final listener = _listener;
+    _listener = null;
+    await listener?.dispose();
+    final room = _livekitRoom;
+    _livekitRoom = null;
+    await room?.disconnect();
+    await room?.dispose();
+    final subscription = _eventSubscription;
+    _eventSubscription = null;
+    await subscription?.cancel();
+    final socket = _eventsSocket;
+    _eventsSocket = null;
+    await socket?.close();
+    AppLog.warn('DawnInternet', '房间已解散，消息保留到用户退出');
+  }
+
   Future<void> disposeSession() async {
     if (_closed) return;
     _closed = true;
@@ -1299,6 +1318,8 @@ class InternetRoomSession extends ChangeNotifier {
     );
     await _waveController.close();
     _incomingImages.clear();
+    _messages.clear();
+    _unreadChatCount = 0;
     _roomKey.fillRange(0, _roomKey.length, 0);
     api.close();
   }

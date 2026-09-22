@@ -36,6 +36,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
   final ChatMediaService _chatMedia = ChatMediaService();
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<List<ChatMessage>>? _chatListSub;
+  StreamSubscription<RoomState>? _roomStateSub;
   bool _isSending = false;
 
   @override
@@ -52,12 +53,16 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
     _chatListSub = widget.session.chatListStream.listen((_) {
       if (mounted) setState(() {});
     });
+    _roomStateSub = widget.session.stateStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _chatSub?.cancel();
     _chatListSub?.cancel();
+    _roomStateSub?.cancel();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -557,7 +562,11 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
 
                                               // 气泡本体（长按支持撤回）
                                               GestureDetector(
-                                                onLongPress: isLocal
+                                                onLongPress:
+                                                    isLocal &&
+                                                        !widget
+                                                            .session
+                                                            .roomEnded
                                                     ? () => _handleRecall(msg)
                                                     : null,
                                                 child: Container(
@@ -663,88 +672,95 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
 
                       // 3. 底部输入与发送栏
                       const Divider(height: 1, thickness: 0.8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              tooltip: '发送图片',
-                              onPressed: _isSending ? null : _handleImage,
-                              icon: Icon(
-                                Icons.image_outlined,
-                                color: accentColor,
-                              ),
-                            ),
-                            Expanded(
-                              child: Semantics(
-                                label: s.chatInputPlaceholder,
-                                textField: true,
-                                child: TextField(
-                                  key: const ValueKey('full-chat-input'),
-                                  controller: _textController,
-                                  autofocus: widget.autofocusComposer,
-                                  maxLines: 3,
-                                  minLines: 1,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    color: textPrimary,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: s.chatInputPlaceholder,
-                                    hintStyle: TextStyle(
-                                      fontSize: 13.5,
-                                      color: textSecondary.withValues(
-                                        alpha: 0.65,
-                                      ),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
-                                    filled: true,
-                                    fillColor: isNight
-                                        ? const Color(0xFF121B2B)
-                                        : const Color(0xFFF1ECE5),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                  ),
-                                  onSubmitted: (_) => _handleSend(),
+                      if (widget.session.roomEnded)
+                        const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Text('房间已解散 · 可继续查看和保存消息'),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: '发送图片',
+                                onPressed: _isSending ? null : _handleImage,
+                                icon: Icon(
+                                  Icons.image_outlined,
+                                  color: accentColor,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Semantics(
-                              label: _isSending ? s.chatSending : s.chatSend,
-                              liveRegion: _isSending,
-                              button: true,
-                              child: IconButton(
-                                key: const ValueKey('full-chat-send'),
-                                icon: _isSending
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                              Expanded(
+                                child: Semantics(
+                                  label: s.chatInputPlaceholder,
+                                  textField: true,
+                                  child: TextField(
+                                    key: const ValueKey('full-chat-input'),
+                                    controller: _textController,
+                                    autofocus: widget.autofocusComposer,
+                                    maxLines: 3,
+                                    minLines: 1,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: textPrimary,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: s.chatInputPlaceholder,
+                                      hintStyle: TextStyle(
+                                        fontSize: 13.5,
+                                        color: textSecondary.withValues(
+                                          alpha: 0.65,
                                         ),
-                                      )
-                                    : Icon(
-                                        Icons.send_rounded,
-                                        color: accentColor,
                                       ),
-                                tooltip: _isSending
-                                    ? s.chatSending
-                                    : s.chatSend,
-                                onPressed: _isSending ? null : _handleSend,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10,
+                                          ),
+                                      filled: true,
+                                      fillColor: isNight
+                                          ? const Color(0xFF121B2B)
+                                          : const Color(0xFFF1ECE5),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    onSubmitted: (_) => _handleSend(),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              Semantics(
+                                label: _isSending ? s.chatSending : s.chatSend,
+                                liveRegion: _isSending,
+                                button: true,
+                                child: IconButton(
+                                  key: const ValueKey('full-chat-send'),
+                                  icon: _isSending
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.send_rounded,
+                                          color: accentColor,
+                                        ),
+                                  tooltip: _isSending
+                                      ? s.chatSending
+                                      : s.chatSend,
+                                  onPressed: _isSending ? null : _handleSend,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

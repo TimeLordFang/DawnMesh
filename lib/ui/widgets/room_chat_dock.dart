@@ -34,6 +34,7 @@ class RoomChatDock extends StatefulWidget {
     this.messageMaxLines = 2,
     this.compact = false,
     this.expandedPreview = false,
+    this.fillAvailableSpace = false,
     this.margin = const EdgeInsets.symmetric(horizontal: 18),
   });
 
@@ -48,6 +49,7 @@ class RoomChatDock extends StatefulWidget {
   final int messageMaxLines;
   final bool compact;
   final bool expandedPreview;
+  final bool fillAvailableSpace;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -115,7 +117,9 @@ class _RoomChatDockState extends State<RoomChatDock> {
           border: Border.all(color: accent.withValues(alpha: .22)),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: widget.fillAvailableSpace
+              ? MainAxisSize.max
+              : MainAxisSize.min,
           children: [
             InkWell(
               key: const ValueKey('open-chat-history'),
@@ -165,77 +169,85 @@ class _RoomChatDockState extends State<RoomChatDock> {
                 ),
               ),
             ),
-            ConstrainedBox(
-              key: const ValueKey('room-chat-preview'),
-              constraints: BoxConstraints(
-                minHeight: widget.expandedPreview
-                    ? 64
-                    : (widget.compact ? 30 : 42),
-                maxHeight: widget.expandedPreview
-                    ? 132
-                    : (widget.compact ? 58 : 96),
-              ),
-              child: visible.isEmpty
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        s.chatDockEmpty,
-                        style: TextStyle(color: secondary, fontSize: 12),
-                      ),
-                    )
-                  : ClipRect(
-                      child: SingleChildScrollView(
-                        reverse: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            for (final message in visible)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 1,
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 72,
-                                      ),
-                                      child: Text(
-                                        message.isMine
-                                            ? s.chatSelfBadge
-                                            : message.sender,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: secondary,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
+            Flexible(
+              fit: widget.fillAvailableSpace ? FlexFit.tight : FlexFit.loose,
+              child: ConstrainedBox(
+                key: const ValueKey('room-chat-preview'),
+                constraints: BoxConstraints(
+                  minHeight: widget.fillAvailableSpace
+                      ? 0
+                      : widget.expandedPreview
+                      ? 64
+                      : (widget.compact ? 30 : 42),
+                  maxHeight: widget.fillAvailableSpace
+                      ? double.infinity
+                      : widget.expandedPreview
+                      ? 132
+                      : (widget.compact ? 58 : 96),
+                ),
+                child: visible.isEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          s.chatDockEmpty,
+                          style: TextStyle(color: secondary, fontSize: 12),
+                        ),
+                      )
+                    : ClipRect(
+                        child: SingleChildScrollView(
+                          reverse: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              for (final message in visible)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 1,
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 72,
+                                        ),
+                                        child: Text(
+                                          message.isMine
+                                              ? s.chatSelfBadge
+                                              : message.sender,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: secondary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 7),
-                                    Expanded(
-                                      child: Text(
-                                        message.hasImage
-                                            ? '📷 ${s.chatImage}'
-                                            : message.text,
-                                        maxLines: widget.messageMaxLines,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: primary,
-                                          fontSize: 12,
+                                      const SizedBox(width: 7),
+                                      Expanded(
+                                        child: Text(
+                                          message.hasImage
+                                              ? '📷 ${s.chatImage}'
+                                              : message.text,
+                                          maxLines: widget.messageMaxLines,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: primary,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+              ),
             ),
             Row(
               children: [

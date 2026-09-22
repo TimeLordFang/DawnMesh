@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 /// LEAVE (0x06) Payload
-/// Format: [1 byte reason code] (0: normal leave, 1: timeout, 2: kicked)
+/// Format: [1 byte reason code] (0: normal, 1: timeout, 2: kicked, 3: dissolved)
 class LeavePayload {
   final int reason;
 

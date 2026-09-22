@@ -60,6 +60,7 @@ class RoomContent extends StatefulWidget {
   final Animation<double> stage;
 
   final VoidCallback onLeave;
+  final VoidCallback? onDissolve;
   final VoidCallback? onOpenChat;
   final VoidCallback? onOpenComposer;
 
@@ -69,6 +70,7 @@ class RoomContent extends StatefulWidget {
     required this.isNight,
     required this.stage,
     required this.onLeave,
+    this.onDissolve,
     this.onOpenChat,
     this.onOpenComposer,
   });
@@ -96,15 +98,24 @@ class _RoomContentState extends State<RoomContent> {
   }
 
   Future<void> _confirmLeave() async {
+    if (widget.session.roomEnded) {
+      widget.onLeave();
+      return;
+    }
     if (await showLocalRoomLeaveConfirmation(context, widget.session) &&
         mounted) {
-      widget.onLeave();
+      if (widget.session.isHost && widget.onDissolve != null) {
+        widget.onDissolve!();
+      } else {
+        widget.onLeave();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isNight = widget.isNight;
+    final ended = widget.session.roomEnded;
     final stage = widget.stage;
     // Scaffold removes the bottom viewInset from its body MediaQuery after it
     // resizes. Read the underlying view as well so the room can still enter
@@ -150,6 +161,7 @@ class _RoomContentState extends State<RoomContent> {
               unreadCount:
                   unreadSnapshot.data ?? widget.session.unreadChatCount,
               isNight: isNight,
+              enabled: !ended,
               visibleMessageCount: expandedChatPreview
                   ? (compactHeight ? 4 : 6)
                   : (compactHeight ? 2 : 3),
@@ -213,7 +225,24 @@ class _RoomContentState extends State<RoomContent> {
 
             if (!keyboardOpen) const Spacer(),
 
-            if (!keyboardOpen)
+            if (!keyboardOpen && ended) ...[
+              const Icon(
+                Icons.call_end_rounded,
+                color: Colors.redAccent,
+                size: 34,
+              ),
+              const SizedBox(height: 6),
+              const Text('房间已解散，聊天记录会保留到退出', textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: const ValueKey('exit-ended-local-room'),
+                onPressed: widget.onLeave,
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('退出房间'),
+              ),
+            ],
+
+            if (!keyboardOpen && !ended)
               Padding(
                 padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
                 child: VoiceModeSwitch(
@@ -224,7 +253,7 @@ class _RoomContentState extends State<RoomContent> {
                 ),
               ),
             // Each device selects its own transmit mode; receiving stays enabled.
-            if (!keyboardOpen)
+            if (!keyboardOpen && !ended)
               StageEnterItem(
                 stage: stage,
                 index: 1,
@@ -250,10 +279,10 @@ class _RoomContentState extends State<RoomContent> {
                 ),
               ),
 
-            if (!keyboardOpen) const Spacer(),
+            if (!keyboardOpen && !ended) const Spacer(),
 
             // 3. 底部控制条（静音 / 扬声器 / 离开）
-            if (!keyboardOpen)
+            if (!keyboardOpen && !ended)
               StageEnterItem(
                 stage: stage,
                 index: 2,
