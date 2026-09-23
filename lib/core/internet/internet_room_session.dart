@@ -79,13 +79,17 @@ class InternetRoomSession extends ChangeNotifier {
     required this.memberId,
     required InternetRoomSummary summary,
     this.isHost = false,
+    Future<void> Function(bool enabled)? microphoneForTesting,
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
        _inviteCode = '123456',
        _roomKey = Uint8List(32),
        _audioProfile = InternetAudioProfile.clarity,
-       _meteredNetwork = false {
+       _meteredNetwork = false,
+       // Public test seam keeps the named argument accessible across libraries.
+       // ignore: prefer_initializing_formals
+       _microphoneForTesting = microphoneForTesting {
     _summary = summary;
     _connectionState = InternetConnectionState.connected;
   }
@@ -103,6 +107,7 @@ class InternetRoomSession extends ChangeNotifier {
   final BackgroundCallControls _backgroundControls = BackgroundCallControls(
     Object(),
   );
+  Future<void> Function(bool enabled)? _microphoneForTesting;
 
   Room? _livekitRoom;
   EventsListener<RoomEvent>? _listener;
@@ -115,7 +120,8 @@ class InternetRoomSession extends ChangeNotifier {
   bool _closed = false;
   bool _roomEnded = false;
   bool _muted = false;
-  bool _canSpeak = true;
+  bool _policyCanSpeak = true;
+  bool _mediaCanPublish = true;
   bool _pttPressed = false;
   bool _speakerOn = true;
   InternetAudioProfile _audioProfile;
@@ -143,7 +149,7 @@ class InternetRoomSession extends ChangeNotifier {
   VoiceMode get voiceMode => _voiceMode;
   bool get isMuted => _muted;
   bool get roomEnded => _roomEnded;
-  bool get canSpeak => _canSpeak;
+  bool get canSpeak => _policyCanSpeak && _mediaCanPublish;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
   String? get hostInviteCode => isHost ? _inviteCode : null;
@@ -468,8 +474,7 @@ class InternetRoomSession extends ChangeNotifier {
       ..on<ParticipantNameUpdatedEvent>((_) => _refreshMembers())
       ..on<ParticipantPermissionsUpdatedEvent>((event) {
         if (event.participant.identity == memberId) {
-          _canSpeak = event.permissions.canPublish;
-          if (!_canSpeak) unawaited(_applyMicrophone(false));
+          unawaited(_setMediaCanPublish(event.permissions.canPublish));
         }
         _refreshMembers();
       })
@@ -493,12 +498,11 @@ class InternetRoomSession extends ChangeNotifier {
       grant.livekitToken,
       connectOptions: const ConnectOptions(autoSubscribe: true),
     );
+    _mediaCanPublish = room.localParticipant?.permissions.canPublish ?? true;
     _eventsSocket?.add(
       jsonEncode({'type': 'media_ready', 'memberId': memberId}),
     );
-    await _applyMicrophone(
-      _voiceMode == VoiceMode.automatic && !_muted && _canSpeak,
-    );
+    await _syncMicrophone();
     await _applyAudioBitrate();
     _refreshMembers();
     unawaited(_broadcastProfile());
@@ -527,7 +531,7 @@ class InternetRoomSession extends ChangeNotifier {
       final event = jsonDecode(raw as String) as Map<String, dynamic>;
       switch (event['type']) {
         case 'snapshot':
-          _applySnapshot(event);
+          await _applySnapshot(event);
         case 'room_updated':
           _summary = InternetRoomSummary.fromJson(
             event['room'] as Map<String, dynamic>,
@@ -535,8 +539,9 @@ class InternetRoomSession extends ChangeNotifier {
           notifyListeners();
         case 'voice_policy':
           if (event['memberId'] == memberId) {
-            _canSpeak = event['canSpeak'] as bool? ?? false;
-            if (!_canSpeak) await _applyMicrophone(false);
+            _policyCanSpeak = event['canSpeak'] as bool? ?? false;
+            if (!canSpeak) _pttPressed = false;
+            await _syncMicrophone();
             await _syncBackgroundControls();
           }
           _applyMembers(event['members']);
@@ -559,14 +564,44 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> receiveRoomEndedForTesting() =>
       _handleManagementEvent(jsonEncode({'type': 'room_ended'}));
 
-  void _applySnapshot(Map<String, dynamic> event) {
+  @visibleForTesting
+  Future<void> receiveVoicePolicyForTesting(bool value) =>
+      _handleManagementEvent(
+        jsonEncode({
+          'type': 'voice_policy',
+          'memberId': memberId,
+          'canSpeak': value,
+        }),
+      );
+
+  @visibleForTesting
+  Future<void> receiveMediaPermissionForTesting(bool value) =>
+      _setMediaCanPublish(value);
+
+  Future<void> _setMediaCanPublish(bool value) async {
+    if (_closed || _roomEnded) return;
+    _mediaCanPublish = value;
+    if (!canSpeak) _pttPressed = false;
+    try {
+      await _syncMicrophone();
+      await _syncBackgroundControls();
+    } catch (error, stack) {
+      AppLog.error('DawnInternet', '媒体权限变化后更新麦克风失败：$error', stack);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _applySnapshot(Map<String, dynamic> event) async {
     final room = event['room'];
     if (room is Map<String, dynamic>) {
       _summary = InternetRoomSummary.fromJson(room);
     }
     isHost = event['hostMemberId'] == memberId;
-    _canSpeak = event['canSpeak'] as bool? ?? _canSpeak;
+    _policyCanSpeak = event['canSpeak'] as bool? ?? _policyCanSpeak;
+    if (!canSpeak) _pttPressed = false;
     _applyMembers(event['members']);
+    await _syncMicrophone();
+    await _syncBackgroundControls();
   }
 
   void _applyMembers(dynamic raw) {
@@ -1064,9 +1099,7 @@ class InternetRoomSession extends ChangeNotifier {
     if (_voiceMode == value || _closed || _roomEnded) return;
     _voiceMode = value;
     _pttPressed = false;
-    await _applyMicrophone(
-      value == VoiceMode.automatic && !_muted && _canSpeak,
-    );
+    await _syncMicrophone();
     await _syncBackgroundControls();
     notifyListeners();
   }
@@ -1113,13 +1146,13 @@ class InternetRoomSession extends ChangeNotifier {
     if (_voiceMode != VoiceMode.pushToTalk ||
         _closed ||
         _roomEnded ||
-        !_canSpeak ||
+        !canSpeak ||
         _muted) {
       pressed = false;
     }
     if (_pttPressed == pressed) return;
     _pttPressed = pressed;
-    await _applyMicrophone(pressed);
+    await _syncMicrophone();
     await _syncBackgroundControls();
     notifyListeners();
   }
@@ -1127,19 +1160,23 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> toggleMute() async {
     _muted = !_muted;
     if (_muted) _pttPressed = false;
-    await _applyMicrophone(
-      !_muted &&
-          _canSpeak &&
-          (_voiceMode == VoiceMode.automatic || _pttPressed),
-    );
+    await _syncMicrophone();
     await _syncBackgroundControls();
     notifyListeners();
   }
 
-  Future<void> _applyMicrophone(bool enabled) async {
-    await _livekitRoom?.localParticipant?.setMicrophoneEnabled(
-      enabled && _canSpeak && !_muted,
-    );
+  Future<void> _syncMicrophone() async {
+    if (_closed || _roomEnded) return;
+    final enabled =
+        canSpeak &&
+        !_muted &&
+        (_voiceMode == VoiceMode.automatic || _pttPressed);
+    final testMicrophone = _microphoneForTesting;
+    if (testMicrophone != null) {
+      await testMicrophone(enabled);
+    } else {
+      await _livekitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
+    }
     if (enabled) await _applyAudioBitrate();
   }
 
@@ -1241,7 +1278,7 @@ class InternetRoomSession extends ChangeNotifier {
     internet: true,
     automatic: _voiceMode == VoiceMode.automatic,
     pressed: _pttPressed,
-    muted: _muted || !_canSpeak,
+    muted: _muted || !canSpeak,
   );
 
   Future<void> renameRoom(String value) =>
@@ -1284,7 +1321,7 @@ class InternetRoomSession extends ChangeNotifier {
     } else {
       _setConnectionState(InternetConnectionState.disconnected);
     }
-    await _applyMicrophone(false);
+    await _livekitRoom?.localParticipant?.setMicrophoneEnabled(false);
     await _backgroundControls.close();
     final listener = _listener;
     _listener = null;

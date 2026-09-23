@@ -58,13 +58,16 @@ void main() {
     audio.emitEncodedFrame(Uint8List.fromList([6]), level: .2);
     expect(sent.where((f) => f.type == FrameType.audio).length, count);
     room.toggleMute();
+    audio.emitEncodedFrame(Uint8List.fromList([9]), level: .2);
+    expect(sent.where((f) => f.type == FrameType.audio).last.payload, [9]);
+    final resumedCount = sent.where((f) => f.type == FrameType.audio).length;
     room.setVoiceMode(VoiceMode.pushToTalk);
     audio.emitEncodedFrame(Uint8List.fromList([7]), level: .2);
-    expect(sent.where((f) => f.type == FrameType.audio).length, count);
+    expect(sent.where((f) => f.type == FrameType.audio).length, resumedCount);
     expect(audio.isRecording, isTrue);
     await room.leave();
     audio.emitEncodedFrame(Uint8List.fromList([8]), level: .2);
-    expect(sent.where((f) => f.type == FrameType.audio).length, count);
+    expect(sent.where((f) => f.type == FrameType.audio).length, resumedCount);
     expect(audio.isRecording, isFalse);
   });
 
@@ -94,6 +97,20 @@ void main() {
     audio.emitEncodedFrame(Uint8List.fromList([3]), level: .2);
     expect(sent.where((frame) => frame.type == FrameType.audio).last.payload, [
       3,
+    ]);
+    room.toggleMute();
+    final mutedCount = sent
+        .where((frame) => frame.type == FrameType.audio)
+        .length;
+    audio.emitEncodedFrame(Uint8List.fromList([4]), level: .2);
+    expect(
+      sent.where((frame) => frame.type == FrameType.audio).length,
+      mutedCount,
+    );
+    room.toggleMute();
+    audio.emitEncodedFrame(Uint8List.fromList([5]), level: .2);
+    expect(sent.where((frame) => frame.type == FrameType.audio).last.payload, [
+      5,
     ]);
   });
 

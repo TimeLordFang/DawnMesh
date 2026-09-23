@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0-beta.13\nDissolved rooms keep text and images readable until you choose to exit. Member chat has more space; server choices expand below the field, and audio quality opens above its button.'
-      : '1.0.0-beta.13\n房间解散后仍可查看图文消息，主动退出才离房；公网成员房扩大消息区域，服务器列表从选择框下方展开，音质选项在按钮上方弹出。';
+      ? '1.0.0\nRestoring a member’s speaking permission now resumes the microphone automatically in internet rooms. Wi-Fi and Bluetooth mute recovery has also been checked.'
+      : '1.0.0\n修复公网房解除成员闭麦后麦克风未自动恢复的问题，并检查了 Wi-Fi 与蓝牙房的静音恢复。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
