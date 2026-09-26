@@ -56,19 +56,32 @@ internal class BoundedFrameWriter(
     fun send(bytes: ByteArray, realtime: Boolean = false): Boolean {
         if (!open.get()) return false
         if (realtime && shouldDropStaleRealtime()) {
-            // 可靠 L2CAP 会把旧数据完整补发。低延迟档只保留最新一帧待发
-            // 语音，Barrier 与控制帧不动；当前已经写入 socket 的帧无法撤回。
+            // Keep a short, continuous burst instead of replacing every queued
+            // frame: replacing fresh frames destroys coalescing and multi-speaker audio.
+            // Barriers and control frames are never expired.
             val iterator = jobs.iterator()
             while (iterator.hasNext()) {
                 val queued = iterator.next()
-                if (queued is Job.Frame && queued.realtime) {
+                if (queued is Job.Frame && isExpired(queued)) {
                     iterator.remove()
                     droppedRealtime.incrementAndGet()
                 }
             }
         }
-        if (jobs.offer(Job.Frame(bytes.copyOf(), realtime, nanoTimeProvider()))) return true
-        fail(IOException("Peer send queue full"))
+        val next = Job.Frame(bytes.copyOf(), realtime, nanoTimeProvider())
+        if (jobs.offer(next)) return true
+        // Congestion should discard queued audio before disconnecting a peer.
+        // This also reserves space for reliable controls when the voice queue is full.
+        val oldestAudio = jobs.firstOrNull { it is Job.Frame && it.realtime }
+        if (oldestAudio != null && jobs.remove(oldestAudio)) {
+            droppedRealtime.incrementAndGet()
+            if (jobs.offer(next)) return true
+        }
+        if (realtime) {
+            droppedRealtime.incrementAndGet()
+            return true
+        }
+        fail(IOException("Peer control queue full"))
         return false
     }
 

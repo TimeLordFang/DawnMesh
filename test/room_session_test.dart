@@ -767,9 +767,9 @@ void main() {
       session.handleIncomingFrame(joinFrame('失联者', token(0x11), seq: 1));
       expect(session.members.length, 2);
 
-      // 掉线恢复窗口为 10 分钟，超过后才释放名额。
+      // 掉线恢复窗口为 30 分钟，超过后才释放名额。
       session.members.firstWhere((m) => m.memberId == 2).lastActiveAt =
-          DateTime.now().subtract(const Duration(minutes: 10, seconds: 1));
+          DateTime.now().subtract(const Duration(minutes: 30, seconds: 1));
 
       sent.clear();
       session.pruneStaleMembers();

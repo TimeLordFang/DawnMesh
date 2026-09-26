@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.MacAddress
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
@@ -167,13 +168,11 @@ class WifiDirectPlugin(
     }
 
     private fun sendConnectionEvent(isConnected: Boolean, info: WifiP2pInfo?) {
-        val data = mapOf(
-            "type" to "connection",
-            "isConnected" to isConnected,
-            "isGroupOwner" to (info?.isGroupOwner ?: false),
-            "groupFormed" to (info?.groupFormed ?: false),
-            "groupOwnerAddress" to (info?.groupOwnerAddress?.hostAddress ?: ""),
-        )
+        val data = wifiConnectionState(
+            formed = info?.groupFormed == true && isConnected,
+            owner = info?.isGroupOwner ?: false,
+            address = info?.groupOwnerAddress?.hostAddress ?: "",
+        ) + ("type" to "connection")
         eventSink?.success(data)
     }
 
@@ -282,15 +281,20 @@ class WifiDirectPlugin(
                     result.error("BAD_CREDENTIALS", "缺少有效的房间邀请码凭据", null)
                     return
                 }
-                manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {
-                        createGroupInternal(config, result)
+                // A recovery probe must never tear down a healthy owner's group.
+                val p2pManager = manager
+                if (p2pManager == null || channel == null) {
+                    result.success(false)
+                } else {
+                    p2pManager.requestConnectionInfo(channel) { info ->
+                        currentConnectionInfo = info
+                        if (info?.groupFormed == true) {
+                            result.success(info.isGroupOwner)
+                        } else {
+                            createGroupInternal(config, result)
+                        }
                     }
-
-                    override fun onFailure(reason: Int) {
-                        createGroupInternal(config, result)
-                    }
-                }) ?: createGroupInternal(config, result)
+                }
             }
 
             "removeGroup" -> {
@@ -352,6 +356,7 @@ class WifiDirectPlugin(
                         // Known group credentials authorize the selected group
                         // without starting the legacy WPS invitation flow.
                         WifiP2pConfig.Builder()
+                            .setDeviceAddress(MacAddress.fromString(address))
                             .setNetworkName(networkName)
                             .setPassphrase(passphrase)
                             .enablePersistentMode(false)
@@ -393,14 +398,19 @@ class WifiDirectPlugin(
             }
 
             "getConnectionInfo" -> {
-                val info = currentConnectionInfo
-                result.success(
-                    mapOf(
-                        "isConnected" to (info != null && info.groupFormed),
-                        "isGroupOwner" to (info?.isGroupOwner ?: false),
-                        "groupOwnerAddress" to (info?.groupOwnerAddress?.hostAddress ?: ""),
-                    )
-                )
+                val p2pManager = manager
+                if (p2pManager == null || channel == null) {
+                    result.success(emptyMap<String, Any>())
+                } else {
+                    p2pManager.requestConnectionInfo(channel) { info ->
+                        currentConnectionInfo = info
+                        result.success(wifiConnectionState(
+                            formed = info?.groupFormed == true,
+                            owner = info?.isGroupOwner ?: false,
+                            address = info?.groupOwnerAddress?.hostAddress ?: "",
+                        ))
+                    }
+                }
             }
 
             else -> result.notImplemented()

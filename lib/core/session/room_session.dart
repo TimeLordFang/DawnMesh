@@ -50,9 +50,9 @@ class RoomSession {
   /// (senderId, seq) 有界去重队列容量
   static const int maxDeduplicationKeys = 512;
 
-  /// 房主为掉线成员保留 10 分钟名额和 sessionToken 身份。
+  /// 房主为掉线成员保留 30 分钟名额和 sessionToken 身份。
   /// 这样遮挡、锁屏省电或 Wi-Fi Direct 短暂掉组不会把成员踢出房间。
-  static const Duration _memberTimeout = Duration(minutes: 10);
+  static const Duration _memberTimeout = Duration(minutes: 30);
 
   /// 客户端允许至少 6 次心跳调度抖动；任意来自房主的合法帧都会续期。
   static const Duration _hostSilenceBeforeReconnect = Duration(seconds: 12);
@@ -415,6 +415,19 @@ class RoomSession {
             opened.type == FrameType.handshakeConfirm) {
           return;
         }
+        final relay = transport;
+        if (_isHost &&
+            relay is AuthenticatedRelayTransport &&
+            opened.type != FrameType.roster &&
+            opened.type != FrameType.hostHandover &&
+            opened.type != FrameType.hostAnnounce &&
+            opened.type != FrameType.chatSync &&
+            opened.type != FrameType.admission) {
+          (relay as AuthenticatedRelayTransport).relayAuthenticated(
+            frame,
+            realtime: opened.type == FrameType.audio,
+          );
+        }
         await _dispatchIncomingFrame(opened);
       } catch (e) {
         AppLog.error('RoomSession', '解封加密帧失败，可能为伪造或重放帧', e);
@@ -430,6 +443,7 @@ class RoomSession {
   }
 
   Future<void> _dispatchIncomingFrame(Frame frame) async {
+    if (_closed || _roomEnded || _state == RoomState.disconnected) return;
     if (secureCodec != null) {
       final hostCommand =
           frame.type == FrameType.roster ||
@@ -1040,7 +1054,7 @@ class RoomSession {
     });
   }
 
-  /// 房主清理超过 10 分钟没有合法帧的成员。恢复期内名额会保留，
+  /// 房主清理超过 30 分钟没有合法帧的成员。恢复期内名额会保留，
   /// 重连时使用 sessionToken 认领原成员号和加入顺序。
   ///
   /// 公开而非私有：心跳定时器周期调用，测试与诊断工具也需要手动触发。
@@ -1119,7 +1133,10 @@ class RoomSession {
       '第 ${_reconnectController.retryCount} 次尝试恢复链路，剩余 ${_reconnectController.remaining.inMinutes} 分钟',
     );
     if (!await reconnect()) return false;
-    if (_closed) return false;
+    if (_closed || _roomEnded || !_reconnectController.isReconnecting) {
+      await transport?.stop();
+      return false;
+    }
 
     // 物理链路恢复后重新 PAKE，避免沿用旧连接上的握手状态。房主仍持有
     // 同一个随机房间密钥，sessionToken 则让重连成员取回原来的身份。
@@ -1174,13 +1191,16 @@ class RoomSession {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _updateState(RoomState.reconnecting);
-    AppLog.warn('重连', '$reason；将在 10 分钟内自动恢复');
+    AppLog.warn('重连', '$reason；将在 30 分钟内自动恢复');
     _reconnectController.start();
   }
 
   Future<void> _finishReconnectWindow() async {
     if (_closed || _isHost) return;
-    AppLog.error('重连', '自动恢复已持续 10 分钟，房间连接未能恢复');
+    AppLog.error('重连', '自动恢复已持续 30 分钟，房间连接未能恢复');
+    _updateState(RoomState.disconnected);
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _audioStarted = false;
     isPttPressed = false;
     _voiceGate.reset();

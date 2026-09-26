@@ -103,6 +103,9 @@ flutter {
 }
 
 dependencies {
+    implementation(project(":flutter_webrtc"))
+    // Keep the processor ABI aligned with flutter_webrtc 1.6.0.
+    implementation("io.github.webrtc-sdk:android:144.7559.09")
     // Opus 编解码。纯 JVM 实现，不需要额外的 .so。
     // 版本与已发布的 Kotlin 版 alpha.7 一致，保证两版音频互通。
     implementation("io.github.jaredmdobson:concentus:1.0.2")

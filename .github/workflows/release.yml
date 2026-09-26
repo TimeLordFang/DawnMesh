@@ -132,6 +132,16 @@ jobs:
           flutter test --concurrency=1
           ./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug
 
+      - name: Test native voice enhancement
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S native -B /tmp/dawnmesh-native-test -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build /tmp/dawnmesh-native-test --parallel 2
+          ctest --test-dir /tmp/dawnmesh-native-test --output-on-failure
+
       - name: Build signed release APK
         run: flutter build apk --release
 
@@ -166,9 +176,14 @@ jobs:
           else
             release_flags=(
               --verify-tag
-              --generate-notes
               --title "DawnMesh ${{ steps.version.outputs.name }}"
             )
+            notes_file="docs/RELEASE_${{ steps.version.outputs.name }}.md"
+            if [[ -f "${notes_file}" ]]; then
+              release_flags+=(--notes-file "${notes_file}")
+            else
+              release_flags+=(--generate-notes)
+            fi
             if [[ "${{ steps.version.outputs.name }}" == *-* ]]; then
               release_flags+=(--prerelease)
             fi

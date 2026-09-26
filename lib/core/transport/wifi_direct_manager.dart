@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/services.dart';
+
 import '../diagnostics/app_log.dart';
 import 'wifi_direct_credentials.dart';
 
@@ -45,7 +47,10 @@ class WifiP2pConnectionInfo {
     return WifiP2pConnectionInfo(
       isConnected: (map['isConnected'] as bool?) ?? false,
       isGroupOwner: (map['isGroupOwner'] as bool?) ?? false,
-      groupFormed: (map['groupFormed'] as bool?) ?? false,
+      groupFormed:
+          (map['groupFormed'] as bool?) ??
+          (map['isConnected'] as bool?) ??
+          false,
       groupOwnerAddress: (map['groupOwnerAddress'] as String?) ?? '',
     );
   }

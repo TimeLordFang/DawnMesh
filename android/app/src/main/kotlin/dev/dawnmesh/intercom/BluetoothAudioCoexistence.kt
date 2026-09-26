@@ -18,8 +18,8 @@ internal enum class AudioTuningProfile(
     // 低延迟档以“现在听到”为第一目标：40ms 起播、最多保留 60ms 待播语音，
     // AudioTrack 只请求一帧，L2CAP 不等待合并。拥塞时直接跳到最新语音。
     LOW_LATENCY("low", 2, 8, 4, 3, 25, 2, 1, 0, 8_000),
-    BALANCED("balanced", 6, 24, 14, 24, 100, 2, 4, 50, 8_000),
-    STABLE("stable", 10, 32, 24, 32, 250, 3, 6, 60, 10_000),
+    BALANCED("balanced", 6, 24, 14, 24, 100, 2, 4, 50, 6_000),
+    STABLE("stable", 10, 32, 24, 32, 250, 3, 6, 60, 8_000),
     ;
 
     companion object {
@@ -107,8 +107,12 @@ internal data class AudioTuningParameters(
                 audioTrackBufferFrames = profile.audioTrackBufferFrames,
                 l2capCoalesceMillis = profile.l2capCoalesceMillis,
                 headsetBitrate = profile.headsetBitrate,
-                dropStaleRealtime = profile == AudioTuningProfile.LOW_LATENCY,
-                maxRealtimeAgeMillis = 60,
+                dropStaleRealtime = true,
+                maxRealtimeAgeMillis = when (profile) {
+                    AudioTuningProfile.LOW_LATENCY -> 60
+                    AudioTuningProfile.BALANCED -> 180
+                    AudioTuningProfile.STABLE -> 260
+                },
                 // 测量版默认保持 dev.19 行为，调试页可即时关闭以做 A/B 对照。
                 flushEveryWrite = true,
             )

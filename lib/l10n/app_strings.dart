@@ -29,8 +29,8 @@ class AppStrings {
       : '用 Wi-Fi、热点或设备直连，开口就能聊，也能发消息';
   String get bluetoothRoom => isEn ? 'Bluetooth room' : '蓝牙房间';
   String get bluetoothDescription => isEn
-      ? 'Connect over Bluetooth with push-to-talk or automatic voice and messages'
-      : '用蓝牙连接，可选按住对讲或自动通话，也能发消息';
+      ? 'Bluetooth voice and messages. With Bluetooth headsets, prefer a Wi-Fi room.'
+      : '用蓝牙对讲和发消息；同时戴蓝牙耳机时，建议优先用 Wi-Fi 房间';
   String get fullDuplex => isEn ? 'Talk freely' : '自由交谈';
   String get pttMode => isEn ? 'Hold to talk' : '按住说话';
 
@@ -182,8 +182,8 @@ class AppStrings {
       isEn ? '$count people here' : '$count 人在这里';
   String get roomConnected => isEn ? 'Connected' : '已连接';
   String get roomReconnecting => isEn
-      ? 'Reconnecting automatically · up to 10 min'
-      : '连接中断 · 自动恢复中（最长 10 分钟）';
+      ? 'Reconnecting automatically · up to 30 min'
+      : '连接中断 · 自动恢复中（最长 30 分钟）';
   String get roomDisconnected =>
       isEn ? 'Could not restore the room connection' : '房间连接暂未恢复';
   String get activeRoomKept =>
@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.0\nRestoring a member’s speaking permission now resumes the microphone automatically in internet rooms. Wi-Fi and Bluetooth mute recovery has also been checked.'
-      : '1.0.0\n修复公网房解除成员闭麦后麦克风未自动恢复的问题，并检查了 Wi-Fi 与蓝牙房的静音恢复。';
+      ? '1.0.1\nAdded offline microphone noise reduction (Off / Standard / Strong) to all three room types. Fixed Wi-Fi Direct group recovery, improved Bluetooth voice queues, and extended reconnection to 30 minutes. New rooms use editable 4-digit codes; legacy 6-digit codes remain supported. Internet retention requires the updated server.'
+      : '1.0.1\n三种房间新增关闭／标准／强力三档本地人声降噪，可在房内随时切换。修复 Wi-Fi Direct 群组误重建，优化蓝牙语音队列，自动重连延长至 30 分钟。新房间默认 4 位邀请码，可随机生成或手动设置，兼容旧版 6 位。公网半小时保留需升级服务端。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

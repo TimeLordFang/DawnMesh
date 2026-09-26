@@ -18,6 +18,8 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import dev.dawnmesh.intercom.audio.VoiceDenoiser
+import dev.dawnmesh.intercom.audio.VoiceNoiseReduction
 import dev.dawnmesh.intercom.audio.JitterBuffer
 import dev.dawnmesh.intercom.audio.OpusCodec
 import dev.dawnmesh.intercom.audio.PollResult
@@ -82,6 +84,7 @@ class PlatformAudioPlugin(
         val codec = OpusCodec()
     }
 
+    private val voiceNoiseReduction = VoiceNoiseReduction(context)
     private val methodChannel = MethodChannel(messenger, METHOD_CHANNEL)
     private val eventChannel = EventChannel(messenger, EVENT_CHANNEL)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -142,6 +145,7 @@ class PlatformAudioPlugin(
     }
 
     fun dispose() {
+        voiceNoiseReduction.close()
         stopCapture()
         stopPlayback()
         methodChannel.setMethodCallHandler(null)
@@ -162,6 +166,24 @@ class PlatformAudioPlugin(
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "getNoiseReduction" -> result.success(voiceNoiseReduction.level)
+            "setNoiseReduction" -> {
+                val level = call.argument<Int>("level")
+                if (level == null || level !in 0..2) {
+                    result.error("INVALID_LEVEL", "降噪等级无效", null)
+                } else {
+                    voiceNoiseReduction.setLevel(level)
+                    result.success(true)
+                }
+            }
+            "startInternetNoiseReduction" -> {
+                if (voiceNoiseReduction.startInternet()) result.success(true)
+                else result.error("AUDIO_NOT_READY", "网络音频处理尚未就绪", null)
+            }
+            "stopInternetNoiseReduction" -> {
+                voiceNoiseReduction.stopInternet()
+                result.success(true)
+            }
             "startCapture" -> {
                 if (!hasMicPermission()) {
                     result.error(
@@ -404,80 +426,83 @@ class PlatformAudioPlugin(
         var consecutiveErrors = 0
         var offset = 0
 
-        while (capturing.get()) {
-            val read = try {
-                record.read(pcm, offset, SAMPLES_PER_FRAME - offset)
-            } catch (e: Exception) {
-                Log.e(TAG, "读取麦克风数据失败", e)
-                -1
-            }
-
-            if (read < 0) {
-                consecutiveErrors++
-                Log.w(TAG, "AudioRecord.read 返回 $read (连续 $consecutiveErrors 次)")
-                if (consecutiveErrors > 50) {
-                    Log.e(TAG, "AudioRecord 连续错误超过阈值，采集中止")
-                    capturing.set(false)
-                    break
+        VoiceDenoiser(SAMPLE_RATE).use { denoiser ->
+            while (capturing.get()) {
+                val read = try {
+                    record.read(pcm, offset, SAMPLES_PER_FRAME - offset)
+                } catch (e: Exception) {
+                    Log.e(TAG, "读取麦克风数据失败", e)
+                    -1
                 }
-                try { Thread.sleep(20) } catch (_: InterruptedException) {}
-                continue
-            }
 
-            if (read == 0) {
-                try { Thread.sleep(5) } catch (_: InterruptedException) {}
-                continue
-            }
+                if (read < 0) {
+                    consecutiveErrors++
+                    Log.w(TAG, "AudioRecord.read 返回 $read (连续 $consecutiveErrors 次)")
+                    if (consecutiveErrors > 50) {
+                        Log.e(TAG, "AudioRecord 连续错误超过阈值，采集中止")
+                        capturing.set(false)
+                        break
+                    }
+                    try { Thread.sleep(20) } catch (_: InterruptedException) {}
+                    continue
+                }
 
-            consecutiveErrors = 0
-            offset += read
+                if (read == 0) {
+                    try { Thread.sleep(5) } catch (_: InterruptedException) {}
+                    continue
+                }
 
-            if (offset < SAMPLES_PER_FRAME) {
-                // 仅读取部分采样点，继续补齐到整帧
-                continue
-            }
+                consecutiveErrors = 0
+                offset += read
 
-            // 读满一整帧（320 采样点 / 20ms）
-            offset = 0
+                if (offset < SAMPLES_PER_FRAME) {
+                    // 仅读取部分采样点，继续补齐到整帧
+                    continue
+                }
 
-            val capturedNanos = System.nanoTime()
-            if (lastCapturedNanos != 0L) {
-                captureGapUs.add((capturedNanos - lastCapturedNanos) / 1_000)
-            }
-            lastCapturedNanos = capturedNanos
+                // 读满一整帧（320 采样点 / 20ms）
+                offset = 0
 
-            if (muted.get()) continue
+                val capturedNanos = System.nanoTime()
+                if (lastCapturedNanos != 0L) {
+                    captureGapUs.add((capturedNanos - lastCapturedNanos) / 1_000)
+                }
+                lastCapturedNanos = capturedNanos
 
-            val encodeStart = System.nanoTime()
-            val level = rms(pcm)
-            val packet = try {
-                uplinkCodec?.encode(pcm) ?: continue
-            } catch (e: Exception) {
-                Log.e(TAG, "Opus 编码失败", e)
-                continue
-            }
+                if (muted.get()) continue
 
-            val encodeDuration = System.nanoTime() - encodeStart
-            encodeUs.add(encodeDuration / 1_000)
-            if (encodeDuration > 20_000_000) slowEncodes++
-            if (System.nanoTime() - lastReport > 10_000_000_000L) {
-                if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
-                Log.d(
-                    TAG,
-                    "采集管线统计：captureGap[${captureGapUs.summary()}]," +
-                        "encode[${encodeUs.summary()}],eventDispatch[${captureEventDispatchUs.summary()}]," +
-                        "eventCall[${eventChannelCallUs.summary()}]",
-                )
-                slowEncodes = 0
-                lastReport = System.nanoTime()
-            }
-            val event = mapOf<String, Any>("data" to packet, "level" to level)
-            val dispatchStarted = System.nanoTime()
-            mainHandler.post {
-                captureEventDispatchUs.add((System.nanoTime() - dispatchStarted) / 1_000)
-                val callStarted = System.nanoTime()
-                eventSink?.success(event)
-                eventChannelCallUs.add((System.nanoTime() - callStarted) / 1_000)
+                val encodeStart = System.nanoTime()
+                denoiser.process(pcm, voiceNoiseReduction.level)
+                val level = rms(pcm)
+                val packet = try {
+                    uplinkCodec?.encode(pcm) ?: continue
+                } catch (e: Exception) {
+                    Log.e(TAG, "Opus 编码失败", e)
+                    continue
+                }
+
+                val encodeDuration = System.nanoTime() - encodeStart
+                encodeUs.add(encodeDuration / 1_000)
+                if (encodeDuration > 20_000_000) slowEncodes++
+                if (System.nanoTime() - lastReport > 10_000_000_000L) {
+                    if (slowEncodes > 0) Log.w(TAG, "过去10秒编码超过20ms的帧数=$slowEncodes")
+                    Log.d(
+                        TAG,
+                        "采集管线统计：captureGap[${captureGapUs.summary()}]," +
+                            "encode[${encodeUs.summary()}],eventDispatch[${captureEventDispatchUs.summary()}]," +
+                            "eventCall[${eventChannelCallUs.summary()}]",
+                    )
+                    slowEncodes = 0
+                    lastReport = System.nanoTime()
+                }
+                val event = mapOf<String, Any>("data" to packet, "level" to level)
+                val dispatchStarted = System.nanoTime()
+                mainHandler.post {
+                    captureEventDispatchUs.add((System.nanoTime() - dispatchStarted) / 1_000)
+                    val callStarted = System.nanoTime()
+                    eventSink?.success(event)
+                    eventChannelCallUs.add((System.nanoTime() - callStarted) / 1_000)
+                }
             }
         }
     }

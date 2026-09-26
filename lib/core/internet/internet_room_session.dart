@@ -1,6 +1,9 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
+
+import '../audio/noise_reduction.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -117,6 +120,9 @@ class InternetRoomSession extends ChangeNotifier {
   Timer? _eventReconnectTimer;
   Future<InternetConnectionGrant>? _resumeFuture;
   DateTime? _reconnectStartedAt;
+  DateTime? _eventReconnectStartedAt;
+  bool _mediaReconnectPending = false;
+  bool _noiseReductionAttached = false;
   bool _closed = false;
   bool _roomEnded = false;
   bool _muted = false;
@@ -498,6 +504,8 @@ class InternetRoomSession extends ChangeNotifier {
       grant.livekitToken,
       connectOptions: const ConnectOptions(autoSubscribe: true),
     );
+    await NoiseReductionSettings.startInternet();
+    _noiseReductionAttached = true;
     _mediaCanPublish = room.localParticipant?.permissions.canPublish ?? true;
     _eventsSocket?.add(
       jsonEncode({'type': 'media_ready', 'memberId': memberId}),
@@ -518,6 +526,11 @@ class InternetRoomSession extends ChangeNotifier {
     await _eventSubscription?.cancel();
     await _eventsSocket?.close();
     final socket = await _openSocket(profile, eventsUrl, resumeToken);
+    if (_closed || _roomEnded) {
+      await socket.close();
+      return;
+    }
+    _eventReconnectStartedAt = null;
     _eventsSocket = socket;
     _eventSubscription = socket.listen(
       _handleManagementEvent,
@@ -699,6 +712,12 @@ class InternetRoomSession extends ChangeNotifier {
 
   void _scheduleEventReconnect() {
     if (_closed || _roomEnded || _eventReconnectTimer != null) return;
+    _eventReconnectStartedAt ??= DateTime.now();
+    if (DateTime.now().difference(_eventReconnectStartedAt!) >=
+        const Duration(minutes: 30)) {
+      _setConnectionState(InternetConnectionState.disconnected);
+      return;
+    }
     _eventReconnectTimer = Timer(const Duration(seconds: 2), () async {
       _eventReconnectTimer = null;
       if (_closed || _roomEnded) return;
@@ -713,30 +732,38 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   void _beginFullReconnect(String reason) {
-    if (_closed || _roomEnded) return;
+    if (_closed || _roomEnded || _mediaReconnectPending) return;
     _reconnectStartedAt ??= DateTime.now();
     if (DateTime.now().difference(_reconnectStartedAt!) >=
-        const Duration(minutes: 10)) {
+        const Duration(minutes: 30)) {
       _setConnectionState(InternetConnectionState.disconnected);
       return;
     }
     _setConnectionState(InternetConnectionState.reconnecting);
     AppLog.warn('DawnInternet', '媒体连接中断：$reason；尝试恢复');
+    _mediaReconnectPending = true;
     Future<void>.delayed(const Duration(seconds: 2), () async {
-      if (_closed || _connectionState != InternetConnectionState.reconnecting) {
+      if (_closed ||
+          _roomEnded ||
+          _connectionState != InternetConnectionState.reconnecting) {
+        _mediaReconnectPending = false;
         return;
       }
       try {
         final grant = await _resume();
+        if (_closed || _roomEnded) return;
         await _listener?.dispose();
         await _livekitRoom?.dispose();
         await _connectLiveKit(grant);
         _reconnectStartedAt = null;
       } catch (error) {
-        if (!_closed) {
+        _mediaReconnectPending = false;
+        if (!_closed && !_roomEnded) {
           _beginFullReconnect('$error');
         }
+        return;
       }
+      _mediaReconnectPending = false;
     });
   }
 
@@ -1311,6 +1338,12 @@ class InternetRoomSession extends ChangeNotifier {
     await _finishEndedRoom();
   }
 
+  Future<void> _stopNoiseReduction() async {
+    if (!_noiseReductionAttached) return;
+    _noiseReductionAttached = false;
+    await NoiseReductionSettings.stopInternet();
+  }
+
   Future<void> _finishEndedRoom() async {
     if (_closed || _roomEnded) return;
     _roomEnded = true;
@@ -1330,6 +1363,7 @@ class InternetRoomSession extends ChangeNotifier {
     _livekitRoom = null;
     await room?.disconnect();
     await room?.dispose();
+    await _stopNoiseReduction();
     final subscription = _eventSubscription;
     _eventSubscription = null;
     await subscription?.cancel();
@@ -1350,6 +1384,7 @@ class InternetRoomSession extends ChangeNotifier {
     await _listener?.dispose();
     await _livekitRoom?.disconnect();
     await _livekitRoom?.dispose();
+    await _stopNoiseReduction();
     await AudioManager.instance.setAudioSessionManagementMode(
       AudioSessionManagementMode.automatic,
     );

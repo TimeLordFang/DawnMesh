@@ -79,3 +79,8 @@ abstract class RoomTransport {
   /// 断开并释放全部资源，之后不可再用。
   Future<void> dispose();
 }
+
+/// Optional host relay: authenticate/decrypt before assigning local queue priority.
+abstract interface class AuthenticatedRelayTransport {
+  void relayAuthenticated(Frame sealed, {required bool realtime});
+}

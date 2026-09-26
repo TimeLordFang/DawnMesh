@@ -115,6 +115,8 @@ void main() {
     // createRoom 里有真实的 socket 绑定，得让真事件循环跑一轮。
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
+      await tester.pump();
+      await tester.tap(find.text('创建房间'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);
@@ -135,7 +137,7 @@ void main() {
     final inviteRow = find.byType(RoomInviteRow);
     expect(inviteRow, findsOneWidget);
     final code = tester.widget<RoomInviteRow>(inviteRow).code;
-    expect(RegExp(r'^\d{6}$').hasMatch(code), isTrue);
+    expect(RegExp(r'^\d{4}$').hasMatch(code), isTrue);
     expect(find.text(code), findsOneWidget);
     expect(
       tester.getTopLeft(inviteRow).dy,
@@ -199,6 +201,8 @@ void main() {
 
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
+      await tester.pump();
+      await tester.tap(find.text('创建房间'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);
@@ -236,6 +240,8 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
+      await tester.pump();
+      await tester.tap(find.text('创建房间'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);

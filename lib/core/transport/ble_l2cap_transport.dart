@@ -42,9 +42,9 @@ class DiscoveredBleRoom {
 /// 厂商数据发布，客户端扫描时读取。这个类原先有一个 `defaultPsm = 0x1001`
 /// 的常量，用它永远连不上。
 ///
-/// 星型拓扑的帧转发在原生侧完成（房主把一个成员的帧转给其余成员），
-/// 这里只负责收发。
-class BleL2capTransport implements RoomTransport {
+/// 星型拓扑由房主转发：加密帧经会话认证后回到原生发送队列，
+/// 保留语音实时标记；旧未加密控制帧仍由原生中继。
+class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
   static const MethodChannel _channel = MethodChannel(
     'dev.dawnmesh.intercom/ble_l2cap',
   );
@@ -68,6 +68,7 @@ class BleL2capTransport implements RoomTransport {
   bool _stopping = false;
 
   bool _sendErrorReported = false;
+  final _frameSources = Expando<String>('BLE frame source');
 
   final Map<String, DiscoveredBleRoom> _rooms = {};
   final StreamController<Frame> _incoming = StreamController<Frame>.broadcast();
@@ -134,6 +135,7 @@ class BleL2capTransport implements RoomTransport {
       final ok = await _channel.invokeMethod<bool>('startAdvertising', {
         'roomName': roomName,
         'memberCount': memberCount,
+        'authenticatedRelay': true,
       });
       if (ok != true) {
         AppLog.error(_tag, '蓝牙房广播未能开启，其他人搜不到这个房间');
@@ -302,6 +304,24 @@ class BleL2capTransport implements RoomTransport {
   // ------------------------------------------------------------ RoomTransport
 
   @override
+  void relayAuthenticated(Frame sealed, {required bool realtime}) {
+    final source = _frameSources[sealed];
+    if (!isHost || source == null) return;
+    unawaited(
+      _channel
+          .invokeMethod<bool>('sendL2capData', {
+            'data': sealed.encode(),
+            'realtime': realtime,
+            'excludeAddress': source,
+          })
+          .catchError((Object error) {
+            AppLog.warn(_tag, '转发蓝牙帧失败', error);
+            return false;
+          }),
+    );
+  }
+
+  @override
   void send(Frame frame, {bool realtime = false}) {
     if (_role == BleRole.idle) {
       AppLog.warn(_tag, '蓝牙通道未建立，${frame.type.name} 帧没有发出去');
@@ -457,6 +477,7 @@ class BleL2capTransport implements RoomTransport {
         AppLog.warn(_tag, '收到无法解析的蓝牙帧（${data.length} 字节），来自 $peerAddress');
         return;
       }
+      _frameSources[frame] = peerAddress;
       if (!_incoming.isClosed) _incoming.add(frame);
     }, onError: (Object e) => AppLog.error(_tag, '蓝牙数据通道中断', e));
   }

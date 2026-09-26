@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/session/room_session.dart';
 import '../theme/app_theme.dart';
+import 'noise_reduction_control.dart';
 
 /// 房内发言方式切换器。
 ///
@@ -25,118 +26,128 @@ class VoiceModeSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final automatic = value == VoiceMode.automatic;
-    final primary =
-        isNight ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final secondary =
-        isNight ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-    final surface =
-        isNight
-            ? AppTheme.darkCardBg.withValues(alpha: 0.86)
-            : AppTheme.lightCardBg.withValues(alpha: 0.90);
+    final primary = isNight
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final secondary = isNight
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final surface = isNight
+        ? AppTheme.darkCardBg.withValues(alpha: 0.86)
+        : AppTheme.lightCardBg.withValues(alpha: 0.90);
 
-    return Semantics(
-      container: true,
-      label: '发言模式',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 390),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final textScale = MediaQuery.textScalerOf(context).scale(1);
-            final compact =
-                dense || constraints.maxWidth < 330 || textScale > 1.25;
-            final height = dense ? 46.0 : (compact ? 58.0 : 68.0);
-            final inset = dense ? 3.0 : 4.0;
-            final optionWidth = (constraints.maxWidth - inset * 2) / 2;
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            container: true,
+            label: '发言模式',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 390),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final compact =
+                      dense || constraints.maxWidth < 330 || textScale > 1.25;
+                  final height = dense ? 46.0 : (compact ? 58.0 : 68.0);
+                  final inset = dense ? 3.0 : 4.0;
+                  final optionWidth = (constraints.maxWidth - inset * 2) / 2;
 
-            return Container(
-              height: height,
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(dense ? 19 : 23),
-                border: Border.all(
-                  color:
-                      isNight
-                          ? Colors.white.withValues(alpha: 0.10)
-                          : AppTheme.dawnBurgundy.withValues(alpha: 0.12),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: isNight ? 0.18 : 0.07,
-                    ),
-                    blurRadius: 18,
-                    offset: const Offset(0, 7),
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 260),
-                    curve: Curves.easeOutCubic,
-                    left: inset + (automatic ? optionWidth : 0),
-                    top: inset,
-                    bottom: inset,
-                    width: optionWidth,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOutCubic,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: _selectedGradient(automatic),
-                        ),
-                        borderRadius: BorderRadius.circular(dense ? 16 : 19),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent(automatic).withValues(alpha: 0.28),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                  return Container(
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(dense ? 19 : 23),
+                      border: Border.all(
+                        color: isNight
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : AppTheme.dawnBurgundy.withValues(alpha: 0.12),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isNight ? 0.18 : 0.07,
                           ),
-                        ],
-                      ),
+                          blurRadius: 18,
+                          offset: const Offset(0, 7),
+                        ),
+                      ],
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ModeOption(
-                          title: '按住对讲',
-                          hint: '按住发送',
-                          icon: Icons.touch_app_rounded,
-                          selected: !automatic,
-                          compact: compact,
-                          primary: primary,
-                          secondary: secondary,
-                          selectedForeground: Colors.white,
-                          onTap: () => _select(VoiceMode.pushToTalk),
+                    child: Stack(
+                      children: [
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          left: inset + (automatic ? optionWidth : 0),
+                          top: inset,
+                          bottom: inset,
+                          width: optionWidth,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: _selectedGradient(automatic),
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                dense ? 16 : 19,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _accent(automatic)
+                                      .withValues(alpha: 0.28),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: _ModeOption(
-                          title: '自动通话',
-                          hint: '声音触发',
-                          icon: Icons.graphic_eq_rounded,
-                          selected: automatic,
-                          compact: compact,
-                          primary: primary,
-                          secondary: secondary,
-                          selectedForeground:
-                              isNight
-                                  ? Colors.white
-                                  : AppTheme.lightTextPrimary,
-                          onTap: () => _select(VoiceMode.automatic),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ModeOption(
+                                title: '按住对讲',
+                                hint: '按住发送',
+                                icon: Icons.touch_app_rounded,
+                                selected: !automatic,
+                                compact: compact,
+                                primary: primary,
+                                secondary: secondary,
+                                selectedForeground: Colors.white,
+                                onTap: () => _select(VoiceMode.pushToTalk),
+                              ),
+                            ),
+                            Expanded(
+                              child: _ModeOption(
+                                title: '自动通话',
+                                hint: '声音触发',
+                                icon: Icons.graphic_eq_rounded,
+                                selected: automatic,
+                                compact: compact,
+                                primary: primary,
+                                secondary: secondary,
+                                selectedForeground: isNight
+                                    ? Colors.white
+                                    : AppTheme.lightTextPrimary,
+                                onTap: () => _select(VoiceMode.automatic),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ),
         ),
-      ),
+        const SizedBox(width: 6),
+        NoiseReductionControl(isNight: isNight),
+      ],
     );
   }
 
@@ -238,10 +249,9 @@ class _ModeOption extends StatelessWidget {
                           hint,
                           maxLines: 1,
                           style: TextStyle(
-                            color:
-                                selected
-                                    ? selectedForeground.withValues(alpha: 0.78)
-                                    : secondary,
+                            color: selected
+                                ? selectedForeground.withValues(alpha: 0.78)
+                                : secondary,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),

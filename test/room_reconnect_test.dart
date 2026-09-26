@@ -6,28 +6,74 @@ import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/roster.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/core/security/session_crypto.dart';
+import 'package:dawn_mesh/core/security/session_handshake.dart';
 import 'package:dawn_mesh/core/transport/room_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('transport is told that audio may be dropped while control stays reliable', () async {
+  test('host relays authenticated ciphertext with audio priority, rejects replay and host commands', () async {
     final transport = _FakeTransport();
-    final session = RoomSession(audioIo: MockAudioIo(), selfNickname: '实时成员');
+    final session = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Host');
     session.attachTransport(transport, reconnect: () async => false);
-    addTearDown(() async {
-      await session.dispose();
-      await transport.dispose();
-    });
-
-    await session.sendFrame(
-      Frame(type: FrameType.audio, senderId: 1, seq: 1, payload: Uint8List(8)),
+    await session.createRoom(startAudio: false);
+    session.secureCodec = SecureFrameCodec(
+      await SessionCipher.fromKey(Uint8List(32)),
     );
-    await session.sendFrame(
-      Frame(type: FrameType.heartbeat, senderId: 1, seq: 2, payload: Uint8List(0)),
+    final sender = SecureFrameCodec(await SessionCipher.fromKey(Uint8List(32)));
+    addTearDown(session.dispose);
+    final voice = await sender.seal(
+      Frame(type: FrameType.audio, senderId: 2, seq: 1, payload: Uint8List(8)),
     );
-
-    expect(transport.sentRealtime, [true, false]);
+    await session.handleIncomingFrame(voice);
+    await session.handleIncomingFrame(voice); // replay must not be forwarded
+    await session.handleIncomingFrame(
+      await sender.seal(
+        Frame(
+          type: FrameType.heartbeat,
+          senderId: 2,
+          seq: 2,
+          payload: Uint8List(0),
+        ),
+      ),
+    );
+    await session.handleIncomingFrame(await sender.seal(_roster()));
+    expect(transport.relayedRealtime, [true, false]);
+    expect(transport.relayed.first, same(voice));
+    expect(transport.relayed.every((f) => f.type == FrameType.sealed), isTrue);
   });
+
+  test(
+    'transport is told that audio may be dropped while control stays reliable',
+    () async {
+      final transport = _FakeTransport();
+      final session = RoomSession(audioIo: MockAudioIo(), selfNickname: '实时成员');
+      session.attachTransport(transport, reconnect: () async => false);
+      addTearDown(() async {
+        await session.dispose();
+        await transport.dispose();
+      });
+
+      await session.sendFrame(
+        Frame(
+          type: FrameType.audio,
+          senderId: 1,
+          seq: 1,
+          payload: Uint8List(8),
+        ),
+      );
+      await session.sendFrame(
+        Frame(
+          type: FrameType.heartbeat,
+          senderId: 1,
+          seq: 2,
+          payload: Uint8List(0),
+        ),
+      );
+
+      expect(transport.sentRealtime, [true, false]);
+    },
+  );
 
   test(
     'a physical disconnect rebuilds the link and rejoins the room',
@@ -80,14 +126,13 @@ Frame _roster() => Frame(
   type: FrameType.roster,
   senderId: 1,
   seq: 1,
-  payload:
-      RosterPayload(
-        hostId: 1,
-        members: [
-          RosterMember(memberId: 1, flags: 1, nickname: '房主'),
-          RosterMember(memberId: 2, flags: 0, nickname: '重连成员'),
-        ],
-      ).encode(),
+  payload: RosterPayload(
+    hostId: 1,
+    members: [
+      RosterMember(memberId: 1, flags: 1, nickname: '房主'),
+      RosterMember(memberId: 2, flags: 0, nickname: '重连成员'),
+    ],
+  ).encode(),
 );
 
 Future<void> _until(
@@ -103,7 +148,15 @@ Future<void> _until(
   }
 }
 
-class _FakeTransport implements RoomTransport {
+class _FakeTransport implements RoomTransport, AuthenticatedRelayTransport {
+  final relayed = <Frame>[];
+  final relayedRealtime = <bool>[];
+  @override
+  void relayAuthenticated(Frame sealed, {required bool realtime}) {
+    relayed.add(sealed);
+    relayedRealtime.add(realtime);
+  }
+
   final _incoming = StreamController<Frame>.broadcast(sync: true);
   final _disconnections = StreamController<TransportDisconnection>.broadcast(
     sync: true,

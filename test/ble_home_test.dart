@@ -146,6 +146,8 @@ void main() {
     await showHome(tester);
     await tester.tap(find.text('Create Bluetooth room'));
     await tester.pump();
+    await tester.tap(find.text('创建房间'));
+    await tester.pump();
     await pumpUntil(
       tester,
       () => find.textContaining('蓝牙广播未能开启').evaluate().isNotEmpty,

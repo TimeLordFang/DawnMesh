@@ -356,14 +356,13 @@ class _HomeContentState extends State<HomeContent> {
           AppLog.info('WiFiDirect', '房主群组已自动恢复');
           _wifiDirectRecoveryStartedAt = null;
         }
-        await manager.discoverPeers();
         return;
       }
 
       final now = DateTime.now();
       final startedAt = _wifiDirectRecoveryStartedAt ??= now;
-      if (now.difference(startedAt) >= const Duration(minutes: 10)) {
-        AppLog.error('WiFiDirect', '房主群组在 10 分钟内未能恢复，已停止自动重建');
+      if (now.difference(startedAt) >= const Duration(minutes: 30)) {
+        AppLog.error('WiFiDirect', '房主群组在 30 分钟内未能恢复，已停止自动重建');
         _isHostingWifiDirect = false;
         return;
       }
@@ -1018,6 +1017,12 @@ class _HomeContentState extends State<HomeContent> {
   void _onCreateRoom() async {
     if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
+    final invite = await requestRoomInvite(context, creating: true);
+    if (!mounted) return;
+    if (invite == null) {
+      setState(() => _busy = false);
+      return;
+    }
     await _stopBleScanning();
     if (!mounted) return;
     FocusScope.of(context).unfocus();
@@ -1033,7 +1038,6 @@ class _HomeContentState extends State<HomeContent> {
       mode: _selectedMode,
     );
 
-    final invite = RoomInvite.generate();
     await session.protectWithInvite(invite);
     if (!mounted) {
       await session.dispose();

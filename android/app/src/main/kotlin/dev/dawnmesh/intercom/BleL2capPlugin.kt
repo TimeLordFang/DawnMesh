@@ -115,6 +115,7 @@ class BleL2capPlugin(
     private val peers = ConcurrentHashMap<String, PeerLink>()
 
     private var isHost = false
+    @Volatile private var authenticatedRelay = false
     private var scanning = false
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
@@ -201,6 +202,7 @@ class BleL2capPlugin(
                 val roomName = call.argument<String>("roomName") ?: "蓝牙房"
                 val memberCount = call.argument<Int>("memberCount") ?: 1
                 startAdvertising(roomName, memberCount, result)
+                authenticatedRelay = call.argument<Boolean>("authenticatedRelay") ?: false
             }
 
             "updateMemberCount" -> {
@@ -248,7 +250,7 @@ class BleL2capPlugin(
                     result.error("BAD_ARGS", "sendL2capData 缺少 data", null)
                     return
                 }
-                result.success(sendData(data, excludeAddress = null, realtime = realtime))
+                result.success(sendData(data, excludeAddress = call.argument<String>("excludeAddress"), realtime = realtime))
             }
 
             "flush" -> {
@@ -455,7 +457,7 @@ class BleL2capPlugin(
                 break
             }
 
-            if (peers.size >= MAX_PEERS) {
+            if (peers.size >= MAX_PEERS && !peers.containsKey(socket.remoteDevice?.address)) {
                 Log.w(TAG, "蓝牙房已满，拒绝 ${socket.remoteDevice?.address}")
                 try {
                     socket.close()
@@ -852,7 +854,7 @@ class BleL2capPlugin(
     private fun registerPeer(socket: BluetoothSocket): PeerLink {
         val address = socket.remoteDevice?.address ?: "unknown"
         val link = PeerLink(socket, address)
-        peers[address] = link
+        peers.put(address, link)?.close("replaced_by_reconnect")
         Log.i(TAG, "蓝牙链路建立：$address，maxTx=${socket.maxTransmitPacketSize}，maxRx=${socket.maxReceivePacketSize}")
         link.startDiagnostics()
 
@@ -903,7 +905,11 @@ class BleL2capPlugin(
                 if (isHost && type in listOf(0x03, 0x07, 0x08, 0x0d)) continue
 
                 // 房主负责把一个成员的帧转给其他成员（星型拓扑，与 WiFi 房一致）。
-                if (isHost) sendData(full, excludeAddress = link.address)
+                // SEALED frames are classified by Dart after AES authentication.
+                // This keeps voice droppable even on the host -> client relay hop.
+                if (isHost && !(authenticatedRelay && type == 0x0b)) {
+                    sendData(full, excludeAddress = link.address, realtime = type == 0x01)
+                }
 
                 val event = mapOf<String, Any>(
                     "type" to "frame",

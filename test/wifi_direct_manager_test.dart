@@ -51,6 +51,14 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  test('legacy native state cannot cause healthy groups to be rebuilt', () {
+    final info = WifiP2pConnectionInfo.fromMap({
+      'isConnected': true,
+      'isGroupOwner': true,
+    });
+    expect(info.groupFormed, isTrue);
+  });
+
   group('WifiP2pPeer & WifiP2pConnectionInfo Model Tests', () {
     test('WifiP2pPeer.fromMap parses standard map properly', () {
       final map = {
@@ -125,6 +133,7 @@ void main() {
       final info = await manager.getConnectionInfo();
       expect(info.isConnected, isTrue);
       expect(info.isGroupOwner, isTrue);
+      expect(info.groupFormed, isTrue);
       expect(info.groupOwnerAddress, '192.168.49.1');
     });
 

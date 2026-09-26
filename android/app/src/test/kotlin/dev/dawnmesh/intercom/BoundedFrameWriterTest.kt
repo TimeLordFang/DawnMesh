@@ -36,6 +36,30 @@ class BoundedFrameWriterTest {
         } finally { writer.close() }
     }
 
+    @Test fun fullVoiceQueueMakesRoomForControlWithoutDisconnecting() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val written = java.util.Collections.synchronizedList(mutableListOf<Int>())
+        val writer = BoundedFrameWriter(capacity = 2, write = {
+            written.add(it[0].toInt())
+            if (it[0].toInt() == 1) { entered.countDown(); release.await() }
+        }, closeTransport = { release.countDown() }, onFailure = { throw AssertionError(it) })
+        try {
+            writer.send(byteArrayOf(1))
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            writer.send(byteArrayOf(2), realtime = true)
+            writer.send(byteArrayOf(3), realtime = true)
+            assertTrue(writer.send(byteArrayOf(9)))
+            release.countDown()
+            // Wait until there is room for the barrier without racing the worker.
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (writer.pendingJobs() > 0 && System.nanoTime() < deadline) Thread.yield()
+            writer.flush().get(2, TimeUnit.SECONDS)
+            assertEquals(listOf(1, 3, 9), written.toList())
+            assertEquals(1, writer.droppedRealtimeFrames())
+        } finally { writer.close() }
+    }
+
     @Test fun blockedWriteTimesOutAndRejectsPendingFlush() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -111,7 +135,7 @@ class BoundedFrameWriterTest {
         } finally { writer.close() }
     }
 
-    @Test fun aggressiveRealtimeQueueKeepsNewestAudioAndPreservesControl() {
+    @Test fun realtimeQueuePreservesFreshAudioAndControl() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val written = java.util.Collections.synchronizedList(mutableListOf<Int>())
@@ -136,8 +160,8 @@ class BoundedFrameWriterTest {
             release.countDown()
             writer.flush().get(2, TimeUnit.SECONDS)
 
-            assertEquals(listOf(1, 9, 3), written.toList())
-            assertEquals(1, writer.droppedRealtimeFrames())
+            assertEquals(listOf(1, 2, 9, 3), written.toList())
+            assertEquals(0, writer.droppedRealtimeFrames())
         } finally { writer.close() }
     }
 

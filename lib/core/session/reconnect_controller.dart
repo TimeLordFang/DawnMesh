@@ -19,6 +19,8 @@ class ReconnectController {
 
   int _retryCount = 0;
   Timer? _timer;
+  Timer? _deadlineTimer;
+  int _generation = 0;
   bool _isReconnecting = false;
   DateTime? _startedAt;
 
@@ -26,7 +28,7 @@ class ReconnectController {
     required this.onAttemptReconnect,
     required this.onMaxRetriesReached,
     this.delays = defaultDelays,
-    this.recoveryWindow = const Duration(minutes: 10),
+    this.recoveryWindow = const Duration(minutes: 30),
     DateTime Function()? now,
   }) : assert(delays.isNotEmpty),
        assert(recoveryWindow > Duration.zero),
@@ -47,6 +49,7 @@ class ReconnectController {
     _retryCount = 0;
     _isReconnecting = true;
     _startedAt = now();
+    _deadlineTimer = Timer(recoveryWindow, _finishFailed);
     _scheduleNext();
   }
 
@@ -62,11 +65,17 @@ class ReconnectController {
       _timer = Timer(remaining, _finishFailed);
       return;
     }
+    final generation = _generation;
     _timer = Timer(delay, () async {
       if (!_isReconnecting) return;
       _retryCount++;
-      final success = await onAttemptReconnect();
-      if (!_isReconnecting) return;
+      var success = false;
+      try {
+        success = await onAttemptReconnect();
+      } catch (_) {
+        // A transient platform/socket exception must not stop future retries.
+      }
+      if (!_isReconnecting || generation != _generation) return;
       if (success) {
         cancel();
       } else {
@@ -77,6 +86,9 @@ class ReconnectController {
 
   void _finishFailed() {
     if (!_isReconnecting) return;
+    _generation++;
+    _deadlineTimer?.cancel();
+    _deadlineTimer = null;
     _timer?.cancel();
     _timer = null;
     _isReconnecting = false;
@@ -86,6 +98,9 @@ class ReconnectController {
   }
 
   void cancel() {
+    _generation++;
+    _deadlineTimer?.cancel();
+    _deadlineTimer = null;
     _timer?.cancel();
     _timer = null;
     _isReconnecting = false;

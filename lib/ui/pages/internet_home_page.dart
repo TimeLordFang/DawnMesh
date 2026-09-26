@@ -244,7 +244,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
       ),
     );
     if (options == null) return;
-    final invite = RoomInvite.generate();
+    final invite = options.invite;
     final api = InternetRoomApi(profile);
     _showBusy('正在创建安全房间…');
     try {
@@ -711,11 +711,13 @@ class _CreateOptions {
     this.maxParticipants,
     this.hostTimeoutMinutes,
     this.allowAdminListening,
+    this.invite,
   );
   final String name;
   final int maxParticipants;
   final int hostTimeoutMinutes;
   final bool allowAdminListening;
+  final RoomInvite invite;
 }
 
 class _CreateRoomDialog extends StatefulWidget {
@@ -736,7 +738,8 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   late final _maximum = TextEditingController(
     text: min(25, widget.serverMaximum).toString(),
   );
-  final _timeout = TextEditingController(text: '10');
+  final _timeout = TextEditingController(text: '30');
+  final _invite = TextEditingController(text: RoomInvite.generate().code);
   String? _error;
   bool _allowAdminListening = false;
 
@@ -755,10 +758,30 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
       );
       return;
     }
-    Navigator.pop(
-      context,
-      _CreateOptions(_name.text.trim(), maximum, timeout, _allowAdminListening),
-    );
+    try {
+      final invite = RoomInvite.parse(_invite.text);
+      Navigator.pop(
+        context,
+        _CreateOptions(
+          _name.text.trim(),
+          maximum,
+          timeout,
+          _allowAdminListening,
+          invite,
+        ),
+      );
+    } on FormatException catch (error) {
+      setState(() => _error = error.message);
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _maximum.dispose();
+    _timeout.dispose();
+    _invite.dispose();
+    super.dispose();
   }
 
   @override
@@ -768,6 +791,21 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          TextField(
+            key: const ValueKey('create-room-invite-input'),
+            controller: _invite,
+            maxLength: 6,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: '4 位邀请码（兼容旧版 6 位）',
+              helperText: '可手动修改；有旧版成员时请设为 6 位。',
+              suffixIcon: IconButton(
+                tooltip: '随机生成',
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _invite.text = RoomInvite.generate().code,
+              ),
+            ),
+          ),
           TextField(
             controller: _name,
             maxLength: 80,
@@ -794,7 +832,7 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '房主断线期间保留身份，超时后由在线成员接任。全房无人在线仍在 10 分钟后回收。',
+            '默认保留房主身份 30 分钟，超时后由在线成员接任。半小时成员恢复与空房保留需服务端支持；旧服务端仍可能在 10 分钟后回收。',
             style: TextStyle(fontSize: 12),
           ),
           if (widget.adminListeningSupported) ...[

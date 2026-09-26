@@ -122,7 +122,7 @@ class SemVer implements Comparable<SemVer> {
 }
 
 class UpdateService {
-  static const String currentVersion = '1.0.0';
+  static const String currentVersion = '1.0.1';
   static const String releasesPage =
       'https://github.com/TimeLordFang/DawnMesh/releases';
   static const String _releasesApi =
