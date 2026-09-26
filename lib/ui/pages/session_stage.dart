@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/noise_reduction_control.dart';
 import '../../core/audio/audio_io.dart';
 import '../../core/internet/internet_room_session.dart';
 import '../../core/platform/platform_audio_channel.dart';
@@ -606,6 +607,8 @@ class _SessionStageState extends State<SessionStage>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!session.roomEnded)
+                const NoiseReductionControl(isNight: true),
               IconButton(
                 tooltip: s.tooltipDebugLogs,
                 iconSize: 28,

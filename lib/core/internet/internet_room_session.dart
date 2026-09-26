@@ -2,8 +2,6 @@
 
 import 'dart:async';
 
-import '../audio/noise_reduction.dart';
-
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -12,6 +10,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
 
+import '../audio/noise_reduction.dart';
 import '../diagnostics/app_log.dart';
 import '../platform/background_call_controls.dart';
 import '../protocol/payloads/chat_image.dart';
@@ -21,6 +20,7 @@ import '../security/spake2.dart';
 import '../session/room_session.dart' show VoiceMode;
 import 'internet_audio_profile.dart';
 import 'internet_models.dart';
+import 'presence_announcements.dart';
 import 'internet_room_api.dart';
 
 enum InternetConnectionState {
@@ -83,6 +83,7 @@ class InternetRoomSession extends ChangeNotifier {
     required InternetRoomSummary summary,
     this.isHost = false,
     Future<void> Function(bool enabled)? microphoneForTesting,
+    Future<void> Function(String kind, String name)? presenceForTesting,
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
@@ -93,6 +94,7 @@ class InternetRoomSession extends ChangeNotifier {
        // Public test seam keeps the named argument accessible across libraries.
        // ignore: prefer_initializing_formals
        _microphoneForTesting = microphoneForTesting {
+    _presenceForTesting = presenceForTesting;
     _summary = summary;
     _connectionState = InternetConnectionState.connected;
   }
@@ -137,6 +139,14 @@ class InternetRoomSession extends ChangeNotifier {
   InternetConnectionState _connectionState = InternetConnectionState.connecting;
   InternetRoomSummary? _summary;
   final List<InternetMember> _members = [];
+  final Map<String, InternetMember> _managementMembers = {};
+  bool _hasManagementRoster = false;
+  bool _managementRecovering = true;
+  Future<void> Function(String, String)? _presenceForTesting;
+  late final _presence = PresenceAnnouncements(
+    selfId: memberId,
+    speak: _presenceForTesting,
+  );
   final Map<String, int> _memberSortOrders = {};
   final Map<String, String> _profileNames = {};
   final List<InternetChatMessage> _messages = [];
@@ -540,6 +550,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> _handleManagementEvent(dynamic raw) async {
+    if (_closed || _roomEnded) return;
     try {
       final event = jsonDecode(raw as String) as Map<String, dynamic>;
       switch (event['type']) {
@@ -549,7 +560,17 @@ class InternetRoomSession extends ChangeNotifier {
           _summary = InternetRoomSummary.fromJson(
             event['room'] as Map<String, dynamic>,
           );
+          _presence.enabled = summary.presenceAnnouncementsEnabled;
           notifyListeners();
+        case 'member_left':
+          if (!_managementRecovering &&
+              _connectionState == InternetConnectionState.connected) {
+            _presence.memberLeft(
+              event['memberId'] as String? ?? '',
+              event['nickname'] as String? ?? '成员',
+              event['eventId'] as String? ?? '',
+            );
+          }
         case 'voice_policy':
           if (event['memberId'] == memberId) {
             _policyCanSpeak = event['canSpeak'] as bool? ?? false;
@@ -571,6 +592,26 @@ class InternetRoomSession extends ChangeNotifier {
     } catch (error, stack) {
       AppLog.error('DawnInternet', '管理事件处理失败：$error', stack);
     }
+  }
+
+  @visibleForTesting
+  Future<void> receiveManagementForTesting(Map<String, dynamic> event) =>
+      _handleManagementEvent(jsonEncode(event));
+
+  Future<void> setPresenceAnnouncements(bool enabled) async {
+    if (!isHost || _closed || _roomEnded) return;
+    if (!summary.presenceAnnouncementsSupported) {
+      throw StateError('请先将服务端升级到 0.2.4 或更新版本');
+    }
+    final updated = await api.setPresenceAnnouncements(
+      roomId,
+      enabled,
+      resumeToken,
+    );
+    if (_closed || _roomEnded) return;
+    _summary = updated;
+    _presence.enabled = updated.presenceAnnouncementsEnabled;
+    notifyListeners();
   }
 
   @visibleForTesting
@@ -609,6 +650,8 @@ class InternetRoomSession extends ChangeNotifier {
     if (room is Map<String, dynamic>) {
       _summary = InternetRoomSummary.fromJson(room);
     }
+    _managementRecovering = false;
+    _presence.enabled = summary.presenceAnnouncementsEnabled;
     isHost = event['hostMemberId'] == memberId;
     _policyCanSpeak = event['canSpeak'] as bool? ?? _policyCanSpeak;
     if (!canSpeak) _pttPressed = false;
@@ -619,30 +662,24 @@ class InternetRoomSession extends ChangeNotifier {
 
   void _applyMembers(dynamic raw) {
     if (raw is! List<dynamic>) return;
-    _members
-      ..clear()
-      ..addAll(
-        raw.indexed.map((entry) {
-          final (index, item) = entry;
-          final value = item as Map<String, dynamic>;
-          final id = value['id'] as String;
-          final sortOrder = value['joinOrder'] as int? ?? index;
-          _memberSortOrders[id] = sortOrder;
-          return InternetMember(
-            id: id,
-            nickname: _profileNames[id] ?? value['nickname'] as String? ?? id,
-            isHost: value['isHost'] as bool? ?? false,
-            canSpeak: value['canSpeak'] as bool? ?? true,
-            // DawnMesh Server emits this array in immutable join order. Older
-            // servers do not expose the numeric order, so the array index is
-            // the protocol-compatible fallback.
-            sortOrder: sortOrder,
-            isSpeaking: _speakingIds.contains(id),
-          );
-        }),
-      )
-      ..sort(InternetMember.compareStable);
-    notifyListeners();
+    _hasManagementRoster = true;
+    _managementMembers.clear();
+    for (final entry in raw.indexed) {
+      final (index, item) = entry;
+      final value = item as Map<String, dynamic>;
+      final id = value['id'] as String;
+      final sortOrder = value['joinOrder'] as int? ?? index;
+      _memberSortOrders[id] = sortOrder;
+      _managementMembers[id] = InternetMember(
+        id: id,
+        nickname: _profileNames[id] ?? value['nickname'] as String? ?? id,
+        isHost: value['isHost'] as bool? ?? false,
+        canSpeak: value['canSpeak'] as bool? ?? true,
+        isOnline: value['connected'] as bool? ?? true,
+        sortOrder: sortOrder,
+      );
+    }
+    _refreshMembers();
   }
 
   Future<void> _handlePakeHello(Map<String, dynamic> event) async {
@@ -712,6 +749,8 @@ class InternetRoomSession extends ChangeNotifier {
 
   void _scheduleEventReconnect() {
     if (_closed || _roomEnded || _eventReconnectTimer != null) return;
+    _managementRecovering = true;
+    _presence.suspend();
     _eventReconnectStartedAt ??= DateTime.now();
     if (DateTime.now().difference(_eventReconnectStartedAt!) >=
         const Duration(minutes: 30)) {
@@ -793,17 +832,23 @@ class InternetRoomSession extends ChangeNotifier {
   void _setConnectionState(InternetConnectionState value) {
     if (_connectionState == value) return;
     _connectionState = value;
-    notifyListeners();
+    if (value != InternetConnectionState.connected) _presence.suspend();
+    _refreshMembers();
   }
 
   void _refreshMembers() {
     final room = _livekitRoom;
-    if (room == null) return;
-    final management = {for (final item in _members) item.id: item};
-    final participants = <Participant>[...room.remoteParticipants.values]
-      ..sort((a, b) => a.identity.compareTo(b.identity));
-    final local = room.localParticipant;
-    if (local != null) participants.add(local);
+    final participants = <String, Participant>{
+      for (final participant
+          in room?.remoteParticipants.values ?? <RemoteParticipant>[])
+        participant.identity: participant,
+      if (room?.localParticipant != null) memberId: room!.localParticipant!,
+    };
+    // The server roster is authoritative: offline members remain visible for
+    // the recovery window, and a departed SDK participant cannot reappear.
+    final ids = _hasManagementRoster
+        ? _managementMembers.keys
+        : participants.keys;
     var nextOrder = _memberSortOrders.values.fold<int>(
       0,
       (value, order) => order >= value ? order + 1 : value,
@@ -811,29 +856,41 @@ class InternetRoomSession extends ChangeNotifier {
     _members
       ..clear()
       ..addAll(
-        participants.map((participant) {
-          final managed = management[participant.identity];
+        ids.map((id) {
+          final managed = _managementMembers[id];
+          final participant = participants[id];
+          final mediaOnline =
+              room == null ||
+              room.connectionState != ConnectionState.connected ||
+              participants.containsKey(id);
+          final online = (managed?.isOnline ?? true) && mediaOnline;
           return InternetMember(
-            id: participant.identity,
+            id: id,
             nickname:
-                _profileNames[participant.identity] ??
-                (participant.name.isEmpty
-                    ? (managed?.nickname ?? participant.identity)
-                    : participant.name),
-            isHost:
-                managed?.isHost ?? (participant.identity == memberId && isHost),
-            canSpeak: managed?.canSpeak ?? participant.permissions.canPublish,
+                _profileNames[id] ??
+                managed?.nickname ??
+                (participant?.name.isNotEmpty == true ? participant!.name : id),
+            isHost: managed?.isHost ?? (id == memberId && isHost),
+            canSpeak:
+                managed?.canSpeak ??
+                participant?.permissions.canPublish ??
+                true,
             sortOrder:
                 managed?.sortOrder ??
-                _memberSortOrders.putIfAbsent(
-                  participant.identity,
-                  () => nextOrder++,
-                ),
-            isSpeaking: _speakingIds.contains(participant.identity),
+                _memberSortOrders.putIfAbsent(id, () => nextOrder++),
+            isOnline: online,
+            isSpeaking: online && _speakingIds.contains(id),
           );
         }),
       )
       ..sort(InternetMember.compareStable);
+    if (!_closed &&
+        !_roomEnded &&
+        !_managementRecovering &&
+        _connectionState == InternetConnectionState.connected) {
+      _presence.enabled = summary.presenceAnnouncementsEnabled;
+      _presence.observe(_members);
+    }
     notifyListeners();
   }
 
@@ -1317,6 +1374,7 @@ class InternetRoomSession extends ChangeNotifier {
 
   Future<void> leave({bool endRoom = false}) async {
     if (_closed) return;
+    _presence.dispose();
     try {
       await api.leave(
         roomId,
@@ -1347,6 +1405,7 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> _finishEndedRoom() async {
     if (_closed || _roomEnded) return;
     _roomEnded = true;
+    _presence.dispose();
     _eventReconnectTimer?.cancel();
     _pttPressed = false;
     if (_connectionState == InternetConnectionState.disconnected) {
@@ -1376,6 +1435,7 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> disposeSession() async {
     if (_closed) return;
     _closed = true;
+    _presence.dispose();
     _eventReconnectTimer?.cancel();
     await _connectivitySubscription?.cancel();
     await _backgroundControls.close();

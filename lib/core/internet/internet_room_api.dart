@@ -142,6 +142,23 @@ class InternetRoomApi {
     );
   }
 
+  Future<InternetRoomSummary> setPresenceAnnouncements(
+    String roomId,
+    bool enabled,
+    String sessionToken,
+  ) async {
+    final response = await _decode(
+      _client.put(
+        _uri('/api/v1/rooms/$roomId/presence-announcements'),
+        headers: _sessionHeaders(sessionToken),
+        body: jsonEncode({'enabled': enabled}),
+      ),
+    );
+    return InternetRoomSummary.fromJson(
+      response['room'] as Map<String, dynamic>,
+    );
+  }
+
   Future<void> setVoicePolicy(
     String roomId,
     String memberId,

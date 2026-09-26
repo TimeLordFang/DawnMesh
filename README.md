@@ -7,7 +7,7 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前正式版本：`1.0.1`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前正式版本：`1.0.2`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -36,7 +36,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.0.1-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.0.2-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -147,3 +147,5 @@ scripts/   本机工具链与校验脚本
 ## 许可与来源
 
 DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。
+
+1.0.2 统一验证码输入和降噪工具入口，公网房新增离线头像标记与房主控制的语音提示。详见 [1.0.2 发布说明](docs/RELEASE_1.0.2.md)。房间语音提示开关需要 DawnMesh Server 0.2.4；未安装系统离线语音的 Android 手机使用短提示音。

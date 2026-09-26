@@ -30,7 +30,7 @@ void main() {
           tester.widget<TextField>(input).controller!.text,
           matches(r'^\d{4}$'),
         );
-        await tester.tap(find.text('随机生成'));
+        await tester.tap(find.byTooltip('随机生成'));
         await tester.pump();
         expect(
           tester.widget<TextField>(input).controller!.text,

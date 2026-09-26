@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
     private var permissionsInFlight = false
     private var nicknamePreferences: NicknamePreferencesPlugin? = null
+    private var presenceAudio: PresenceAudioPlugin? = null
     private var audioPlugin: PlatformAudioPlugin? = null
     private var blePlugin: BleL2capPlugin? = null
     private var wifiDirectPlugin: WifiDirectPlugin? = null
@@ -83,6 +84,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        presenceAudio = PresenceAudioPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         audioPlugin = PlatformAudioPlugin(
             applicationContext,
             flutterEngine.dartExecutor.binaryMessenger,
@@ -129,6 +131,8 @@ class MainActivity : FlutterActivity() {
         permissionChannel = null
         externalLinkChannel?.setMethodCallHandler(null)
         externalLinkChannel = null
+        presenceAudio?.dispose()
+        presenceAudio = null
         audioPlugin?.dispose()
         audioPlugin = null
         blePlugin?.dispose()

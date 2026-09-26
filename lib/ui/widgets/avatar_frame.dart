@@ -115,6 +115,7 @@ class AvatarFrame extends StatelessWidget {
   final bool isHost;
   final bool isSpeaking;
   final bool isMuted;
+  final bool isOffline;
   final double size;
   final bool isNight;
 
@@ -125,6 +126,7 @@ class AvatarFrame extends StatelessWidget {
     this.isHost = false,
     this.isSpeaking = false,
     this.isMuted = false,
+    this.isOffline = false,
     this.size = 36,
     this.isNight = false,
   });
@@ -137,7 +139,7 @@ class AvatarFrame extends StatelessWidget {
 
     return Semantics(
       label:
-          '$nickname${isHost ? '，房主' : ''}${isSpeaking ? '，正在发言' : ''}${isMuted ? '，麦克风已关闭' : ''}',
+          '$nickname${isOffline ? '，离线' : ''}${isHost ? '，房主' : ''}${isSpeaking ? '，正在发言' : ''}${isMuted ? '，麦克风已关闭' : ''}',
       image: true,
       child: Stack(
         alignment: Alignment.center,
@@ -150,11 +152,19 @@ class AvatarFrame extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: SweepGradient(colors: theme.borderGradient),
+              gradient: SweepGradient(
+                colors: isOffline
+                    ? const [Color(0xFF7C858C), Color(0xFFADB3B8)]
+                    : theme.borderGradient,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: theme.glowColor.withValues(
-                    alpha: isSpeaking ? 0.72 : (isHost ? 0.45 : 0.25),
+                    alpha: isOffline
+                        ? 0
+                        : isSpeaking
+                        ? 0.72
+                        : (isHost ? 0.45 : 0.25),
                   ),
                   blurRadius: isSpeaking ? 14 : (isHost ? 6 : 4),
                   spreadRadius: isSpeaking ? 3 : (isHost ? 1.0 : 0.5),
@@ -202,7 +212,38 @@ class AvatarFrame extends StatelessWidget {
                 ),
               ),
             ),
-          if (isMuted)
+          if (isOffline)
+            Positioned(
+              bottom: -3,
+              left: -4,
+              right: -4,
+              child: Center(
+                child: Container(
+                  key: const ValueKey('member-offline-badge'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF59636D),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isNight ? const Color(0xFF1E1C24) : Colors.white,
+                    ),
+                  ),
+                  child: const Text(
+                    '离线',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (isMuted && !isOffline)
             Positioned(
               right: -2,
               bottom: -2,

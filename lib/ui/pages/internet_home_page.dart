@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/room_invite_code_field.dart';
 import '../../core/diagnostics/app_log.dart';
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/internet_room_api.dart';
@@ -791,20 +792,11 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            key: const ValueKey('create-room-invite-input'),
+          RoomInviteCodeField(
+            fieldKey: const ValueKey('create-room-invite-input'),
             controller: _invite,
-            maxLength: 6,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: '4 位邀请码（兼容旧版 6 位）',
-              helperText: '可手动修改；有旧版成员时请设为 6 位。',
-              suffixIcon: IconButton(
-                tooltip: '随机生成',
-                icon: const Icon(Icons.refresh),
-                onPressed: () => _invite.text = RoomInvite.generate().code,
-              ),
-            ),
+            creating: true,
+            onRandomized: () => setState(() => _error = null),
           ),
           TextField(
             controller: _name,

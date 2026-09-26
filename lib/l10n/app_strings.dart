@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.1\nAdded offline microphone noise reduction (Off / Standard / Strong) to all three room types. Fixed Wi-Fi Direct group recovery, improved Bluetooth voice queues, and extended reconnection to 30 minutes. New rooms use editable 4-digit codes; legacy 6-digit codes remain supported. Internet retention requires the updated server.'
-      : '1.0.1\n三种房间新增关闭／标准／强力三档本地人声降噪，可在房内随时切换。修复 Wi-Fi Direct 群组误重建，优化蓝牙语音队列，自动重连延长至 30 分钟。新房间默认 4 位邀请码，可随机生成或手动设置，兼容旧版 6 位。公网半小时保留需升级服务端。';
+      ? '1.0.2\nUnified the trailing random-code button for all rooms. Moved noise reduction into the room toolbar with a compact menu. Internet rooms retain offline avatars and add host-controlled departure announcements; server 0.2.4 or later is required for the room-wide switch.'
+      : '1.0.2\n三种房间的随机验证码按钮统一放到输入框末尾。降噪入口移到顶部工具区，菜单更紧凑。公网房保留离线头像并标记状态，新增房主统一控制的掉线／退出语音提示；房间开关需配套服务端 0.2.4 或更新版本。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

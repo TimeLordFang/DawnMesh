@@ -79,6 +79,8 @@ class InternetRoomSummary {
     this.isHost = false,
     this.adminListening = false,
     this.adminListeningAvailable = false,
+    this.presenceAnnouncementsSupported = false,
+    this.presenceAnnouncementsEnabled = false,
   });
 
   final String id;
@@ -89,6 +91,8 @@ class InternetRoomSummary {
   final bool isHost;
   final bool adminListening;
   final bool adminListeningAvailable;
+  final bool presenceAnnouncementsSupported;
+  final bool presenceAnnouncementsEnabled;
 
   factory InternetRoomSummary.fromJson(Map<String, dynamic> json) =>
       InternetRoomSummary(
@@ -101,6 +105,10 @@ class InternetRoomSummary {
         adminListening: json['adminListening'] as bool? ?? false,
         adminListeningAvailable:
             json['adminListeningAvailable'] as bool? ?? false,
+        presenceAnnouncementsSupported:
+            json['presenceAnnouncementsSupported'] as bool? ?? false,
+        presenceAnnouncementsEnabled:
+            json['presenceAnnouncementsEnabled'] as bool? ?? false,
       );
 }
 
@@ -169,6 +177,7 @@ class InternetMember {
     required this.canSpeak,
     this.sortOrder = 0,
     this.isSpeaking = false,
+    this.isOnline = true,
   });
 
   final String id;
@@ -177,6 +186,7 @@ class InternetMember {
   final bool canSpeak;
   final int sortOrder;
   final bool isSpeaking;
+  final bool isOnline;
 
   static int compareStable(InternetMember a, InternetMember b) {
     final byOrder = a.sortOrder.compareTo(b.sortOrder);

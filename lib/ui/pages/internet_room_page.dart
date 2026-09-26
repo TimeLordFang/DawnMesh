@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/noise_reduction_control.dart';
+import '../widgets/presence_announcements_control.dart';
 import '../../core/internet/internet_audio_profile.dart';
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/internet_room_session.dart';
@@ -304,6 +306,10 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ],
           ),
           actions: [
+            if (!keyboardOpen && !session.roomEnded)
+              NoiseReductionControl(isNight: widget.isNight),
+            if (!keyboardOpen && session.isHost && !session.roomEnded)
+              PresenceAnnouncementsControl(session: session),
             if (!keyboardOpen && session.isHost && !session.roomEnded)
               IconButton(
                 tooltip: '修改房间名',
@@ -362,8 +368,8 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 if (!keyboardOpen && !session.roomEnded)
                   SizedBox(
                     height: compactHeight
-                        ? (session.isHost ? 68 : 58)
-                        : (session.isHost ? 96 : 76),
+                        ? (session.isHost ? 100 : 72)
+                        : (session.isHost ? 108 : 80),
                     child: _InternetMemberStrip(
                       session: session,
                       accent: accent,
@@ -790,6 +796,7 @@ class _MemberPill extends StatelessWidget {
             isHost: member.isHost,
             isSpeaking: member.isSpeaking,
             isMuted: !member.canSpeak,
+            isOffline: !member.isOnline,
             size: 48,
             isNight: isNight,
           ),
@@ -806,26 +813,43 @@ class _MemberPill extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    tooltip: member.canSpeak ? '关闭麦克风' : '恢复发言',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    iconSize: 18,
-                    onPressed: _setVoice,
-                    icon: Icon(
-                      member.canSpeak
-                          ? Icons.mic_off_rounded
-                          : Icons.mic_rounded,
-                      color: accent,
+                  Expanded(
+                    child: IconButton(
+                      tooltip: member.canSpeak ? '关闭麦克风' : '恢复发言',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 36,
+                        height: 30,
+                      ),
+                      padding: EdgeInsets.zero,
+                      iconSize: 18,
+                      onPressed: _setVoice,
+                      icon: Icon(
+                        member.canSpeak
+                            ? Icons.mic_off_rounded
+                            : Icons.mic_rounded,
+                        color: accent,
+                      ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: '移交房主',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    iconSize: 18,
-                    onPressed: () => _transfer(context),
-                    icon: Icon(Icons.workspace_premium_outlined, color: accent),
+                  Expanded(
+                    child: IconButton(
+                      tooltip: '移交房主',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 36,
+                        height: 30,
+                      ),
+                      padding: EdgeInsets.zero,
+                      iconSize: 18,
+                      onPressed: member.isOnline
+                          ? () => _transfer(context)
+                          : null,
+                      icon: Icon(
+                        Icons.workspace_premium_outlined,
+                        color: accent,
+                      ),
+                    ),
                   ),
                 ],
               ),
