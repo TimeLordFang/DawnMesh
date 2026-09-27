@@ -82,6 +82,9 @@ class InternetRoomApi {
     required String deviceId,
     required int maxParticipants,
     required int hostDisconnectTimeoutMinutes,
+    required String joinSalt,
+    required String joinCredential,
+    required String wrappedRoomKey,
     String? monitoringKey,
   }) async => InternetConnectionGrant.fromJson(
     await _decode(
@@ -94,25 +97,37 @@ class InternetRoomApi {
           'deviceId': deviceId,
           'maxParticipants': maxParticipants,
           'hostDisconnectTimeoutMinutes': hostDisconnectTimeoutMinutes,
+          'joinSalt': joinSalt,
+          'joinCredential': joinCredential,
+          'wrappedRoomKey': wrappedRoomKey,
           'monitoringKey': ?monitoringKey,
         }),
       ),
     ),
   );
 
-  Future<InternetAdmissionGrant> beginAdmission({
+  Future<(InternetConnectionGrant, String)> joinRoom({
     required String roomId,
     required String nickname,
     required String deviceId,
-  }) async => InternetAdmissionGrant.fromJson(
-    await _decode(
+    required String joinCredential,
+  }) async {
+    final body = await _decode(
       _client.post(
-        _uri('/api/v1/rooms/$roomId/admissions'),
+        _uri('/api/v1/rooms/$roomId/join'),
         headers: _headers,
-        body: jsonEncode({'nickname': nickname, 'deviceId': deviceId}),
+        body: jsonEncode({
+          'nickname': nickname,
+          'deviceId': deviceId,
+          'joinCredential': joinCredential,
+        }),
       ),
-    ),
-  );
+    );
+    return (
+      InternetConnectionGrant.fromJson(body),
+      body['wrappedRoomKey'] as String,
+    );
+  }
 
   Future<InternetConnectionGrant> resume({
     required String roomId,

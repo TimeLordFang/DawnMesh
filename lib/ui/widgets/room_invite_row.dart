@@ -98,7 +98,7 @@ class _RoomInviteRowState extends State<RoomInviteRow>
         const SizedBox(width: 12),
         Flexible(
           child: Text(
-            _visible ? widget.code : '••••••',
+            _visible ? widget.code : '••••',
             semanticsLabel:
                 _visible ? '邀请码 ${widget.code.split('').join(' ')}' : '邀请码已隐藏',
             maxLines: 1,

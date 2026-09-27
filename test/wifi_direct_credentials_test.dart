@@ -4,8 +4,8 @@ import 'package:dawn_mesh/core/transport/wifi_direct_credentials.dart';
 
 void main() {
   test('same invite derives valid stable Wi-Fi Direct credentials', () {
-    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
-    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
+    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('0123'));
+    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('0123'));
     expect(first.toMap(), second.toMap());
     expect(
       first.networkName,
@@ -15,10 +15,10 @@ void main() {
   });
 
   test('different invites do not share transport credentials', () {
-    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('012345'));
-    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('012346'));
+    final first = WifiDirectCredentials.fromInvite(RoomInvite.parse('0123'));
+    final second = WifiDirectCredentials.fromInvite(RoomInvite.parse('0124'));
     expect(first.networkName, isNot(second.networkName));
     expect(first.passphrase, isNot(second.passphrase));
-    expect(first.passphrase, isNot(contains('012345')));
+    expect(first.passphrase, isNot(contains('0123')));
   });
 }

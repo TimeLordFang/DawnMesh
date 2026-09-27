@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.2\nUnified the trailing random-code button for all rooms. Moved noise reduction into the room toolbar with a compact menu. Internet rooms retain offline avatars and add host-controlled departure announcements; server 0.2.4 or later is required for the room-wide switch.'
-      : '1.0.2\n三种房间的随机验证码按钮统一放到输入框末尾。降噪入口移到顶部工具区，菜单更紧凑。公网房保留离线头像并标记状态，新增房主统一控制的掉线／退出语音提示；房间开关需配套服务端 0.2.4 或更新版本。';
+      ? '1.0.3\nAll rooms now use four-digit invite codes. Internet presence follows the media connection, preventing false offline badges during control-channel interruptions. Server-side admission lets members join while the host is offline. Requires server 0.2.5 and newly created rooms.'
+      : '1.0.3\n所有房间统一使用四位邀请码。公网房以语音连接判断成员在线状态，修复管理连接中断时的离线误报。入房改由服务端验证，房主离线时其他成员仍可加入。请配套升级服务端至 0.2.5 并重新创建房间。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

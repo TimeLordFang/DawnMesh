@@ -662,7 +662,7 @@ class _InviteCard extends StatelessWidget {
           const Text('邀请码'),
           const Spacer(),
           Text(
-            visible ? code : '••••••',
+            visible ? code : '••••',
             style: const TextStyle(
               fontFamily: 'monospace',
               fontSize: 21,

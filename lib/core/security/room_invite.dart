@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/scrypt.dart';
 
-/// Four or legacy six digits authenticate a PAKE exchange; they are never an AES traffic key.
+/// Four digits authenticate room admission; they are never an AES traffic key.
 class RoomInvite {
   final String code;
   Future<BigInt>? _scalar;
@@ -17,8 +17,8 @@ class RoomInvite {
 
   factory RoomInvite.parse(String input) {
     final code = input.trim();
-    if (!RegExp(r'^(?:[0-9]{4}|[0-9]{6})$').hasMatch(code)) {
-      throw const FormatException('请输入 4 位数字邀请码（兼容旧版 6 位）。');
+    if (!RegExp(r'^[0-9]{4}$').hasMatch(code)) {
+      throw const FormatException('请输入 4 位数字邀请码。');
     }
     return RoomInvite._(code);
   }

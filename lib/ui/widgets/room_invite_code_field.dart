@@ -31,13 +31,13 @@ class RoomInviteCodeField extends StatelessWidget {
     autofocus: autofocus,
     autocorrect: false,
     enableSuggestions: false,
-    maxLength: 6,
+    maxLength: 4,
     keyboardType: TextInputType.number,
     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
     onSubmitted: onSubmitted,
     decoration: InputDecoration(
-      labelText: '4 位数字（兼容旧版 6 位）',
-      helperText: creating ? '可手动修改；有旧版成员时请设为 6 位。' : null,
+      labelText: '4 位数字邀请码',
+      helperText: creating ? '可手动输入，也可随机生成。' : null,
       helperMaxLines: 2,
       errorText: errorText,
       suffixIcon: creating

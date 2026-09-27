@@ -19,6 +19,7 @@ import '../security/session_crypto.dart';
 import '../security/spake2.dart';
 import '../session/room_session.dart' show VoiceMode;
 import 'internet_audio_profile.dart';
+import 'internet_invite_credentials.dart';
 import 'internet_models.dart';
 import 'presence_announcements.dart';
 import 'internet_room_api.dart';
@@ -87,7 +88,7 @@ class InternetRoomSession extends ChangeNotifier {
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
-       _inviteCode = '123456',
+       _inviteCode = '1234',
        _roomKey = Uint8List(32),
        _audioProfile = InternetAudioProfile.clarity,
        _meteredNetwork = false,
@@ -115,6 +116,21 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> Function(bool enabled)? _microphoneForTesting;
 
   Room? _livekitRoom;
+  Set<String>? _mediaMembersForTesting;
+  bool _mediaConnectedForTesting = true;
+
+  @visibleForTesting
+  void receiveMediaRosterForTesting(Set<String> ids, {bool connected = true}) {
+    _mediaMembersForTesting = ids;
+    _mediaConnectedForTesting = connected;
+    _setConnectionState(
+      connected
+          ? InternetConnectionState.connected
+          : InternetConnectionState.reconnecting,
+    );
+    _refreshMembers();
+  }
+
   EventsListener<RoomEvent>? _listener;
   WebSocket? _eventsSocket;
   StreamSubscription<dynamic>? _eventSubscription;
@@ -152,7 +168,6 @@ class InternetRoomSession extends ChangeNotifier {
   final List<InternetChatMessage> _messages = [];
   int _unreadChatCount = 0;
   final Map<String, _IncomingInternetImage> _incomingImages = {};
-  final Map<String, _HostAdmission> _hostAdmissions = {};
   final Set<String> _speakingIds = {};
   final StreamController<double> _waveController =
       StreamController<double>.broadcast();
@@ -191,12 +206,19 @@ class InternetRoomSession extends ChangeNotifier {
     final key = Uint8List.fromList(
       List<int>.generate(32, (_) => random.nextInt(256)),
     );
+    final credentials = await InternetInviteCredentials.derive(
+      invite,
+      InternetInviteCredentials.randomSalt(),
+    );
     final grant = await api.createRoom(
       name: roomName,
       nickname: nickname,
       deviceId: deviceId,
       maxParticipants: maxParticipants,
       hostDisconnectTimeoutMinutes: hostDisconnectTimeoutMinutes,
+      joinSalt: credentials.salt,
+      joinCredential: credentials.credential,
+      wrappedRoomKey: await credentials.wrap(key),
       monitoringKey: allowAdminListening ? base64UrlEncode(key) : null,
     );
     final network = await networkFuture;
@@ -213,7 +235,7 @@ class InternetRoomSession extends ChangeNotifier {
       audioProfile: network.$2,
       meteredNetwork: network.$1,
     ).._summary = grant.room;
-    await session._start(grant, invite: invite);
+    await session._start(grant);
     return session;
   }
 
@@ -226,158 +248,34 @@ class InternetRoomSession extends ChangeNotifier {
     required RoomInvite invite,
   }) async {
     final networkFuture = _readNetworkAudioRecommendation();
-    final admission = await api.beginAdmission(
+    final credentials = await InternetInviteCredentials.derive(
+      invite,
+      room.joinSalt,
+    );
+    final (grant, wrappedKey) = await api.joinRoom(
       roomId: room.id,
       nickname: nickname,
       deviceId: deviceId,
+      joinCredential: credentials.credential,
     );
-    final result = await _completeAdmission(profile, admission, invite);
+    final roomKey = await credentials.unwrap(wrappedKey);
     final network = await networkFuture;
-    final session =
-        InternetRoomSession._(
-            api: api,
-            profile: profile,
-            nickname: nickname,
-            roomId: room.id,
-            memberId: result.grant.memberId,
-            resumeToken: result.grant.resumeToken,
-            isHost: false,
-            inviteCode: invite.code,
-            roomKey: result.roomKey,
-            audioProfile: network.$2,
-            meteredNetwork: network.$1,
-          )
-          .._summary = result.grant.room
-          .._hostPasswordScalar = result.passwordScalar;
-    await session._start(result.grant);
+    final session = InternetRoomSession._(
+      api: api,
+      profile: profile,
+      nickname: nickname,
+      roomId: room.id,
+      memberId: grant.memberId,
+      resumeToken: grant.resumeToken,
+      isHost: false,
+      inviteCode: invite.code,
+      roomKey: roomKey,
+      audioProfile: network.$2,
+      meteredNetwork: network.$1,
+    ).._summary = grant.room;
+    await session._start(grant);
     return session;
   }
-
-  static Future<_AdmissionResult> _completeAdmission(
-    ServerProfile profile,
-    InternetAdmissionGrant admission,
-    RoomInvite invite,
-  ) async {
-    final scalar = await invite.passwordScalar();
-    final pake = Spake2(isA: true, passwordScalar: scalar);
-    final socket = await _openSocket(
-      profile,
-      admission.eventsUrl,
-      admission.resumeToken,
-    );
-    final completer = Completer<_AdmissionResult>();
-    Spake2Keys? keys;
-    late final StreamSubscription<dynamic> subscription;
-    subscription = socket.listen(
-      (raw) async {
-        try {
-          final event = jsonDecode(raw as String) as Map<String, dynamic>;
-          if (event['admissionId'] != admission.admissionId) return;
-          final type = event['type'];
-          if (type == 'pake_reply') {
-            final body = base64Decode(event['body'] as String);
-            if (body.length != 97) {
-              throw const FormatException('PAKE reply length');
-            }
-            final identities = _pakeIdentities(
-              profile.instanceId ?? '',
-              admission.room.id,
-              admission.admissionId,
-              admission.memberId,
-            );
-            keys = pake.finish(
-              Uint8List.sublistView(body, 0, 65),
-              a: identities.$1,
-              b: identities.$2,
-            );
-            if (!Spake2Keys.equal(body.sublist(65), keys!.confirmB)) {
-              throw const FormatException('邀请码校验失败');
-            }
-            socket.add(
-              jsonEncode({
-                'type': 'pake_confirm',
-                'admissionId': admission.admissionId,
-                'body': base64Encode(keys!.confirmA),
-              }),
-            );
-          } else if (type == 'pake_key') {
-            final activeKeys = keys;
-            if (activeKeys == null) throw const FormatException('PAKE state');
-            final packet = base64Decode(event['body'] as String);
-            if (packet.length < 29) {
-              throw const FormatException('encrypted key length');
-            }
-            final cipher = await SessionCipher.fromKey(
-              Spake2Keys.hkdf(
-                activeKeys.sharedKey,
-                'DawnMesh internet room key wrapping v1',
-              ),
-            );
-            final roomKey = await cipher.decrypt(
-              EncryptedPacket(
-                nonce: Uint8List.sublistView(packet, 0, 12),
-                ciphertext: Uint8List.sublistView(packet, 12),
-              ),
-              associatedData: Uint8List.fromList(
-                utf8.encode(admission.admissionId),
-              ),
-            );
-            final grant = InternetConnectionGrant.fromJson(
-              event['connection'] as Map<String, dynamic>,
-            );
-            if (!completer.isCompleted) {
-              completer.complete(
-                _AdmissionResult(grant, Uint8List.fromList(roomKey), scalar),
-              );
-            }
-          } else if (type == 'admission_rejected') {
-            throw InternetApiException(event['error'] as String? ?? '邀请码验证失败');
-          }
-        } catch (error, stack) {
-          if (!completer.isCompleted) completer.completeError(error, stack);
-        }
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!completer.isCompleted) completer.completeError(error, stack);
-      },
-      onDone: () {
-        if (!completer.isCompleted) {
-          completer.completeError(const InternetApiException('房主连接已中断'));
-        }
-      },
-    );
-    socket.add(
-      jsonEncode({
-        'type': 'pake_hello',
-        'admissionId': admission.admissionId,
-        'body': base64Encode(pake.message),
-      }),
-    );
-    try {
-      return await completer.future.timeout(const Duration(seconds: 20));
-    } finally {
-      await subscription.cancel();
-      await socket.close();
-    }
-  }
-
-  static (Uint8List, Uint8List) _pakeIdentities(
-    String instanceId,
-    String roomId,
-    String admissionId,
-    String memberId,
-  ) => (
-    Uint8List.fromList(
-      utf8.encode(
-        'DawnMesh internet PAKE v1 client\u0000$instanceId\u0000$roomId\u0000$admissionId\u0000$memberId',
-      ),
-    ),
-    Uint8List.fromList(
-      utf8.encode(
-        'DawnMesh internet PAKE v1 host\u0000$instanceId\u0000$roomId',
-      ),
-    ),
-  );
 
   static Future<WebSocket> _openSocket(
     ServerProfile profile,
@@ -398,17 +296,10 @@ class InternetRoomSession extends ChangeNotifier {
     ).timeout(const Duration(seconds: 12));
   }
 
-  Future<void> _start(
-    InternetConnectionGrant grant, {
-    RoomInvite? invite,
-  }) async {
+  Future<void> _start(InternetConnectionGrant grant) async {
     _chatCipher = await SessionCipher.fromKey(
       Spake2Keys.hkdf(_roomKey, 'DawnMesh internet chat v1'),
     );
-    if (isHost) {
-      if (invite == null) throw StateError('Host invite is required');
-      _hostPasswordScalar = await invite.passwordScalar();
-    }
     await _connectEvents(grant.eventsUrl);
     await _connectLiveKit(grant);
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
@@ -418,7 +309,6 @@ class InternetRoomSession extends ChangeNotifier {
     await _syncBackgroundControls();
   }
 
-  BigInt? _hostPasswordScalar;
   SessionCipher? _chatCipher;
 
   Future<void> _connectLiveKit(InternetConnectionGrant grant) async {
@@ -584,10 +474,6 @@ class InternetRoomSession extends ChangeNotifier {
           _applyMembers(event['members']);
         case 'room_ended':
           await _finishEndedRoom();
-        case 'pake_hello':
-          if (isHost) await _handlePakeHello(event);
-        case 'pake_confirm':
-          if (isHost) await _handlePakeConfirm(event);
       }
     } catch (error, stack) {
       AppLog.error('DawnInternet', '管理事件处理失败：$error', stack);
@@ -682,71 +568,6 @@ class InternetRoomSession extends ChangeNotifier {
     _refreshMembers();
   }
 
-  Future<void> _handlePakeHello(Map<String, dynamic> event) async {
-    final scalar = _hostPasswordScalar;
-    if (scalar == null || _eventsSocket == null) return;
-    final admissionId = event['admissionId'] as String;
-    final guestMemberId = event['memberId'] as String;
-    final clientMessage = base64Decode(event['body'] as String);
-    _hostAdmissions.removeWhere(
-      (_, pending) =>
-          DateTime.now().difference(pending.created) >
-          const Duration(seconds: 30),
-    );
-    if (clientMessage.length != 65 || _hostAdmissions.length >= 8) return;
-    final server = Spake2(isA: false, passwordScalar: scalar);
-    final identities = _pakeIdentities(
-      profile.instanceId ?? '',
-      roomId,
-      admissionId,
-      guestMemberId,
-    );
-    final keys = server.finish(
-      clientMessage,
-      a: identities.$1,
-      b: identities.$2,
-    );
-    _hostAdmissions[admissionId] = _HostAdmission(keys, DateTime.now());
-    _eventsSocket!.add(
-      jsonEncode({
-        'type': 'pake_reply',
-        'admissionId': admissionId,
-        'body': base64Encode([...server.message, ...keys.confirmB]),
-      }),
-    );
-  }
-
-  Future<void> _handlePakeConfirm(Map<String, dynamic> event) async {
-    final socket = _eventsSocket;
-    if (socket == null) return;
-    final admissionId = event['admissionId'] as String;
-    final pending = _hostAdmissions.remove(admissionId);
-    final confirm = base64Decode(event['body'] as String);
-    if (pending == null || !Spake2Keys.equal(confirm, pending.keys.confirmA)) {
-      socket.add(
-        jsonEncode({'type': 'admission_rejected', 'admissionId': admissionId}),
-      );
-      return;
-    }
-    final cipher = await SessionCipher.fromKey(
-      Spake2Keys.hkdf(
-        pending.keys.sharedKey,
-        'DawnMesh internet room key wrapping v1',
-      ),
-    );
-    final encrypted = await cipher.encrypt(
-      _roomKey,
-      associatedData: Uint8List.fromList(utf8.encode(admissionId)),
-    );
-    socket.add(
-      jsonEncode({
-        'type': 'pake_key',
-        'admissionId': admissionId,
-        'body': base64Encode([...encrypted.nonce, ...encrypted.ciphertext]),
-      }),
-    );
-  }
-
   void _scheduleEventReconnect() {
     if (_closed || _roomEnded || _eventReconnectTimer != null) return;
     _managementRecovering = true;
@@ -837,6 +658,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   void _refreshMembers() {
+    final previousMembers = {for (final member in _members) member.id: member};
     final room = _livekitRoom;
     final participants = <String, Participant>{
       for (final participant
@@ -859,11 +681,18 @@ class InternetRoomSession extends ChangeNotifier {
         ids.map((id) {
           final managed = _managementMembers[id];
           final participant = participants[id];
-          final mediaOnline =
-              room == null ||
-              room.connectionState != ConnectionState.connected ||
-              participants.containsKey(id);
-          final online = (managed?.isOnline ?? true) && mediaOnline;
+          final mediaKnown = room != null || _mediaMembersForTesting != null;
+          final mediaConnected = _mediaMembersForTesting != null
+              ? _mediaConnectedForTesting
+              : room?.connectionState == ConnectionState.connected;
+          final previous = previousMembers[id];
+          final online = !mediaKnown
+              ? (managed?.isOnline ?? true)
+              : mediaConnected
+              ? (_mediaMembersForTesting ?? participants.keys.toSet()).contains(
+                  id,
+                )
+              : (previous?.isOnline ?? true);
           return InternetMember(
             id: id,
             nickname:
@@ -1604,17 +1433,4 @@ class _IncomingInternetImage {
     }
     return result;
   }
-}
-
-class _AdmissionResult {
-  const _AdmissionResult(this.grant, this.roomKey, this.passwordScalar);
-  final InternetConnectionGrant grant;
-  final Uint8List roomKey;
-  final BigInt passwordScalar;
-}
-
-class _HostAdmission {
-  const _HostAdmission(this.keys, this.created);
-  final Spake2Keys keys;
-  final DateTime created;
 }

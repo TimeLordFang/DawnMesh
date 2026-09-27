@@ -9,7 +9,7 @@ void main() {
 
   const channel = MethodChannel('dev.dawnmesh.intercom/wifi_direct');
   final credentials = WifiDirectCredentials.fromInvite(
-    RoomInvite.parse('012345'),
+    RoomInvite.parse('0123'),
   );
   final calls = <MethodCall>[];
 

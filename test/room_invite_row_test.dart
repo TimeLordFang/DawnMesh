@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/ui/widgets/room_invite_row.dart';
 
 void main() {
-  Widget panel({String code = '012345', bool visible = true}) => MaterialApp(
+  Widget panel({String code = '0123', bool visible = true}) => MaterialApp(
     home: Scaffold(
       body: SizedBox(
         width: 280,
@@ -16,24 +16,24 @@ void main() {
     'invite hides after ten seconds and each reveal starts a fresh timer',
     (tester) async {
       await tester.pumpWidget(panel());
-      expect(find.text('012345'), findsOneWidget);
+      expect(find.text('0123'), findsOneWidget);
       await tester.pump(const Duration(seconds: 9));
-      expect(find.text('012345'), findsOneWidget);
+      expect(find.text('0123'), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('012345'), findsNothing);
-      expect(find.text('••••••'), findsOneWidget);
+      expect(find.text('0123'), findsNothing);
+      expect(find.text('••••'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.visibility_outlined));
       await tester.pump();
-      expect(find.text('012345'), findsOneWidget);
+      expect(find.text('0123'), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
       await tester.tap(find.byIcon(Icons.visibility_off_outlined));
       await tester.pump();
-      expect(find.text('012345'), findsNothing);
+      expect(find.text('0123'), findsNothing);
       await tester.tap(find.byIcon(Icons.visibility_outlined));
       await tester.pump(const Duration(seconds: 5));
-      expect(find.text('012345'), findsOneWidget);
+      expect(find.text('0123'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
-      expect(find.text('012345'), findsNothing);
+      expect(find.text('0123'), findsNothing);
     },
   );
 
@@ -44,12 +44,12 @@ void main() {
       await tester.pumpWidget(panel());
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pump();
-      expect(find.text('012345'), findsNothing);
+      expect(find.text('0123'), findsNothing);
       expect(find.bySemanticsLabel('邀请码已隐藏'), findsOneWidget);
       expect(find.bySemanticsLabel('邀请码 0 1 2 3 4 5'), findsNothing);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
-      expect(find.text('012345'), findsNothing);
+      expect(find.text('0123'), findsNothing);
       semantics.dispose();
     },
   );
@@ -62,7 +62,7 @@ void main() {
     await tester.pumpWidget(panel(code: '654321'));
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('654321'), findsOneWidget);
-    expect(find.text('012345'), findsNothing);
+    expect(find.text('0123'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 15));
     expect(tester.takeException(), isNull);
@@ -78,10 +78,10 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpWidget(panel(visible: false));
-      expect(find.text('012345'), findsNothing);
+      expect(find.text('0123'), findsNothing);
       await tester.tap(find.byIcon(Icons.visibility_outlined));
       await tester.pump();
-      expect(find.text('012345'), findsOneWidget);
+      expect(find.text('0123'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
@@ -97,24 +97,24 @@ void main() {
         home: ValueListenableBuilder<bool>(
           valueListenable: isHost,
           builder: (context, value, _) =>
-              HostRoomInviteRow(isHost: value, code: '012345'),
+              HostRoomInviteRow(isHost: value, code: '0123'),
         ),
       ),
     );
-    expect(find.text('012345'), findsNothing);
+    expect(find.text('0123'), findsNothing);
 
     isHost.value = true;
     await tester.pump();
-    expect(find.text('012345'), findsOneWidget);
+    expect(find.text('0123'), findsOneWidget);
 
     isHost.value = false;
     await tester.pump();
-    expect(find.text('012345'), findsNothing);
+    expect(find.text('0123'), findsNothing);
     expect(find.byIcon(Icons.visibility_outlined), findsNothing);
 
     isHost.value = true;
     await tester.pump();
-    expect(find.text('012345'), findsOneWidget);
+    expect(find.text('0123'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

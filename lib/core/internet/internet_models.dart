@@ -77,6 +77,7 @@ class InternetRoomSummary {
     required this.maxParticipants,
     required this.hostNickname,
     this.isHost = false,
+    this.joinSalt = '',
     this.adminListening = false,
     this.adminListeningAvailable = false,
     this.presenceAnnouncementsSupported = false,
@@ -88,6 +89,7 @@ class InternetRoomSummary {
   final int memberCount;
   final int maxParticipants;
   final String hostNickname;
+  final String joinSalt;
   final bool isHost;
   final bool adminListening;
   final bool adminListeningAvailable;
@@ -97,6 +99,7 @@ class InternetRoomSummary {
   factory InternetRoomSummary.fromJson(Map<String, dynamic> json) =>
       InternetRoomSummary(
         id: json['id'] as String,
+        joinSalt: json['joinSalt'] as String? ?? '',
         name: json['name'] as String? ?? '网络房间',
         memberCount: json['memberCount'] as int? ?? 0,
         maxParticipants: json['maxParticipants'] as int? ?? 25,
@@ -137,33 +140,6 @@ class InternetConnectionGrant {
         memberId: json['memberId'] as String,
         livekitUrl: json['livekitUrl'] as String,
         livekitToken: json['livekitToken'] as String,
-        resumeToken: json['resumeToken'] as String,
-        eventsUrl: json['eventsUrl'] as String,
-      );
-}
-
-class InternetAdmissionGrant {
-  const InternetAdmissionGrant({
-    required this.room,
-    required this.admissionId,
-    required this.memberId,
-    required this.resumeToken,
-    required this.eventsUrl,
-  });
-
-  final InternetRoomSummary room;
-  final String admissionId;
-  final String memberId;
-  final String resumeToken;
-  final String eventsUrl;
-
-  factory InternetAdmissionGrant.fromJson(Map<String, dynamic> json) =>
-      InternetAdmissionGrant(
-        room: InternetRoomSummary.fromJson(
-          json['room'] as Map<String, dynamic>,
-        ),
-        admissionId: json['admissionId'] as String,
-        memberId: json['memberId'] as String,
         resumeToken: json['resumeToken'] as String,
         eventsUrl: json['eventsUrl'] as String,
       );

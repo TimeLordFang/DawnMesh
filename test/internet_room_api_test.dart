@@ -73,6 +73,9 @@ void main() {
       maxParticipants: 25,
       hostDisconnectTimeoutMinutes: 10,
       monitoringKey: 'escrowed-room-key',
+      joinSalt: 'salt',
+      joinCredential: 'credential',
+      wrappedRoomKey: 'wrapped',
     );
     expect(grant.room.adminListeningAvailable, isTrue);
     api.close();

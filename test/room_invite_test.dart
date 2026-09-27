@@ -27,9 +27,15 @@ void main() {
     final invite = RoomInvite.generate();
     expect(invite.code.length, 4);
     expect(RoomInvite.parse('0012').code, '0012');
-    expect(RoomInvite.parse('000123').code, '000123');
     expect(RoomInvite.parse(' ${invite.code} ').code, invite.code);
-    for (final invalid in ['123', '12345', '1234567', '１２３４', '12a4']) {
+    for (final invalid in [
+      '123',
+      '12345',
+      '123456',
+      '1234567',
+      '１２３４',
+      '12a4',
+    ]) {
       expect(() => RoomInvite.parse(invalid), throwsFormatException);
     }
     expect(invite.toString(), isNot(contains(invite.code)));

@@ -118,7 +118,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
     try {
       final results = await Future.wait<dynamic>([api.info(), api.rooms()]);
       final info = results[0] as InternetServerInfo;
-      if (info.protocolVersion != 1) {
+      if (info.protocolVersion != 2) {
         throw InternetApiException(
           '服务器协议版本 ${info.protocolVersion} 与当前 App 不兼容',
         );
@@ -291,7 +291,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
         _rememberedInvites[inviteKey] ?? await requestRoomInvite(context);
     if (invite == null || !mounted) return;
     final api = InternetRoomApi(profile);
-    _showBusy('正在由房主验证邀请码…');
+    _showBusy('正在验证邀请码…');
     try {
       final session = await InternetRoomSession.join(
         api: api,

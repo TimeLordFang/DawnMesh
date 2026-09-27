@@ -56,6 +56,27 @@ void main() {
     expect(room.members.map((m) => m.id), ['me']);
     await room.disposeSession();
   });
+  test(
+    'media membership wins over control outages and restores promptly',
+    () async {
+      final room = session();
+      addTearDown(room.disposeSession);
+      room.receiveMediaRosterForTesting({'me', 'peer'});
+      await room.receiveManagementForTesting(snapshot(false));
+      expect(room.members.last.isOnline, isTrue);
+      room.receiveMediaRosterForTesting({'me'});
+      expect(room.members.last.isOnline, isFalse);
+      await room.receiveManagementForTesting(snapshot(true));
+      expect(room.members.last.isOnline, isFalse);
+      room.receiveMediaRosterForTesting({'me', 'peer'});
+      expect(room.members.last.isOnline, isTrue);
+      room.receiveMediaRosterForTesting({}, connected: false);
+      await room.receiveManagementForTesting(snapshot(false));
+      expect(room.members.last.isOnline, isTrue);
+      room.receiveMediaRosterForTesting({'me', 'peer'});
+      expect(room.members.last.isOnline, isTrue);
+    },
+  );
   testWidgets(
     'offline badge remains on avatar and host has a separate notice control',
     (tester) async {
