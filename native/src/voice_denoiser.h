@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include "tonal_suppressor.h"
 
 struct DenoiseState;
 namespace dawnmesh {
@@ -25,6 +26,7 @@ class VoiceDenoiser {
   };
   int rate_, last_level_ = 0, speech_hold_ = 0;
   DenoiseState* state_;
+  TonalSuppressor tonal_;
   Resampler up_, down_;
   std::array<float, 480> work_{}, output_{}, pcm_{};
   float previous_input_ = 0, highpass_ = 0, gain_ = 1;

@@ -72,6 +72,7 @@ bool VoiceDenoiser::processFloat(float* samples, int count, int level) {
     rnnoise_init(state_); up_.reset(); down_.reset();
     previous_input_ = highpass_ = 0; gain_ = 1; speech_hold_ = 0;
   }
+  if (last_level_ != level) tonal_.reset();
   last_level_ = level;
   // RNNoise already has an 80 Hz high-pass. Strong adds a gentle 160 Hz
   // filter before inference to reduce wind/engine rumble without a hard gate.
@@ -93,6 +94,7 @@ bool VoiceDenoiser::processFloat(float* samples, int count, int level) {
     output_[i] *= gain_ + (next_gain - gain_) * (i + 1) / 480.f;
   }
   gain_ = next_gain;
+  if (level == 2) tonal_.process(output_.data(), probability);
   down_.run(output_.data(), work_.data());
   for (int i = 0; i < count; ++i) samples[i] = bounded(work_[i]);
   return true;

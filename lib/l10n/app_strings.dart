@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.3\nAll rooms now use four-digit invite codes. Internet presence follows the media connection, preventing false offline badges during control-channel interruptions. Server-side admission lets members join while the host is offline. Requires server 0.2.5 and newly created rooms.'
-      : '1.0.3\n所有房间统一使用四位邀请码。公网房以语音连接判断成员在线状态，修复管理连接中断时的离线误报。入房改由服务端验证，房主离线时其他成员仍可加入。请配套升级服务端至 0.2.5 并重新创建房间。';
+      ? '1.0.4\nFixed false host-mute messages and retried media speaking permissions after reconnects. Promoted hosts regain speaking permission with server 0.2.6. Strong microphone noise reduction now targets persistent narrow-band whistles while preserving speech. Helmet wind performance still depends on the microphone and fit.'
+      : '1.0.4\n修复房主被误报闭麦，发言权限恢复失败会自动重试。配套服务端 0.2.6 修复接任房主后残留的闭麦状态。强力麦克风降噪新增持续窄频尖啸抑制，优先保留人声；头盔风噪效果仍需实测。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

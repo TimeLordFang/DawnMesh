@@ -9,6 +9,7 @@ add_library(dawn_mesh_native SHARED
     src/ring_buffer.cpp
     src/protocol_frame.cpp
     src/voice_denoiser.cpp
+    src/tonal_suppressor.cpp
 )
 
 add_library(rnnoise STATIC

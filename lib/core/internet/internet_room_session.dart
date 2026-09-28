@@ -85,6 +85,7 @@ class InternetRoomSession extends ChangeNotifier {
     this.isHost = false,
     Future<void> Function(bool enabled)? microphoneForTesting,
     Future<void> Function(String kind, String name)? presenceForTesting,
+    VoidCallback? mediaReadyForTesting,
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
@@ -96,6 +97,7 @@ class InternetRoomSession extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _microphoneForTesting = microphoneForTesting {
     _presenceForTesting = presenceForTesting;
+    _mediaReadyForTesting = mediaReadyForTesting;
     _summary = summary;
     _connectionState = InternetConnectionState.connected;
   }
@@ -146,6 +148,8 @@ class InternetRoomSession extends ChangeNotifier {
   bool _muted = false;
   bool _policyCanSpeak = true;
   bool _mediaCanPublish = true;
+  Timer? _mediaPermissionTimer;
+  VoidCallback? _mediaReadyForTesting;
   bool _pttPressed = false;
   bool _speakerOn = true;
   InternetAudioProfile _audioProfile;
@@ -180,7 +184,9 @@ class InternetRoomSession extends ChangeNotifier {
   VoiceMode get voiceMode => _voiceMode;
   bool get isMuted => _muted;
   bool get roomEnded => _roomEnded;
-  bool get canSpeak => _policyCanSpeak && _mediaCanPublish;
+  bool get isMutedByHost => !isHost && !_policyCanSpeak;
+  bool get awaitingMediaPermission => !isMutedByHost && !_mediaCanPublish;
+  bool get canSpeak => !isMutedByHost && _mediaCanPublish;
   bool get isPttPressed => _pttPressed;
   bool get isSpeakerOn => _speakerOn;
   String? get hostInviteCode => isHost ? _inviteCode : null;
@@ -367,6 +373,12 @@ class InternetRoomSession extends ChangeNotifier {
       ..on<RoomReconnectedEvent>((_) {
         _reconnectStartedAt = null;
         _setConnectionState(InternetConnectionState.connected);
+        unawaited(
+          _setMediaCanPublish(
+            room.localParticipant?.permissions.canPublish ?? false,
+            forceSync: true,
+          ),
+        );
       })
       ..on<RoomDisconnectedEvent>((event) {
         if (!_closed) _beginFullReconnect('${event.reason ?? 'unknown'}');
@@ -407,9 +419,7 @@ class InternetRoomSession extends ChangeNotifier {
     await NoiseReductionSettings.startInternet();
     _noiseReductionAttached = true;
     _mediaCanPublish = room.localParticipant?.permissions.canPublish ?? true;
-    _eventsSocket?.add(
-      jsonEncode({'type': 'media_ready', 'memberId': memberId}),
-    );
+    _requestMediaPermission(force: true);
     await _syncMicrophone();
     await _applyAudioBitrate();
     _refreshMembers();
@@ -437,6 +447,15 @@ class InternetRoomSession extends ChangeNotifier {
       onDone: _scheduleEventReconnect,
       onError: (_, _) => _scheduleEventReconnect(),
     );
+    final room = _livekitRoom;
+    if (room?.connectionState == ConnectionState.connected) {
+      unawaited(
+        _setMediaCanPublish(
+          room!.localParticipant?.permissions.canPublish ?? false,
+          forceSync: true,
+        ),
+      );
+    }
   }
 
   Future<void> _handleManagementEvent(dynamic raw) async {
@@ -469,9 +488,13 @@ class InternetRoomSession extends ChangeNotifier {
             await _syncBackgroundControls();
           }
           _applyMembers(event['members']);
+          _requestMediaPermission();
         case 'role_changed':
           isHost = event['hostMemberId'] == memberId;
           _applyMembers(event['members']);
+          await _syncMicrophone();
+          await _syncBackgroundControls();
+          _requestMediaPermission();
         case 'room_ended':
           await _finishEndedRoom();
       }
@@ -518,9 +541,10 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> receiveMediaPermissionForTesting(bool value) =>
       _setMediaCanPublish(value);
 
-  Future<void> _setMediaCanPublish(bool value) async {
+  Future<void> _setMediaCanPublish(bool value, {bool forceSync = false}) async {
     if (_closed || _roomEnded) return;
     _mediaCanPublish = value;
+    _requestMediaPermission(force: forceSync);
     if (!canSpeak) _pttPressed = false;
     try {
       await _syncMicrophone();
@@ -542,6 +566,7 @@ class InternetRoomSession extends ChangeNotifier {
     _policyCanSpeak = event['canSpeak'] as bool? ?? _policyCanSpeak;
     if (!canSpeak) _pttPressed = false;
     _applyMembers(event['members']);
+    _requestMediaPermission();
     await _syncMicrophone();
     await _syncBackgroundControls();
   }
@@ -565,7 +590,42 @@ class InternetRoomSession extends ChangeNotifier {
         sortOrder: sortOrder,
       );
     }
+    final self = _managementMembers[memberId];
+    if (self != null) _policyCanSpeak = self.canSpeak;
+    if (!canSpeak) _pttPressed = false;
     _refreshMembers();
+  }
+
+  // Initial grants deliberately deny publishing. Keep retrying the server's
+  // persisted policy after media/control recovery until the SDK confirms it.
+  void _requestMediaPermission({bool force = false}) {
+    _mediaPermissionTimer?.cancel();
+    _mediaPermissionTimer = null;
+    if (_closed ||
+        _roomEnded ||
+        _connectionState != InternetConnectionState.connected) {
+      return;
+    }
+    if (_eventsSocket == null && _mediaReadyForTesting == null) return;
+    final mismatch = _mediaCanPublish != !isMutedByHost;
+    if (!force && !mismatch) return;
+    try {
+      if (_mediaReadyForTesting != null) {
+        _mediaReadyForTesting!();
+      } else {
+        _eventsSocket!.add(
+          jsonEncode({'type': 'media_ready', 'memberId': memberId}),
+        );
+      }
+    } catch (error) {
+      AppLog.warn('DawnInternet', '发言权限同步暂未发送：$error');
+    }
+    if (mismatch) {
+      _mediaPermissionTimer = Timer(
+        const Duration(seconds: 10),
+        _requestMediaPermission,
+      );
+    }
   }
 
   void _scheduleEventReconnect() {
@@ -1204,6 +1264,7 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> leave({bool endRoom = false}) async {
     if (_closed) return;
     _presence.dispose();
+    _mediaPermissionTimer?.cancel();
     try {
       await api.leave(
         roomId,
@@ -1235,6 +1296,7 @@ class InternetRoomSession extends ChangeNotifier {
     if (_closed || _roomEnded) return;
     _roomEnded = true;
     _presence.dispose();
+    _mediaPermissionTimer?.cancel();
     _eventReconnectTimer?.cancel();
     _pttPressed = false;
     if (_connectionState == InternetConnectionState.disconnected) {
@@ -1265,6 +1327,7 @@ class InternetRoomSession extends ChangeNotifier {
     if (_closed) return;
     _closed = true;
     _presence.dispose();
+    _mediaPermissionTimer?.cancel();
     _eventReconnectTimer?.cancel();
     await _connectivitySubscription?.cancel();
     await _backgroundControls.close();

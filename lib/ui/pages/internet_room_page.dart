@@ -255,6 +255,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final stateText = session.roomEnded
         ? '房间已解散 · 消息暂存中'
+        : session.awaitingMediaPermission &&
+              session.connectionState == InternetConnectionState.connected
+        ? '正在恢复发言权限…'
         : switch (session.connectionState) {
             InternetConnectionState.connecting => '正在安全连接',
             InternetConnectionState.connected => '网络良好 · E2EE',
@@ -387,16 +390,18 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                 if (!keyboardOpen && !session.isHost && !session.roomEnded)
                   SizedBox(height: compactHeight ? 5 : 8),
                 if (!keyboardOpen &&
-                    !session.canSpeak &&
+                    session.isMutedByHost &&
                     !session.roomEnded) ...[
-                  const Icon(
-                    Icons.mic_off_rounded,
+                  Icon(
+                    session.isMutedByHost
+                        ? Icons.mic_off_rounded
+                        : Icons.sync_rounded,
                     size: 36,
                     color: Colors.orange,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '房主已关闭你的麦克风',
+                  Text(
+                    session.isMutedByHost ? '房主已关闭你的麦克风' : '正在恢复发言权限…',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 22),
