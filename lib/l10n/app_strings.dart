@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.0.4\nFixed false host-mute messages and retried media speaking permissions after reconnects. Promoted hosts regain speaking permission with server 0.2.6. Strong microphone noise reduction now targets persistent narrow-band whistles while preserving speech. Helmet wind performance still depends on the microphone and fit.'
-      : '1.0.4\n修复房主被误报闭麦，发言权限恢复失败会自动重试。配套服务端 0.2.6 修复接任房主后残留的闭麦状态。强力麦克风降噪新增持续窄频尖啸抑制，优先保留人声；头盔风噪效果仍需实测。';
+      ? '1.1.0-beta.1\nRebuilds microphone capture after Bluetooth reconnection. Installation identities prevent duplicate Internet-room members. Optional Wi-Fi/direct and Internet audio routing with exclusive playback. Server capability manifests control supported features without reinstalling the app. Physical headset and multi-phone testing is still needed.'
+      : '1.1.0-beta.1\n蓝牙耳机重连后重建麦克风采集；公网房按安装身份恢复成员。新增实验性双线融合，直连与公网只播放一路。服务端可动态控制已有功能和参数。需要配套 Server 0.3.0-beta.1，蓝牙及多机切换仍需实测。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

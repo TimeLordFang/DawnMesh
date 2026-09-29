@@ -116,6 +116,26 @@ class PlatformAudioPlugin(
         context.getSharedPreferences("dawnmesh_profile", Context.MODE_PRIVATE),
     )
 
+    @Volatile private var captureRequested = false
+    private var internetActive = false
+    private val routeMonitor: CommunicationRouteMonitor = CommunicationRouteMonitor(context) {
+        if (internetActive) {
+            routeMonitorRestore()
+        } else if (captureRequested) {
+            Thread({
+                synchronized(this) {
+                    if (captureRequested) {
+                        stopCapture(false)
+                        if (captureRequested && !startCapture()) Log.e(TAG, "蓝牙重连后重建录音失败")
+                    }
+                }
+            }, "dawn-audio-recover").start()
+        }
+    }
+    private fun routeMonitorRestore(): Unit = routeMonitor.restoreInternetRoute {
+        if (internetActive) methodChannel.invokeMethod("internetAudioRouteChanged", null)
+    }
+
     // 播放
     private var audioTrack: AudioTrack? = null
     private var playbackThread: Thread? = null
@@ -145,6 +165,8 @@ class PlatformAudioPlugin(
     }
 
     fun dispose() {
+        captureRequested = false
+        routeMonitor.stop()
         voiceNoiseReduction.close()
         stopCapture()
         stopPlayback()
@@ -177,10 +199,16 @@ class PlatformAudioPlugin(
                 }
             }
             "startInternetNoiseReduction" -> {
-                if (voiceNoiseReduction.startInternet()) result.success(true)
+                if (voiceNoiseReduction.startInternet()) {
+                    internetActive = true
+                    routeMonitor.start()
+                    result.success(true)
+                }
                 else result.error("AUDIO_NOT_READY", "网络音频处理尚未就绪", null)
             }
             "stopInternetNoiseReduction" -> {
+                internetActive = false
+                routeMonitor.stop()
                 voiceNoiseReduction.stopInternet()
                 result.success(true)
             }
@@ -197,6 +225,8 @@ class PlatformAudioPlugin(
                     result.error("FOREGROUND_FAILED", "无法启动前台通话，请保持应用在前台并允许麦克风和通知权限", null)
                     return
                 }
+                captureRequested = true
+                routeMonitor.start()
                 currentBitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
 
                 // AudioRecord / AudioTrack 的构造、AEC/NS/AGC 挂载、前台服务启动
@@ -223,6 +253,8 @@ class PlatformAudioPlugin(
             }
 
             "stopCapture" -> {
+                captureRequested = false
+                routeMonitor.stop()
                 // 同理：stopCapture / stopPlayback 各自 join 一条线程，最坏 1 秒，
                 // 不能压在主线程上，否则离开房间时界面会僵住。
                 Thread({
@@ -340,7 +372,8 @@ class PlatformAudioPlugin(
     // ------------------------------------------------------------------ 采集
 
     @SuppressLint("MissingPermission")
-    private fun startCapture(): Boolean {
+    @Synchronized private fun startCapture(): Boolean {
+        if (!captureRequested) return false
         if (capturing.get()) return true
         // 权限可能在 MethodChannel 检查后、后台线程真正创建 AudioRecord 前被撤销。
         if (!hasMicPermission()) {
@@ -427,7 +460,7 @@ class PlatformAudioPlugin(
         var offset = 0
 
         VoiceDenoiser(SAMPLE_RATE).use { denoiser ->
-            while (capturing.get()) {
+            while (capturing.get() && audioRecord === record) {
                 val read = try {
                     record.read(pcm, offset, SAMPLES_PER_FRAME - offset)
                 } catch (e: Exception) {
@@ -531,8 +564,11 @@ class PlatformAudioPlugin(
         }
     }
 
-    private fun stopCapture() {
-        if (!capturing.getAndSet(false)) return
+    @Synchronized private fun stopCapture(stopService: Boolean = true) {
+        capturing.set(false)
+        // Stop first to unblock read before joining/releasing its AudioRecord.
+        try { audioRecord?.stop() } catch (_: IllegalStateException) {}
+        if (audioRecord == null) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
             audioDeviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
@@ -555,7 +591,7 @@ class PlatformAudioPlugin(
         BluetoothAudioCoexistence.setActive(false)
 
         audioManager.mode = previousAudioMode
-        IntercomForegroundService.stop(context)
+        if (stopService) IntercomForegroundService.stop(context)
         Log.i(TAG, "麦克风已关闭")
     }
 

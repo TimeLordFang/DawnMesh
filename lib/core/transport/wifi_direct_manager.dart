@@ -160,6 +160,21 @@ class WifiDirectManager {
     }
   }
 
+  Future<bool> connectKnownGroup(WifiDirectCredentials credentials) async {
+    if (!await isSupported()) return false;
+    await startListeningEvents();
+    try {
+      return await _channel.invokeMethod<bool>(
+            'connectKnownGroup',
+            credentials.toMap(),
+          ) ??
+          false;
+    } catch (error) {
+      AppLog.warn(_tag, '融合直连建链失败：$error');
+      return false;
+    }
+  }
+
   Future<bool> removeGroup() async {
     if (!await isSupported()) return false;
     try {

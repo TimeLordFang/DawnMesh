@@ -1,3 +1,5 @@
+import 'internet_features.dart';
+
 class ServerProfile {
   const ServerProfile({
     required this.id,
@@ -50,6 +52,7 @@ class InternetServerInfo {
     required this.maxRoomParticipants,
     required this.protocolVersion,
     this.adminListeningSupported = false,
+    this.features = const InternetFeatures(),
   });
 
   final String instanceId;
@@ -57,10 +60,12 @@ class InternetServerInfo {
   final int maxRoomParticipants;
   final int protocolVersion;
   final bool adminListeningSupported;
+  final InternetFeatures features;
 
   factory InternetServerInfo.fromJson(Map<String, dynamic> json) =>
       InternetServerInfo(
         instanceId: json['instanceId'] as String,
+        features: InternetFeatures.fromJson(json['features']),
         name: json['name'] as String? ?? 'DawnMesh Server',
         maxRoomParticipants: json['maxRoomParticipants'] as int? ?? 25,
         protocolVersion: json['protocolVersion'] as int? ?? 1,

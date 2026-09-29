@@ -8,6 +8,7 @@ import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import '../audio/noise_reduction.dart';
@@ -23,6 +24,9 @@ import 'internet_invite_credentials.dart';
 import 'internet_models.dart';
 import 'presence_announcements.dart';
 import 'internet_room_api.dart';
+import 'server_profile_store.dart';
+import 'internet_features.dart';
+import 'hybrid_audio.dart';
 
 enum InternetConnectionState {
   connecting,
@@ -86,6 +90,7 @@ class InternetRoomSession extends ChangeNotifier {
     Future<void> Function(bool enabled)? microphoneForTesting,
     Future<void> Function(String kind, String name)? presenceForTesting,
     VoidCallback? mediaReadyForTesting,
+    Future<void> Function()? audioRecoveryForTesting,
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
@@ -98,6 +103,7 @@ class InternetRoomSession extends ChangeNotifier {
        _microphoneForTesting = microphoneForTesting {
     _presenceForTesting = presenceForTesting;
     _mediaReadyForTesting = mediaReadyForTesting;
+    _audioRecoveryForTesting = audioRecoveryForTesting;
     _summary = summary;
     _connectionState = InternetConnectionState.connected;
   }
@@ -118,6 +124,119 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> Function(bool enabled)? _microphoneForTesting;
 
   Room? _livekitRoom;
+  HybridAudio? _hybrid;
+  InternetFeatures features = const InternetFeatures();
+  Timer? _featuresTimer;
+  Future<void>? _hybridQueue;
+  bool get hybridEnabled => _hybrid != null;
+  int get directAudioCount => _hybrid?.directCount ?? 0;
+
+  Future<void> _refreshFeatures() async {
+    try {
+      final info = await api.info();
+      if (_closed) return;
+      features = info.features;
+      if (!features.hybridAudio) await setHybridEnabled(false);
+      _hybrid?.features = features;
+      notifyListeners();
+    } catch (error) {
+      AppLog.warn('DawnInternet', '动态功能配置刷新失败，保留上次配置：$error');
+    }
+  }
+
+  Future<void> setHybridEnabled(bool enabled) {
+    if (!enabled && _hybrid == null && _hybridQueue == null) {
+      return Future<void>.value();
+    }
+    final task = (_hybridQueue ?? Future<void>.value()).then((_) async {
+      if (!enabled) {
+        final previous = _hybrid;
+        _hybrid = null;
+        await previous?.close();
+      } else if (_hybrid == null &&
+          features.hybridAudio &&
+          !_closed &&
+          !_roomEnded &&
+          _connectionState == InternetConnectionState.connected &&
+          _livekitRoom != null) {
+        final hybrid = HybridAudio(
+          selfId: memberId,
+          room: _livekitRoom!,
+          signal: _sendHybridSignal,
+          canReceive: (id) =>
+              !_managementRecovering &&
+              (_managementMembers[id]?.canSpeak ?? false),
+          changed: () {
+            if (!_closed) notifyListeners();
+          },
+          features: features,
+        );
+        _hybrid = hybrid;
+        await hybrid.start(isHost: isHost, roomKey: _roomKey);
+        await _syncMicrophone();
+      }
+      if (!_closed) notifyListeners();
+    });
+    late final Future<void> settled;
+    settled = task.then(
+      (_) {
+        if (identical(_hybridQueue, settled)) _hybridQueue = null;
+      },
+      onError: (Object error, StackTrace _) {
+        if (identical(_hybridQueue, settled)) _hybridQueue = null;
+        AppLog.warn('Hybrid', '切换融合模式失败：$error');
+      },
+    );
+    _hybridQueue = settled;
+    return task;
+  }
+
+  Future<void> _sendHybridSignal(String? to, Map<String, dynamic> data) async {
+    final cipher = _chatCipher;
+    final participant = _livekitRoom?.localParticipant;
+    if (cipher == null || participant == null || _closed) return;
+    const topic = 'dawnmesh.hybrid.v1';
+    final packet = await cipher.encrypt(
+      Uint8List.fromList(utf8.encode(jsonEncode(data))),
+      associatedData: Uint8List.fromList(utf8.encode('$topic\u0000$memberId')),
+    );
+    await participant.publishData(
+      [...packet.nonce, ...packet.ciphertext],
+      reliable: true,
+      topic: topic,
+      destinationIdentities: to == null ? null : [to],
+    );
+  }
+
+  Future<void> _receiveHybridSignal(DataReceivedEvent event) async {
+    try {
+      final from = event.participant?.identity;
+      final cipher = _chatCipher;
+      if (_hybrid == null ||
+          from == null ||
+          cipher == null ||
+          event.data.length < 29 ||
+          event.data.length > 15000) {
+        return;
+      }
+      final clear = await cipher.decrypt(
+        EncryptedPacket(
+          nonce: Uint8List.fromList(event.data.sublist(0, 12)),
+          ciphertext: Uint8List.fromList(event.data.sublist(12)),
+        ),
+        associatedData: Uint8List.fromList(
+          utf8.encode('dawnmesh.hybrid.v1\u0000$from'),
+        ),
+      );
+      _hybrid?.receive(
+        from,
+        jsonDecode(utf8.decode(clear)) as Map<String, dynamic>,
+      );
+    } catch (error) {
+      AppLog.warn('Hybrid', '忽略无效直连信令：$error');
+    }
+  }
+
   Set<String>? _mediaMembersForTesting;
   bool _mediaConnectedForTesting = true;
 
@@ -143,8 +262,19 @@ class InternetRoomSession extends ChangeNotifier {
   DateTime? _eventReconnectStartedAt;
   bool _mediaReconnectPending = false;
   bool _noiseReductionAttached = false;
+  static const _audioChannel = MethodChannel('dev.dawnmesh.intercom/audio');
+  Future<void>? _microphoneQueue;
+  bool _audioRecoveryPending = false;
+  Future<void> Function()? _audioRecoveryForTesting;
+  Future<void> recoverAudioRoute() async {
+    if (_closed || _roomEnded) return;
+    _audioRecoveryPending = true;
+    await _syncMicrophone();
+  }
+
   bool _closed = false;
   bool _roomEnded = false;
+  bool sessionReplaced = false;
   bool _muted = false;
   bool _policyCanSpeak = true;
   bool _mediaCanPublish = true;
@@ -220,6 +350,7 @@ class InternetRoomSession extends ChangeNotifier {
       name: roomName,
       nickname: nickname,
       deviceId: deviceId,
+      deviceProof: await ServerProfileStore().deviceProof(),
       maxParticipants: maxParticipants,
       hostDisconnectTimeoutMinutes: hostDisconnectTimeoutMinutes,
       joinSalt: credentials.salt,
@@ -262,6 +393,7 @@ class InternetRoomSession extends ChangeNotifier {
       roomId: room.id,
       nickname: nickname,
       deviceId: deviceId,
+      deviceProof: await ServerProfileStore().deviceProof(),
       joinCredential: credentials.credential,
     );
     final roomKey = await credentials.unwrap(wrappedKey);
@@ -273,7 +405,7 @@ class InternetRoomSession extends ChangeNotifier {
       roomId: room.id,
       memberId: grant.memberId,
       resumeToken: grant.resumeToken,
-      isHost: false,
+      isHost: grant.room.isHost,
       inviteCode: invite.code,
       roomKey: roomKey,
       audioProfile: network.$2,
@@ -308,6 +440,11 @@ class InternetRoomSession extends ChangeNotifier {
     );
     await _connectEvents(grant.eventsUrl);
     await _connectLiveKit(grant);
+    await _refreshFeatures();
+    _featuresTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(_refreshFeatures()),
+    );
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
       (results) => unawaited(_handleConnectivityChanged(results)),
     );
@@ -389,6 +526,9 @@ class InternetRoomSession extends ChangeNotifier {
         unawaited(_broadcastProfile());
       })
       ..on<ParticipantDisconnectedEvent>((_) => _refreshMembers())
+      ..on<TrackSubscribedEvent>(
+        (event) => _hybrid?.cloudTrackChanged(event.participant.identity),
+      )
       ..on<ParticipantNameUpdatedEvent>((_) => _refreshMembers())
       ..on<ParticipantPermissionsUpdatedEvent>((event) {
         if (event.participant.identity == memberId) {
@@ -416,6 +556,11 @@ class InternetRoomSession extends ChangeNotifier {
       grant.livekitToken,
       connectOptions: const ConnectOptions(autoSubscribe: true),
     );
+    _audioChannel.setMethodCallHandler((call) async {
+      if (call.method == 'internetAudioRouteChanged' && !_closed) {
+        await recoverAudioRoute();
+      }
+    });
     await NoiseReductionSettings.startInternet();
     _noiseReductionAttached = true;
     _mediaCanPublish = room.localParticipant?.permissions.canPublish ?? true;
@@ -495,6 +640,9 @@ class InternetRoomSession extends ChangeNotifier {
           await _syncMicrophone();
           await _syncBackgroundControls();
           _requestMediaPermission();
+        case 'session_replaced':
+          sessionReplaced = true;
+          await _finishEndedRoom();
         case 'room_ended':
           await _finishEndedRoom();
       }
@@ -672,6 +820,7 @@ class InternetRoomSession extends ChangeNotifier {
       try {
         final grant = await _resume();
         if (_closed || _roomEnded) return;
+        await setHybridEnabled(false);
         await _listener?.dispose();
         await _livekitRoom?.dispose();
         await _connectLiveKit(grant);
@@ -711,6 +860,9 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   void _setConnectionState(InternetConnectionState value) {
+    if (value != InternetConnectionState.connected && _hybrid != null) {
+      unawaited(setHybridEnabled(false));
+    }
     if (_connectionState == value) return;
     _connectionState = value;
     if (value != InternetConnectionState.connected) _presence.suspend();
@@ -784,7 +936,9 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   void _onDataReceived(DataReceivedEvent event) {
-    if (event.topic == 'dawnmesh.chat.v1') {
+    if (event.topic == 'dawnmesh.hybrid.v1') {
+      unawaited(_receiveHybridSignal(event));
+    } else if (event.topic == 'dawnmesh.chat.v1') {
       unawaited(_decryptChat(event));
     } else if (event.topic == 'dawnmesh.image.v1') {
       unawaited(_decryptImageChunk(event));
@@ -1138,19 +1292,69 @@ class InternetRoomSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _syncMicrophone() async {
+  Future<void> _syncMicrophone() {
+    final task = (_microphoneQueue ?? Future<void>.value()).then(
+      (_) => _applyMicrophone(),
+    );
+    late final Future<void> settled;
+    settled = task.then(
+      (_) {
+        if (identical(_microphoneQueue, settled)) _microphoneQueue = null;
+      },
+      onError: (Object error, StackTrace _) {
+        if (identical(_microphoneQueue, settled)) _microphoneQueue = null;
+        AppLog.warn('DawnInternet', '更新麦克风失败：$error');
+      },
+    );
+    _microphoneQueue = settled;
+    return task;
+  }
+
+  bool get _shouldSendVoice =>
+      !_closed &&
+      !_roomEnded &&
+      canSpeak &&
+      !_muted &&
+      (_voiceMode == VoiceMode.automatic || _pttPressed);
+
+  Future<void> _applyMicrophone() async {
     if (_closed || _roomEnded) return;
-    final enabled =
-        canSpeak &&
-        !_muted &&
-        (_voiceMode == VoiceMode.automatic || _pttPressed);
+    if (_audioRecoveryPending && _shouldSendVoice) {
+      _audioRecoveryPending = false;
+      try {
+        final recover = _audioRecoveryForTesting;
+        if (recover != null) {
+          await recover();
+        } else {
+          final track = _livekitRoom?.localParticipant
+              ?.getTrackPublicationBySource(TrackSource.microphone)
+              ?.track;
+          if (track is LocalAudioTrack) {
+            await _hybrid?.setSending(false);
+            await track.restartTrack();
+            await NoiseReductionSettings.startInternet();
+            await AudioManager.instance.setSpeakerOutputPreferred(
+              _speakerOn,
+              force: false,
+            );
+            AppLog.info('DawnInternet', '耳机连接变化后已重建麦克风采集');
+          }
+        }
+      } catch (_) {
+        _audioRecoveryPending = true;
+        rethrow;
+      }
+    }
+    // A mute, PTT release or policy update may arrive while capture restarts.
+    final enabled = _shouldSendVoice;
     final testMicrophone = _microphoneForTesting;
     if (testMicrophone != null) {
       await testMicrophone(enabled);
     } else {
       await _livekitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
     }
-    if (enabled) await _applyAudioBitrate();
+    await _hybrid?.setSending(_shouldSendVoice);
+    if (_shouldSendVoice) await _applyAudioBitrate();
   }
 
   Future<void> _applyAudioBitrate() async {
@@ -1295,6 +1499,9 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> _finishEndedRoom() async {
     if (_closed || _roomEnded) return;
     _roomEnded = true;
+    _featuresTimer?.cancel();
+    await setHybridEnabled(false);
+    await _microphoneQueue;
     _presence.dispose();
     _mediaPermissionTimer?.cancel();
     _eventReconnectTimer?.cancel();
@@ -1326,6 +1533,10 @@ class InternetRoomSession extends ChangeNotifier {
   Future<void> disposeSession() async {
     if (_closed) return;
     _closed = true;
+    _featuresTimer?.cancel();
+    await setHybridEnabled(false);
+    _audioChannel.setMethodCallHandler(null);
+    await _microphoneQueue;
     _presence.dispose();
     _mediaPermissionTimer?.cancel();
     _eventReconnectTimer?.cancel();

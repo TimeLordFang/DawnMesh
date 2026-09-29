@@ -36,14 +36,45 @@ class ServerProfileStore {
   Future<void> saveSelectedId(String id) =>
       _storage.write(key: _selectedKey, value: id);
 
-  Future<String> deviceId() async {
+  // Serialize across store instances so two simultaneous entry points cannot
+  // generate different installation identities before secure storage commits.
+  static Future<void> _identityQueue = Future<void>.value();
+  static Future<String> _identityOperation(Future<String> Function() load) {
+    final result = _identityQueue.then((_) => load());
+    _identityQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  Future<String> deviceId() => _identityOperation(_loadDeviceId);
+
+  Future<String> _loadDeviceId() async {
     final existing = await _storage.read(key: _deviceKey);
     if (existing != null && existing.length >= 24) return existing;
     final random = Random.secure();
-    final generated = base64UrlEncode(
-      List<int>.generate(24, (_) => random.nextInt(256)),
-    );
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final generated =
+        '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
     await _storage.write(key: _deviceKey, value: generated);
     return generated;
+  }
+
+  Future<String> deviceProof() => _identityOperation(_loadDeviceProof);
+  Future<String> _loadDeviceProof() async {
+    const key = 'installation_device_proof_v1';
+    final existing = await _storage.read(key: key);
+    if (existing != null && existing.length == 44) return existing;
+    final random = Random.secure();
+    final proof = base64Encode(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
+    await _storage.write(key: key, value: proof);
+    return proof;
   }
 }

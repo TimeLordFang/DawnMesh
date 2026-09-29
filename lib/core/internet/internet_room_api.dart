@@ -80,6 +80,7 @@ class InternetRoomApi {
     required String name,
     required String nickname,
     required String deviceId,
+    String? deviceProof,
     required int maxParticipants,
     required int hostDisconnectTimeoutMinutes,
     required String joinSalt,
@@ -95,6 +96,7 @@ class InternetRoomApi {
           'name': name,
           'nickname': nickname,
           'deviceId': deviceId,
+          'deviceProof': ?deviceProof,
           'maxParticipants': maxParticipants,
           'hostDisconnectTimeoutMinutes': hostDisconnectTimeoutMinutes,
           'joinSalt': joinSalt,
@@ -110,6 +112,7 @@ class InternetRoomApi {
     required String roomId,
     required String nickname,
     required String deviceId,
+    String? deviceProof,
     required String joinCredential,
   }) async {
     final body = await _decode(
@@ -119,6 +122,7 @@ class InternetRoomApi {
         body: jsonEncode({
           'nickname': nickname,
           'deviceId': deviceId,
+          'deviceProof': ?deviceProof,
           'joinCredential': joinCredential,
         }),
       ),

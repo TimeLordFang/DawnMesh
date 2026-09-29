@@ -256,7 +256,7 @@ class WifiDirectPlugin(
 
     @SuppressLint("MissingPermission")
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method in setOf("createGroup", "removeGroup", "discoverPeers", "connect", "disconnect") &&
+        if (call.method in setOf("createGroup", "removeGroup", "discoverPeers", "connect", "connectKnownGroup", "disconnect") &&
             !hasNearbyWifiPermission()
         ) {
             result.error("PERMISSION_DENIED", "缺少附近 Wi-Fi 设备权限", null)
@@ -338,6 +338,14 @@ class WifiDirectPlugin(
                 }
             }
 
+            "connectKnownGroup" -> {
+                val config = configuredGroup(call.argument("networkName"), call.argument("passphrase"))
+                if (config == null) { result.success(false); return }
+                manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() { result.success(true) }
+                    override fun onFailure(reason: Int) { result.success(false) }
+                }) ?: result.success(false)
+            }
             "connect" -> {
                 val address = call.argument<String>("deviceAddress")
                 val networkName = call.argument<String>("networkName")

@@ -285,6 +285,13 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (session.features.notice.isNotEmpty)
+                Text(
+                  session.features.notice,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
+                ),
               Text(
                 session.summary.name,
                 maxLines: 1,
@@ -293,7 +300,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
               ),
               if (!keyboardOpen)
                 Text(
-                  '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k',
+                  '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k${session.hybridEnabled ? ' · 直连 ${session.directAudioCount}' : ''}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -309,6 +316,51 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ],
           ),
           actions: [
+            if (!keyboardOpen &&
+                !session.roomEnded &&
+                session.features.hybridAudio)
+              IconButton(
+                tooltip: session.hybridEnabled
+                    ? '关闭双线融合（${session.directAudioCount} 路直连）'
+                    : '开启双线融合（实验）',
+                icon: Icon(
+                  Icons.wifi_tethering,
+                  color: session.hybridEnabled ? Colors.green : null,
+                ),
+                onPressed: () async {
+                  if (!session.hybridEnabled) {
+                    final enable = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('双线融合 · Beta'),
+                        content: const Text(
+                          '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。每位成员需分别开启。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('开启'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (enable != true) return;
+                  }
+                  try {
+                    await session.setHybridEnabled(!session.hybridEnabled);
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('直连暂不可用，继续使用公网')),
+                      );
+                    }
+                  }
+                },
+              ),
             if (!keyboardOpen && !session.roomEnded)
               NoiseReductionControl(isNight: widget.isNight),
             if (!keyboardOpen && session.isHost && !session.roomEnded)
@@ -414,7 +466,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                     color: Colors.redAccent,
                   ),
                   Text(
-                    session.isHost ? '房间已解散' : '房间已被群主解散',
+                    session.sessionReplaced
+                        ? '此设备已在另一个会话重新加入'
+                        : session.isHost
+                        ? '房间已解散'
+                        : '房间已被群主解散',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const Text('聊天记录会保留到退出房间'),
@@ -1226,7 +1282,7 @@ class _InternetChatSheetState extends State<_InternetChatSheet> {
                 top: false,
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('房间已解散 · 可继续查看和保存消息'),
+                  child: Text('通话已结束 · 可继续查看和保存消息'),
                 ),
               )
             else
