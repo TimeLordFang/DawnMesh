@@ -39,6 +39,38 @@ void main() {
     return session;
   }
 
+  test('host reconnect snapshot and permission restoration cannot switch idle PTT to automatic', () async {
+    final states = <bool>[];
+    final session = makeSession(states);
+    await session.setPtt(true);
+    await session.setPtt(false);
+    states.clear();
+    session.receiveMediaRosterForTesting({}, connected: false);
+    await session.receiveMediaPermissionForTesting(false);
+    await session.receiveManagementForTesting({
+      'type': 'snapshot',
+      'hostMemberId': 'host',
+      'canSpeak': true,
+      'members': [
+        {'id': 'host', 'isHost': true, 'canSpeak': true},
+        {'id': 'member-test', 'canSpeak': true},
+      ],
+    });
+    session.receiveMediaRosterForTesting({
+      'host',
+      'member-test',
+    }, connected: true);
+    await session.receiveMediaPermissionForTesting(true);
+    await session.receiveVoicePolicyForTesting(true);
+    expect(session.voiceMode, VoiceMode.pushToTalk);
+    expect(session.isPttPressed, false);
+    expect(states, isNotEmpty);
+    expect(states, everyElement(false));
+    await session.setPtt(true);
+    expect(states.last, true);
+    await session.setPtt(false);
+    expect(states.last, false);
+  });
   test(
     'automatic talk resumes when the host restores speaking permission',
     () async {

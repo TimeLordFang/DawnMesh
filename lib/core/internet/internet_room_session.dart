@@ -1419,6 +1419,7 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> _syncMicrophone() {
+    if (!_shouldSendVoice) _ownedMicrophone?.blockTransmission();
     final task = (_microphoneQueue ?? Future<void>.value()).then(
       (_) => _applyMicrophone(),
     );
@@ -1463,6 +1464,7 @@ class InternetRoomSession extends ChangeNotifier {
               await track.release();
               _ownedMicrophone = await IntercomAudioTrack.createOwned(
                 _captureOptions,
+                mayTransmit: () => _shouldSendVoice,
               );
             } else {
               await track.restartTrack();
@@ -1491,6 +1493,7 @@ class InternetRoomSession extends ChangeNotifier {
           (_livekitRoom != null || _hybrid != null)) {
         _ownedMicrophone = await IntercomAudioTrack.createOwned(
           _captureOptions,
+          mayTransmit: () => _shouldSendVoice,
         );
       }
       final track = _ownedMicrophone;

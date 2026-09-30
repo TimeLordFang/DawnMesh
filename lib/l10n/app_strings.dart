@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0-beta.4\nHealthy direct links now take priority. Established links and microphone capture survive public-network outages for the 30-minute recovery window. Adds direct keepalive, independent teammate disconnects and hot-configurable loss/jitter thresholds. Multi-user Wi-Fi remains a single group, not a multi-hop mesh.'
-      : '1.1.0-beta.4\n健康直连优先；公网断开后，在 30 分钟重连窗口内保留已建立直连和麦克风，对讲不再等待公网。增加直连保活，单人离开不影响其他直连；丢包与抖动阈值支持热配置。多人 Wi-Fi 仍是单群组，不支持跨群组多跳 Mesh。';
+      ? '1.1.0-beta.5\nGuards microphone activation during public-room and direct-link reconnection. Idle push-to-talk stays silent even if the SDK requests unmute; releasing the button closes the audio track immediately. Replacement capture tracks check the latest local talk state before attachment. Requires an APK update; no server upgrade needed.'
+      : '1.1.0-beta.5\n修复公网融合房重连期间可能绕过按住对讲的开麦入口。未按键时拦截底层解除静音，松手立即关闭音轨；重建采集时先检查本机发言状态，再接入发送器。本次需更新 APK，无需升级服务端。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

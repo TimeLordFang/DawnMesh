@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:dawn_mesh/core/internet/hybrid_audio.dart';
+import 'package:dawn_mesh/core/internet/intercom_audio_track.dart';
 import 'package:dawn_mesh/core/internet/internet_features.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -47,6 +48,11 @@ class _Channel extends Fake implements rtc.RTCDataChannel {
   }
 }
 
+class _Stream extends Fake implements rtc.MediaStream {
+  @override
+  Future<void> dispose() async {}
+}
+
 class _Track extends Fake implements rtc.MediaStreamTrack {
   _Track(this.id);
   @override
@@ -55,6 +61,10 @@ class _Track extends Fake implements rtc.MediaStreamTrack {
   String get kind => 'audio';
   @override
   bool enabled = false;
+  @override
+  void Function()? onEnded;
+  @override
+  Future<void> stop() async {}
 }
 
 class _Local extends Fake implements LocalAudioTrack {
@@ -156,6 +166,68 @@ class _Connection extends Fake implements rtc.RTCPeerConnection {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'host direct renegotiation and SDK unmute leave released PTT silent',
+    () async {
+      var pressed = true;
+      final media = _Track('mic');
+      final track = IntercomAudioTrack(
+        _Stream(),
+        media,
+        const AudioCaptureOptions(),
+        mayTransmit: () => pressed,
+      );
+      await track.start();
+      await track.mute(stopOnMute: false);
+      await track.unmute(stopOnMute: false);
+      final pcs = <_Connection>[];
+      final hybrid = HybridAudio(
+        selfId: 'a',
+        room: _Room(),
+        localTrack: () => track,
+        canSend: () => pressed,
+        signal: (_, _) async {},
+        canReceive: (_) => true,
+        changed: () {},
+        features: const InternetFeatures(),
+        createConnection: (_) async {
+          final pc = _Connection();
+          pcs.add(pc);
+          return pc;
+        },
+      );
+      addTearDown(() async {
+        await hybrid.close();
+        await track.release();
+      });
+      await hybrid.receive('z', {'kind': 'hello'});
+      await hybrid.setSending(true);
+      expect(pcs.first.sender.source, same(media));
+      // Release locally before the host's reconnect signals finish processing.
+      pressed = false;
+      track.blockTransmission();
+      await hybrid.receive('z', {'kind': 'bye'});
+      await track.unmute(stopOnMute: false); // stale SDK request
+      await hybrid.receive('z', {'kind': 'hello'});
+      expect(pcs, hasLength(2));
+      expect(pcs.last.sender.source, isNull);
+      expect(media.enabled, false);
+      expect(track.muted, true);
+      await hybrid.setSending(false);
+      pressed = true;
+      await track.unmute(stopOnMute: false);
+      await hybrid.setSending(true);
+      expect(pcs.last.sender.source, same(media));
+      expect(media.enabled, true);
+      pressed = false;
+      track.blockTransmission();
+      await track.mute(stopOnMute: false);
+      await hybrid.setSending(false);
+      expect(pcs.last.sender.source, isNull);
+      expect(media.enabled, false);
+    },
+  );
   test(
     'three members retain direct audio, PTT and control with no public room',
     () async {
