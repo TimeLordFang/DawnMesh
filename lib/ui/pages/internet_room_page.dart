@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/noise_reduction_control.dart';
+import '../widgets/room_settings_button.dart';
 import '../widgets/presence_announcements_control.dart';
 import '../../core/internet/internet_audio_profile.dart';
 import '../../core/internet/internet_models.dart';
@@ -54,6 +55,41 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showRoomEndedNotice();
       });
+    }
+  }
+
+  Future<void> _toggleHybrid() async {
+    final session = widget.session;
+
+    if (!session.hybridEnabled) {
+      final enable = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('双线融合 · Beta'),
+          content: const Text(
+            '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('开启'),
+            ),
+          ],
+        ),
+      );
+      if (enable != true) return;
+    }
+    try {
+      await session.setHybridEnabled(!session.hybridEnabled);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('直连暂不可用，继续使用公网')));
+      }
     }
   }
 
@@ -287,7 +323,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
       },
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: keyboardOpen ? 48 : 58,
+          toolbarHeight: keyboardOpen
+              ? 48
+              : MediaQuery.textScalerOf(context).scale(38) + 20,
           leading: IconButton(
             tooltip: '返回房间列表（保持通话）',
             onPressed: _minimize,
@@ -296,13 +334,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (session.features.notice.isNotEmpty)
-                Text(
-                  session.features.notice,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11),
-                ),
               Text(
                 session.summary.name,
                 maxLines: 1,
@@ -311,7 +342,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
               ),
               if (!keyboardOpen)
                 Text(
-                  '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k${session.hybridEnabled ? ' · 直连 ${session.directAudioCount}' : ''}',
+                  '$stateText · ${session.audioProfile.label} ${session.audioBitrate ~/ 1000}k',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -327,61 +358,61 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ],
           ),
           actions: [
-            if (!keyboardOpen &&
-                !session.roomEnded &&
-                session.isHost &&
-                session.hybridAvailable)
-              IconButton(
-                tooltip: session.hybridEnabled
-                    ? '关闭双线融合（${session.directAudioCount} 路直连）'
-                    : '为全房开启双线融合（实验）',
-                icon: Icon(
-                  Icons.wifi_tethering,
-                  color: session.hybridEnabled ? Colors.green : null,
-                ),
-                onPressed: () async {
-                  if (!session.hybridEnabled) {
-                    final enable = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('双线融合 · Beta'),
-                        content: const Text(
-                          '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('取消'),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('开启'),
-                          ),
-                        ],
+            if (!keyboardOpen)
+              RoomSettingsButton(
+                listenable: session,
+                items: (sheetContext) => [
+                  if (!session.roomEnded)
+                    ListTile(
+                      title: const Text('麦克风降噪'),
+                      subtitle: const Text('只影响本机发出的语音'),
+                      trailing: NoiseReductionControl(isNight: widget.isNight),
+                    ),
+                  if (!session.roomEnded &&
+                      session.isHost &&
+                      session.hybridAvailable)
+                    ListTile(
+                      title: const Text('双线融合'),
+                      subtitle: Text(
+                        session.hybridEnabled
+                            ? session.hybridStatus
+                            : '房主开启，全体成员自动连接',
                       ),
-                    );
-                    if (enable != true) return;
-                  }
-                  try {
-                    await session.setHybridEnabled(!session.hybridEnabled);
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('直连暂不可用，继续使用公网')),
-                      );
-                    }
-                  }
-                },
-              ),
-            if (!keyboardOpen && !session.roomEnded)
-              NoiseReductionControl(isNight: widget.isNight),
-            if (!keyboardOpen && session.isHost && !session.roomEnded)
-              PresenceAnnouncementsControl(session: session),
-            if (!keyboardOpen && session.isHost && !session.roomEnded)
-              IconButton(
-                tooltip: '修改房间名',
-                onPressed: _rename,
-                icon: const Icon(Icons.edit_outlined),
+                      trailing: Switch(
+                        value: session.hybridEnabled,
+                        onChanged: (_) {
+                          Navigator.pop(sheetContext);
+                          unawaited(_toggleHybrid());
+                        },
+                      ),
+                    ),
+                  if (!session.roomEnded && session.isHost)
+                    ListTile(
+                      title: const Text('成员离线／退出提示'),
+                      subtitle: Text(
+                        session.summary.presenceAnnouncementsEnabled
+                            ? '全房间语音提示已开启'
+                            : '全房间语音提示已关闭',
+                      ),
+                      trailing: PresenceAnnouncementsControl(session: session),
+                    ),
+                  if (!session.roomEnded && session.isHost)
+                    ListTile(
+                      leading: const Icon(Icons.edit_outlined),
+                      title: const Text('修改房间名'),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        _rename();
+                      },
+                    ),
+                  if (session.hybridEnabled && !session.isHost)
+                    ListTile(
+                      title: const Text('双线融合'),
+                      subtitle: Text(session.hybridStatus),
+                    ),
+                  if (session.roomEnded)
+                    const ListTile(title: Text('通话已结束，聊天记录保留到退出')),
+                ],
               ),
           ],
         ),
@@ -395,6 +426,39 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ),
             child: Column(
               children: [
+                if (!keyboardOpen &&
+                    !session.roomEnded &&
+                    session.hybridEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.wifi_tethering_rounded,
+                          size: 16,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            session.hybridStatus,
+                            key: const ValueKey('hybrid-connection-status'),
+                            style: TextStyle(fontSize: 12, color: accent),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (!keyboardOpen && session.features.notice.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      session.features.notice,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
                 if (!keyboardOpen && !session.roomEnded && inviteCode != null)
                   _InviteCard(
                     code: inviteCode,

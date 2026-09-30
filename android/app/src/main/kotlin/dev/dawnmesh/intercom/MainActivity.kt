@@ -33,6 +33,8 @@ class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        // Include the P2P interface before the first LiveKit/WebRTC connection.
+        WifiDirectNetworkMonitor.install()
         super.configureFlutterEngine(flutterEngine)
         DebugLogBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)

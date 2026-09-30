@@ -13,6 +13,7 @@ import '../transport/wifi_direct_manager.dart';
 import 'internet_features.dart';
 import 'exclusive_audio_switch.dart';
 import 'hybrid_wifi_link.dart';
+import 'hybrid_ice.dart';
 
 /// One capture, two transports, one audible receiver per member. SFU remains
 /// subscribed as a warm fallback. Direct RTP uses DTLS-SRTP; its SDP fingerprints
@@ -25,7 +26,11 @@ class HybridAudio {
     required this.canReceive,
     required this.changed,
     required this.features,
-  });
+    Future<rtc.RTCPeerConnection> Function(Map<String, dynamic>)?
+    createConnection,
+  }) : _createConnection = createConnection ?? rtc.createPeerConnection;
+  final Future<rtc.RTCPeerConnection> Function(Map<String, dynamic>)
+  _createConnection;
   final String selfId;
   final Room room;
   final Future<void> Function(String? to, Map<String, dynamic> data) signal;
@@ -33,6 +38,7 @@ class HybridAudio {
   final void Function() changed;
   InternetFeatures features;
   final Map<String, _DirectPeer> _peers = {};
+  final _ice = HybridIceInbox();
   final Map<String, DateTime> _available = {};
   Future<void> _queue = Future<void>.value();
   Timer? _timer;
@@ -49,6 +55,16 @@ class HybridAudio {
   }
 
   int get directCount => _peers.values.where((p) => p.audible).length;
+  int get connectedCount => _peers.values
+      .where(
+        (p) =>
+            p.pc.connectionState ==
+            rtc.RTCPeerConnectionState.RTCPeerConnectionStateConnected,
+      )
+      .length;
+  String get status => connectedCount > 0
+      ? '直连已连接 $connectedCount · ${directCount > 0 ? '语音使用 $directCount 路' : '当前使用公网'}'
+      : _wifi?.status ?? '正在协商直连语音';
 
   Future<void> start({
     required String hostId,
@@ -80,6 +96,8 @@ class HybridAudio {
       ),
       signal: (data) => signal(null, data),
       info: manager.getConnectionInfo,
+      availability: manager.hybridAvailability,
+      changed: changed,
       create: manager.createGroup,
       join: manager.connectKnownGroup,
       disconnect: () async {
@@ -100,67 +118,94 @@ class HybridAudio {
         });
   }
 
-  void receive(String from, Map<String, dynamic> data) => _enqueue(() async {
-    if (!room.remoteParticipants.containsKey(from)) return;
-    final kind = data['kind'];
-    if (kind == 'wifi_ready') {
-      _wifi?.receive(from, data);
-      return;
-    }
-    if (kind == 'hello') {
-      _available[from] = DateTime.now();
-      if (!_peers.containsKey(from) &&
-          selfId.compareTo(from) < 0 &&
-          _peers.length < features.maxPeers) {
-        final peer = await _create(from, _randomSession());
-        await _description(peer, await peer.pc.createOffer());
-      }
-      return;
-    }
-    if (kind == 'bye') {
-      _available.remove(from);
-      await _remove(from);
-      return;
-    }
-    final session = data['session'];
-    final sdp = data['sdp'];
-    if (session is! String ||
-        session.length > 64 ||
-        sdp is! String ||
-        sdp.length > 12000) {
-      return;
-    }
-    if (kind == 'offer' && from.compareTo(selfId) < 0) {
-      if (_peers[from]?.session == session) return;
-      if (!_peers.containsKey(from) && _peers.length >= features.maxPeers) {
+  Future<void> receive(String from, Map<String, dynamic> data) {
+    _enqueue(() async {
+      if (!room.remoteParticipants.containsKey(from)) return;
+      final kind = data['kind'];
+      if (kind == 'wifi_ready') {
+        _wifi?.receive(from, data);
         return;
       }
-      await _remove(from);
-      final peer = await _create(from, session);
-      await peer.pc.setRemoteDescription(
-        rtc.RTCSessionDescription(privateCandidatesOnly(sdp), 'offer'),
-      );
-      await _description(peer, await peer.pc.createAnswer());
-    } else if (kind == 'answer') {
-      final peer = _peers[from];
-      if (peer == null || peer.session != session) return;
-      await peer.pc.setRemoteDescription(
-        rtc.RTCSessionDescription(privateCandidatesOnly(sdp), 'answer'),
-      );
-    }
-  });
+      if (kind == 'hello') {
+        _available[from] = DateTime.now();
+        if (!_peers.containsKey(from) &&
+            selfId.compareTo(from) < 0 &&
+            _peers.length < features.maxPeers) {
+          final peer = await _create(from, _randomSession());
+          await _description(peer, await peer.pc.createOffer());
+        }
+        return;
+      }
+      if (kind == 'bye') {
+        _available.remove(from);
+        await _remove(from);
+        return;
+      }
+      final session = data['session'];
+      if (session is String && kind == 'candidate') {
+        final peer = _peers[from];
+        if (peer != null && peer.session != session) return;
+        await _ice.receive(from, session, data);
+        return;
+      }
+      final sdp = data['sdp'];
+      if (session is! String ||
+          session.length > 64 ||
+          sdp is! String ||
+          sdp.length > 12000) {
+        return;
+      }
+      if (kind == 'offer' && from.compareTo(selfId) < 0) {
+        if (_peers[from]?.session == session) return;
+        if (!_peers.containsKey(from) && _peers.length >= features.maxPeers) {
+          return;
+        }
+        await _remove(from);
+        final peer = await _create(from, session);
+        await peer.pc.setRemoteDescription(
+          rtc.RTCSessionDescription(privateCandidatesOnly(sdp), 'offer'),
+        );
+        await _ice.activate(from, session, peer.pc.addCandidate);
+        await _description(peer, await peer.pc.createAnswer());
+      } else if (kind == 'answer') {
+        final peer = _peers[from];
+        if (peer == null || peer.session != session) return;
+        await peer.pc.setRemoteDescription(
+          rtc.RTCSessionDescription(privateCandidatesOnly(sdp), 'answer'),
+        );
+        await _ice.activate(from, session, peer.pc.addCandidate);
+      }
+    });
+
+    return _queue;
+  }
 
   static String _randomSession() => base64UrlEncode(
     List<int>.generate(18, (_) => Random.secure().nextInt(256)),
   );
 
   Future<_DirectPeer> _create(String id, String session) async {
-    final pc = await rtc.createPeerConnection({
+    final pc = await _createConnection({
       'iceServers': <Object>[],
       'sdpSemantics': 'unified-plan',
+      'continualGatheringPolicy': 'gather_continually',
     });
     final peer = _DirectPeer(id, session, pc);
     _peers[id] = peer;
+    pc.onIceCandidate = (candidate) {
+      final value = candidate.candidate;
+      if (value == null || !isPrivateHostCandidate(value)) return;
+      _enqueue(() async {
+        if (!identical(_peers[id], peer)) return;
+        await signal(id, {
+          'kind': 'candidate',
+          'session': session,
+          'candidate': value,
+          'sdpMid': candidate.sdpMid,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+        });
+      });
+    };
     pc.onIceGatheringState = (state) {
       if (state == rtc.RTCIceGatheringState.RTCIceGatheringStateComplete &&
           !peer.gathered.isCompleted) {
@@ -175,6 +220,8 @@ class HybridAudio {
       _enqueue(() => _select(peer, false));
     };
     pc.onConnectionState = (state) {
+      AppLog.info('Hybrid', '直连语音连接状态：$state');
+      if (!_closed) changed();
       if (state != rtc.RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         _enqueue(() => _select(peer, false));
       }
@@ -212,23 +259,9 @@ class HybridAudio {
   static String privateCandidatesOnly(String sdp) => sdp
       .split('\r\n')
       .where((line) {
+        if (line == 'a=end-of-candidates') return false;
         if (!line.startsWith('a=candidate:')) return true;
-        final parts = line.split(' ');
-        if (parts.length < 8 || parts[6] != 'typ' || parts[7] != 'host') {
-          return false;
-        }
-        final ip = parts[4].toLowerCase();
-        final octets = ip.split('.').map(int.tryParse).toList();
-        return (octets.length == 4 &&
-                octets.every((n) => n != null && n >= 0 && n <= 255) &&
-                (octets[0] == 10 ||
-                    (octets[0] == 192 && octets[1] == 168) ||
-                    (octets[0] == 172 &&
-                        octets[1]! >= 16 &&
-                        octets[1]! <= 31))) ||
-            ip.startsWith('fc') && ip.contains(':') ||
-            ip.startsWith('fd') && ip.contains(':') ||
-            ip.startsWith('fe80:');
+        return isPrivateHostCandidate(line);
       })
       .join('\r\n');
 
@@ -322,14 +355,16 @@ class HybridAudio {
           }
         }
         final use = peer.policy.update(
-          connected: connected && audioFlow && canReceive(peer.id),
+          connected: connected && canReceive(peer.id),
           rttMs: rtt,
           cloudRttMs: cloudRtt,
           loss: loss,
           jitterMs: jitter,
           features: features,
         );
-        await _select(peer, use);
+        // Warm the route with ICE probes even while both users are silent.
+        // Actual playback still requires arriving audio packets.
+        await _select(peer, use && audioFlow);
       } catch (error) {
         await _select(peer, false);
         AppLog.warn('Hybrid', '直连探测异常，回退公网：$error');
@@ -390,6 +425,7 @@ class HybridAudio {
   Future<void> _remove(String id) async {
     final peer = _peers.remove(id);
     if (peer == null) return;
+    _ice.forget(id);
     try {
       await _select(peer, false);
     } finally {
@@ -411,6 +447,7 @@ class HybridAudio {
         AppLog.warn('Hybrid', '关闭直连音轨失败：$error');
       }
     }
+    _ice.clear();
     await _wifi?.close();
     try {
       await signal(null, {'kind': 'bye'});

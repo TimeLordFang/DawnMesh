@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/noise_reduction_control.dart';
+import '../widgets/room_settings_button.dart';
 import '../../core/audio/audio_io.dart';
 import '../../core/internet/internet_room_session.dart';
 import '../../core/platform/platform_audio_channel.dart';
@@ -622,24 +623,33 @@ class _SessionStageState extends State<SessionStage>
         top: 40,
         right: 8,
         child: rise(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          RoomSettingsButton(
+            color: Colors.white,
+            dismissEvents: session.stateStream.where(
+              (state) => state == RoomState.ended,
+            ),
+            items: (sheetContext) => [
               if (!session.roomEnded)
-                const NoiseReductionControl(isNight: true),
-              IconButton(
-                tooltip: s.tooltipDebugLogs,
-                iconSize: 28,
-                padding: const EdgeInsets.all(12),
-                icon: const Icon(Icons.terminal_rounded, color: Colors.white),
-                onPressed: _showDebugLogs,
+                ListTile(
+                  title: const Text('麦克风降噪'),
+                  subtitle: const Text('只影响本机发出的语音'),
+                  trailing: NoiseReductionControl(isNight: widget.isNight),
+                ),
+              ListTile(
+                leading: const Icon(Icons.terminal_rounded),
+                title: Text(s.tooltipDebugLogs),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showDebugLogs();
+                },
               ),
-              IconButton(
-                tooltip: s.tooltipDiagnostics,
-                iconSize: 28,
-                padding: const EdgeInsets.all(12),
-                icon: const Icon(Icons.info_outline, color: Colors.white),
-                onPressed: _showDiagnostics,
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(s.tooltipDiagnostics),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showDiagnostics();
+                },
               ),
             ],
           ),

@@ -78,7 +78,7 @@ void main() {
     },
   );
   testWidgets(
-    'offline badge remains on avatar and host has a separate notice control',
+    'offline badge stays visible and host controls are inside room settings',
     (tester) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
@@ -94,6 +94,12 @@ void main() {
         find.byKey(const ValueKey('member-offline-badge')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('presence-announcements-control')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const ValueKey('room-settings-button')));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('presence-announcements-control')),
         findsOneWidget,

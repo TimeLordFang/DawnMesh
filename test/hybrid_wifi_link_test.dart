@@ -106,4 +106,93 @@ void main() {
     await link.tick();
     await link.close();
   });
+  test(
+    'missing permission reports a useful state and recovers on the next poll',
+    () async {
+      var ready = 'permission', creates = 0;
+      final link = HybridWifiLink(
+        selfId: 'host',
+        hostId: 'host',
+        credentials: credentials,
+        availability: () async => ready,
+        signal: (_) async {},
+        info: () async => state(false, false),
+        create: (_) async {
+          creates++;
+          return true;
+        },
+        join: (_) async => false,
+        disconnect: () async => true,
+      );
+      await link.tick();
+      expect(creates, 0);
+      expect(link.status, contains('权限'));
+      ready = 'wifi_off';
+      await link.tick();
+      expect(creates, 0);
+      expect(link.status, contains('打开 Wi-Fi'));
+      ready = 'ready';
+      await link.tick();
+      expect(creates, 1);
+      expect(link.status, contains('正在建立'));
+      await link.close();
+    },
+  );
+  test('failed group creation retries under one owner and eventually announces readiness', () async {
+    var attempts = 0, formed = false;
+    var now = DateTime(2026);
+    final signals = <Map<String, dynamic>>[];
+    final link = HybridWifiLink(
+      selfId: 'host',
+      hostId: 'host',
+      credentials: credentials,
+      signal: (data) async => signals.add(data),
+      info: () async => state(formed, true),
+      create: (_) async => ++attempts > 1,
+      join: (_) async => false,
+      disconnect: () async => true,
+      now: () => now,
+    );
+    await link.tick();
+    expect(link.status, contains('重试'));
+    now = now.add(const Duration(seconds: 16));
+    await link.tick();
+    formed = true;
+    await link.tick();
+    expect(signals.single['kind'], 'wifi_ready');
+    expect(link.status, contains('Wi-Fi 已连接'));
+    await link.close();
+  });
+  test(
+    'a surviving group for this exact room is adopted and advertised',
+    () async {
+      final signals = <Map<String, dynamic>>[];
+      var removed = false;
+      final link = HybridWifiLink(
+        selfId: 'host',
+        hostId: 'host',
+        credentials: credentials,
+        signal: (data) async => signals.add(data),
+        info: () async => WifiP2pConnectionInfo(
+          isConnected: true,
+          isGroupOwner: true,
+          groupFormed: true,
+          groupOwnerAddress: '192.168.49.1',
+          networkName: credentials.networkName,
+        ),
+        create: (_) async {
+          fail('must adopt the matching existing group');
+        },
+        join: (_) async => false,
+        disconnect: () async {
+          removed = true;
+          return true;
+        },
+      );
+      await link.tick();
+      expect(signals.single['kind'], 'wifi_ready');
+      await link.close();
+      expect(removed, isTrue);
+    },
+  );
 }

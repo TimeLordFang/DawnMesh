@@ -118,6 +118,11 @@ class WifiDirectPlugin(
                             val isConnected = info != null && info.groupFormed
                             Log.i(TAG, "Wi-Fi Direct 连接状态变更: groupFormed=${info?.groupFormed}, isGO=${info?.isGroupOwner}, hostIp=${info?.groupOwnerAddress?.hostAddress}")
                             sendConnectionEvent(isConnected = isConnected, info = info)
+                            if (isConnected && hasNearbyWifiPermission()) {
+                                manager?.requestGroupInfo(channel) { WifiDirectNetworkMonitor.updateGroup(it) }
+                            } else {
+                                WifiDirectNetworkMonitor.updateGroup(null)
+                            }
                         }
                     }
 
@@ -224,24 +229,7 @@ class WifiDirectPlugin(
 
             override fun onFailure(reason: Int) {
                 Log.w(TAG, "创建 Wi-Fi Direct 群组失败: $reason")
-                if (reason == WifiP2pManager.BUSY) {
-                    android.os.Handler(Looper.getMainLooper()).postDelayed({
-                        val retry = object : WifiP2pManager.ActionListener {
-                            override fun onSuccess() {
-                                Log.i(TAG, "重试创建 Wi-Fi Direct 群组成功")
-                                p2pManager.discoverPeers(p2pChannel, null)
-                            }
-                            override fun onFailure(r: Int) {
-                                Log.w(TAG, "重试创建群组失败: $r")
-                            }
-                        }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && config != null) {
-                            p2pManager.createGroup(p2pChannel, config, retry)
-                        } else {
-                            p2pManager.createGroup(p2pChannel, retry)
-                        }
-                    }, 300)
-                }
+                // The caller owns retries; never create an unreported group later.
                 result.success(false)
             }
         }
@@ -265,6 +253,24 @@ class WifiDirectPlugin(
         when (call.method) {
             "isSupported" -> {
                 result.success(manager != null && channel != null)
+            }
+
+            "hybridAvailability" -> {
+                val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+                val location = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+                val locationEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    location?.isLocationEnabled == true
+                } else {
+                    location?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                        location?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
+                }
+                result.success(when {
+                    manager == null || channel == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> "unsupported"
+                    !hasNearbyWifiPermission() -> "permission"
+                    wifi?.isWifiEnabled != true -> "wifi_off"
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && !locationEnabled -> "location_off"
+                    else -> "ready"
+                })
             }
 
             "isEnabled" -> {
@@ -343,7 +349,10 @@ class WifiDirectPlugin(
                 if (config == null) { result.success(false); return }
                 manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() { result.success(true) }
-                    override fun onFailure(reason: Int) { result.success(false) }
+                    override fun onFailure(reason: Int) {
+                        Log.w(TAG, "已知群组连接失败: $reason")
+                        result.success(false)
+                    }
                 }) ?: result.success(false)
             }
             "connect" -> {
@@ -412,11 +421,20 @@ class WifiDirectPlugin(
                 } else {
                     p2pManager.requestConnectionInfo(channel) { info ->
                         currentConnectionInfo = info
-                        result.success(wifiConnectionState(
+                        val state = wifiConnectionState(
                             formed = info?.groupFormed == true,
                             owner = info?.isGroupOwner ?: false,
                             address = info?.groupOwnerAddress?.hostAddress ?: "",
-                        ))
+                        )
+                        if (info?.groupFormed == true && hasNearbyWifiPermission()) {
+                            p2pManager.requestGroupInfo(channel) { group ->
+                                WifiDirectNetworkMonitor.updateGroup(group)
+                                result.success(state + ("networkName" to (group?.networkName ?: "")))
+                            }
+                        } else {
+                            WifiDirectNetworkMonitor.updateGroup(null)
+                            result.success(state)
+                        }
                     }
                 }
             }

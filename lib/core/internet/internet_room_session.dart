@@ -171,6 +171,19 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   int get directAudioCount => _hybrid?.directCount ?? 0;
+  String get hybridStatus {
+    if (!hybridEnabled) return '双线融合已关闭';
+    if (!hybridAvailable) return '服务端已暂停融合，使用公网';
+    if (_managementRecovering ||
+        _connectionState != InternetConnectionState.connected) {
+      return '等待公网恢复后自动连接直连';
+    }
+    if (_hybridRetryAfter != null &&
+        DateTime.now().isBefore(_hybridRetryAfter!)) {
+      return '公网通话中，稍后自动重试直连';
+    }
+    return _hybrid?.status ?? '正在准备直连，公网通话中';
+  }
 
   Future<void> _refreshFeatures() async {
     try {

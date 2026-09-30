@@ -35,12 +35,14 @@ class WifiP2pConnectionInfo {
   final bool isGroupOwner;
   final bool groupFormed;
   final String groupOwnerAddress;
+  final String networkName;
 
   const WifiP2pConnectionInfo({
     required this.isConnected,
     required this.isGroupOwner,
     required this.groupFormed,
     required this.groupOwnerAddress,
+    this.networkName = '',
   });
 
   factory WifiP2pConnectionInfo.fromMap(Map<dynamic, dynamic> map) {
@@ -52,6 +54,7 @@ class WifiP2pConnectionInfo {
           (map['isConnected'] as bool?) ??
           false,
       groupOwnerAddress: (map['groupOwnerAddress'] as String?) ?? '',
+      networkName: (map['networkName'] as String?) ?? '',
     );
   }
 }
@@ -89,6 +92,16 @@ class WifiDirectManager {
       return await _channel.invokeMethod<bool>('isSupported') ?? false;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Read-only prerequisites; joining never repeatedly opens permission dialogs.
+  Future<String> hybridAvailability() async {
+    try {
+      return await _channel.invokeMethod<String>('hybridAvailability') ??
+          'unsupported';
+    } catch (_) {
+      return 'unsupported';
     }
   }
 
