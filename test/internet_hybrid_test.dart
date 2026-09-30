@@ -28,19 +28,14 @@ void main() {
     'direct route requires stable quality, fails back immediately, rewarms',
     () {
       final policy = HybridRoutePolicy();
-      bool sample({
-        bool up = true,
-        double? rtt = 30,
-        double loss = 0,
-        double cloud = 80,
-      }) => policy.update(
-        connected: up,
-        rttMs: rtt,
-        cloudRttMs: cloud,
-        loss: loss,
-        jitterMs: 5,
-        features: const InternetFeatures(),
-      );
+      bool sample({bool up = true, double? rtt = 30, double loss = 0}) =>
+          policy.update(
+            connected: up,
+            rttMs: rtt,
+            loss: loss,
+            jitterMs: 5,
+            features: const InternetFeatures(),
+          );
       expect(sample(), isFalse);
       expect(sample(), isFalse);
       expect(sample(), isTrue);
@@ -49,13 +44,40 @@ void main() {
       expect(sample(), isFalse);
       expect(sample(), isTrue);
       expect(sample(up: false), isFalse);
-      for (var i = 0; i < 5; i++) {
-        expect(sample(cloud: 20), isFalse);
-      }
+      expect(sample(), isFalse);
+      expect(sample(), isFalse);
+      expect(sample(), isTrue);
       expect(sample(rtt: null), isFalse);
       expect(sample(rtt: double.nan), isFalse);
     },
   );
+  test('quality thresholds can change without an APK update', () {
+    final relaxed = InternetFeatures.fromJson({
+      'schemaVersion': 1,
+      'hybridMaxLossPercent': 8,
+      'hybridMaxJitterMs': 70,
+    });
+    final policy = HybridRoutePolicy();
+    bool sample(InternetFeatures f) => policy.update(
+      connected: true,
+      rttMs: 50,
+      loss: .05,
+      jitterMs: 50,
+      features: f,
+    );
+    expect(sample(const InternetFeatures()), isFalse);
+    expect(sample(relaxed), isFalse);
+    expect(sample(relaxed), isFalse);
+    expect(sample(relaxed), isTrue);
+    expect(sample(const InternetFeatures()), isFalse);
+    final invalid = InternetFeatures.fromJson({
+      'schemaVersion': 1,
+      'hybridMaxLossPercent': -1,
+      'hybridMaxJitterMs': 1000,
+    });
+    expect(invalid.maxLossPercent, 3);
+    expect(invalid.maxJitterMs, 40);
+  });
   test('direct signaling drops public, relay and reflexive ICE candidates', () {
     final sdp = [
       'v=0',

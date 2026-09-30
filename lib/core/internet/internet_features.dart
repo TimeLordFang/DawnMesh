@@ -6,12 +6,16 @@ class InternetFeatures {
     this.maxPeers = 4,
     this.maxRttMs = 120,
     this.stableSamples = 3,
+    this.maxLossPercent = 3,
+    this.maxJitterMs = 40,
     this.notice = '',
   });
   final bool hybridAudio;
   final int maxPeers;
   final int maxRttMs;
   final int stableSamples;
+  final int maxLossPercent;
+  final int maxJitterMs;
   final String notice;
   factory InternetFeatures.fromJson(Object? value) {
     if (value is! Map || value['schemaVersion'] != 1) {
@@ -30,6 +34,8 @@ class InternetFeatures {
       maxPeers: bounded('hybridMaxPeers', 4, 1, 4),
       maxRttMs: bounded('hybridMaxRttMs', 120, 40, 300),
       stableSamples: bounded('hybridStableSamples', 3, 3, 10),
+      maxLossPercent: bounded('hybridMaxLossPercent', 3, 0, 20),
+      maxJitterMs: bounded('hybridMaxJitterMs', 40, 5, 200),
       notice: notice is String && notice.length <= 600 ? notice : '',
     );
   }
@@ -43,7 +49,6 @@ class HybridRoutePolicy {
   bool update({
     required bool connected,
     required double? rttMs,
-    required double? cloudRttMs,
     required double loss,
     required double jitterMs,
     required InternetFeatures features,
@@ -55,12 +60,11 @@ class HybridRoutePolicy {
         rttMs >= 0 &&
         rttMs <= features.maxRttMs &&
         loss.isFinite &&
-        loss <= .03 &&
+        loss <= features.maxLossPercent / 100 &&
         loss >= 0 &&
         jitterMs.isFinite &&
-        jitterMs <= 40 &&
-        jitterMs >= 0 &&
-        (cloudRttMs == null || rttMs <= cloudRttMs * .85);
+        jitterMs <= features.maxJitterMs &&
+        jitterMs >= 0;
     goodSamples = good ? goodSamples + 1 : 0;
     direct = good && (direct || goodSamples >= features.stableSamples);
     return direct;

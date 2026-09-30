@@ -1,11 +1,34 @@
 import 'dart:convert';
 
+import 'package:dawn_mesh/core/internet/hybrid_audio.dart';
+import 'package:dawn_mesh/core/internet/internet_features.dart';
+
 import 'package:dawn_mesh/core/internet/internet_models.dart';
 import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+class _Hybrid extends Fake implements HybridAudio {
+  bool closed = false;
+  @override
+  bool cloudAvailable = true;
+  @override
+  InternetFeatures features = const InternetFeatures();
+  @override
+  int get connectedCount => 1;
+  @override
+  Set<String> get connectedIds => {'host'};
+  @override
+  String get status => '直连已连接 1';
+  @override
+  Future<void> setSending(bool value) async {}
+  @override
+  Future<void> close() async {
+    closed = true;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +117,76 @@ void main() {
       'members': <dynamic>[],
     });
     expect(hosts.last, 'new-host');
+  });
+  test('session retains hybrid through public media loss and hot refresh; fresh removal closes it', () async {
+    const profile = ServerProfile(
+      id: 's',
+      name: 's',
+      baseUrl: 'https://example.test',
+    );
+    final api = InternetRoomApi(
+      profile,
+      client: MockClient(
+        (_) async => http.Response(
+          '{"instanceId":"s","features":{"schemaVersion":1,"hybridAudio":true}}',
+          200,
+        ),
+      ),
+    );
+    final session = InternetRoomSession.forTesting(
+      api: api,
+      profile: profile,
+      nickname: 'guest',
+      roomId: 'room',
+      memberId: 'guest',
+      microphoneForTesting: (_) async {},
+      summary: const InternetRoomSummary(
+        id: 'room',
+        name: 'room',
+        memberCount: 2,
+        maxParticipants: 25,
+        hostNickname: 'host',
+      ),
+    );
+    addTearDown(session.disposeSession);
+    await session.refreshFeaturesForTesting();
+    await session.receiveManagementForTesting({
+      'type': 'snapshot',
+      'hostMemberId': 'host',
+      'room': {
+        'id': 'room',
+        'hybridAudioSupported': true,
+        'hybridAudioEnabled': true,
+      },
+      'members': [
+        {'id': 'host', 'canSpeak': true},
+        {'id': 'guest', 'canSpeak': true},
+      ],
+    });
+    final hybrid = _Hybrid();
+    session.attachHybridForTesting(hybrid, 'host');
+    session.receiveMediaRosterForTesting({}, connected: false);
+    await session.refreshFeaturesForTesting();
+    expect(hybrid.closed, false);
+    expect(hybrid.cloudAvailable, false);
+    expect(session.hybridStatus, contains('直连已连接 1'));
+    await session.receiveMediaPermissionForTesting(false);
+    expect(session.canSpeak, true);
+    // A recovered SFU initially denies publishing until policy sync completes.
+    // Keep the authenticated direct microphone working during that interval.
+    session.receiveMediaRosterForTesting({'host', 'guest'}, connected: true);
+    expect(session.canSpeak, true);
+    await session.receiveVoicePolicyForTesting(false);
+    expect(session.canSpeak, false);
+    await session.receiveManagementForTesting({
+      'type': 'room_updated',
+      'room': {
+        'id': 'room',
+        'hybridAudioSupported': true,
+        'hybridAudioEnabled': false,
+      },
+    });
+    expect(hybrid.closed, true);
   });
   test('host policy API carries the authenticated session and parses durable room state', () async {
     const profile = ServerProfile(

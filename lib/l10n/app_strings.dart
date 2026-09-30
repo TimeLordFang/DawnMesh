@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0-beta.3\nFixes Wi-Fi Direct interface discovery, late connection candidates and recovery of existing room groups. Connection status now separates connected peers from active direct audio. Room actions are grouped in one settings sheet to keep status readable.'
-      : '1.1.0-beta.3\n修复 Wi-Fi 直连网卡监听、迟到连接地址交换和当前房间残留群组恢复。区分建链、已连接和正在使用的直连状态，权限或 Wi-Fi 未开启时明确提示。三种房间操作统一收进设置面板，避免挤占房间状态。';
+      ? '1.1.0-beta.4\nHealthy direct links now take priority. Established links and microphone capture survive public-network outages for the 30-minute recovery window. Adds direct keepalive, independent teammate disconnects and hot-configurable loss/jitter thresholds. Multi-user Wi-Fi remains a single group, not a multi-hop mesh.'
+      : '1.1.0-beta.4\n健康直连优先；公网断开后，在 30 分钟重连窗口内保留已建立直连和麦克风，对讲不再等待公网。增加直连保活，单人离开不影响其他直连；丢包与抖动阈值支持热配置。多人 Wi-Fi 仍是单群组，不支持跨群组多跳 Mesh。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

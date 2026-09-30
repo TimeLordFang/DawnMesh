@@ -67,7 +67,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
         builder: (context) => AlertDialog(
           title: const Text('双线融合 · Beta'),
           content: const Text(
-            '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
+            '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网可用时仍保持备用，会继续产生流量。已建立直连后关闭移动数据，可在 30 分钟重连窗口内继续通话，请保持 Wi-Fi 开启。新成员入房和管理仍需公网。建立 Wi-Fi Direct 可能切换手机的无线网络，效果取决于机型。',
           ),
           actions: [
             TextButton(
@@ -302,6 +302,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final stateText = session.roomEnded
         ? '房间已解散 · 消息暂存中'
+        : session.directAudioCount > 0 &&
+              session.connectionState != InternetConnectionState.connected
+        ? '公网恢复中 · 直连通话可用'
         : session.awaitingMediaPermission &&
               session.connectionState == InternetConnectionState.connected
         ? '正在恢复发言权限…'
