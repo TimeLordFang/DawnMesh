@@ -85,6 +85,8 @@ class InternetRoomSummary {
     this.joinSalt = '',
     this.adminListening = false,
     this.adminListeningAvailable = false,
+    this.hybridAudioSupported = false,
+    this.hybridAudioEnabled = false,
     this.presenceAnnouncementsSupported = false,
     this.presenceAnnouncementsEnabled = false,
   });
@@ -98,6 +100,8 @@ class InternetRoomSummary {
   final bool isHost;
   final bool adminListening;
   final bool adminListeningAvailable;
+  final bool hybridAudioSupported;
+  final bool hybridAudioEnabled;
   final bool presenceAnnouncementsSupported;
   final bool presenceAnnouncementsEnabled;
 
@@ -113,6 +117,8 @@ class InternetRoomSummary {
         adminListening: json['adminListening'] as bool? ?? false,
         adminListeningAvailable:
             json['adminListeningAvailable'] as bool? ?? false,
+        hybridAudioSupported: json['hybridAudioSupported'] == true,
+        hybridAudioEnabled: json['hybridAudioEnabled'] == true,
         presenceAnnouncementsSupported:
             json['presenceAnnouncementsSupported'] as bool? ?? false,
         presenceAnnouncementsEnabled:

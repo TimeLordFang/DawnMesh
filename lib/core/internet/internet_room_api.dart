@@ -178,6 +178,21 @@ class InternetRoomApi {
     );
   }
 
+  Future<InternetRoomSummary> setHybridAudio(
+    String roomId,
+    bool enabled,
+    String sessionToken,
+  ) async {
+    final body = await _decode(
+      _client.put(
+        _uri('/api/v1/rooms/$roomId/hybrid-audio'),
+        headers: _sessionHeaders(sessionToken),
+        body: jsonEncode({'enabled': enabled}),
+      ),
+    );
+    return InternetRoomSummary.fromJson(body['room'] as Map<String, dynamic>);
+  }
+
   Future<void> setVoicePolicy(
     String roomId,
     String memberId,

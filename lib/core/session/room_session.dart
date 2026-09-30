@@ -101,6 +101,10 @@ class RoomSession {
   bool _closed = false;
   bool _roomEnded = false;
   bool get roomEnded => _roomEnded;
+  bool get hasTextMessages => _chatMessages.any(
+    (m) => !m.hasImage && !m.isRecalled && m.text.trim().isNotEmpty,
+  );
+  Future<void>? _roomEndTask;
   Future<void> _incomingQueue = Future.value();
   Future<void> _outgoingQueue = Future.value();
   int _pendingIncoming = 0;
@@ -1883,7 +1887,19 @@ class RoomSession {
     await _finishEndedRoom();
   }
 
-  Future<void> _finishEndedRoom() async {
+  Future<void> _finishEndedRoom() {
+    if (_roomEndTask != null) return _roomEndTask!;
+    if (_roomEnded || _closed) return Future<void>.value();
+    final task = _cleanupEndedRoom();
+    late final Future<void> settled;
+    settled = task.whenComplete(() {
+      if (identical(_roomEndTask, settled)) _roomEndTask = null;
+    });
+    _roomEndTask = settled;
+    return settled;
+  }
+
+  Future<void> _cleanupEndedRoom() async {
     if (_roomEnded || _closed) return;
     _roomEnded = true;
     _audioStarted = false;
@@ -1909,6 +1925,7 @@ class RoomSession {
   }
 
   Future<void> leave() async {
+    await _roomEndTask;
     _audioStarted = false;
     isPttPressed = false;
     _voiceGate.reset();

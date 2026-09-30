@@ -78,6 +78,7 @@ class _SessionStageState extends State<SessionStage>
   bool _roomVisible = false;
   bool _leaving = false;
   String _roomName = "";
+  BuildContext? _roomChatContext;
 
   @override
   void initState() {
@@ -114,6 +115,10 @@ class _SessionStageState extends State<SessionStage>
     unawaited(_roomStateSubscription?.cancel());
     _roomStateSubscription = session.stateStream.listen((state) {
       if (state == RoomState.ended && mounted) {
+        if (!session.hasTextMessages) {
+          _onLeaveRoom();
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             behavior: SnackBarBehavior.floating,
@@ -165,6 +170,15 @@ class _SessionStageState extends State<SessionStage>
     final session = _session;
     if (session == null || _leaving) return;
     setState(() => _leaving = true);
+    final chatContext = _roomChatContext;
+    if (chatContext != null && chatContext.mounted) {
+      final chatRoute = ModalRoute.of(chatContext);
+      if (chatRoute?.isActive == true) {
+        Navigator.of(chatContext)
+            .popUntil((route) => identical(route, chatRoute));
+        Navigator.of(chatContext).pop();
+      }
+    }
     unawaited(_roomStateSubscription?.cancel());
     _roomStateSubscription = null;
 
@@ -242,12 +256,16 @@ class _SessionStageState extends State<SessionStage>
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => RoomChatSheet(
-        session: session,
-        isNight: widget.isNight,
-        autofocusComposer: autofocusComposer,
-      ),
+      builder: (context) {
+        _roomChatContext = context;
+        return RoomChatSheet(
+          session: session,
+          isNight: widget.isNight,
+          autofocusComposer: autofocusComposer,
+        );
+      },
     ).then((_) {
+      _roomChatContext = null;
       session.markChatRead();
     });
   }

@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0-beta.1\nRebuilds microphone capture after Bluetooth reconnection. Installation identities prevent duplicate Internet-room members. Optional Wi-Fi/direct and Internet audio routing with exclusive playback. Server capability manifests control supported features without reinstalling the app. Physical headset and multi-phone testing is still needed.'
-      : '1.1.0-beta.1\n蓝牙耳机重连后重建麦克风采集；公网房按安装身份恢复成员。新增实验性双线融合，直连与公网只播放一路。服务端可动态控制已有功能和参数。需要配套 Server 0.3.0-beta.1，蓝牙及多机切换仍需实测。';
+      ? '1.1.0-beta.2\nThe host controls hybrid audio for the whole room. Members automatically connect and recover using encrypted Internet signaling. Active intercom keeps the screen on. Rooms without text exit immediately when dissolved. Existing native features support server-driven configuration; new native code still requires an app update.'
+      : '1.1.0-beta.2\n双线融合改为房主统一控制，成员自动建链和恢复，通过公网加密交换直连信息。三种房间通话期间屏幕常亮；无文本消息的房间解散后直接退出。有文本消息时保留查看。服务端可热调整已有功能与参数，新增原生能力仍需升级客户端。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

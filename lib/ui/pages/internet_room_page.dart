@@ -101,6 +101,14 @@ class _InternetRoomPageState extends State<InternetRoomPage>
 
   void _showRoomEndedNotice() {
     if (_roomEndedNoticeShown || !mounted) return;
+    if (!widget.session.hasTextMessages) {
+      _roomEndedNoticeShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_exitRoom());
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+      return;
+    }
     _roomEndedNoticeShown = true;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -119,6 +127,9 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     await widget.session.disposeSession();
     if (!mounted) return;
+    final roomRoute = ModalRoute.of(context);
+    if (roomRoute?.isActive != true) return;
+    Navigator.of(context).popUntil((route) => identical(route, roomRoute));
     Navigator.of(context).pop(true);
   }
 
@@ -318,11 +329,12 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           actions: [
             if (!keyboardOpen &&
                 !session.roomEnded &&
-                session.features.hybridAudio)
+                session.isHost &&
+                session.hybridAvailable)
               IconButton(
                 tooltip: session.hybridEnabled
                     ? '关闭双线融合（${session.directAudioCount} 路直连）'
-                    : '开启双线融合（实验）',
+                    : '为全房开启双线融合（实验）',
                 icon: Icon(
                   Icons.wifi_tethering,
                   color: session.hybridEnabled ? Colors.green : null,
@@ -334,7 +346,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       builder: (context) => AlertDialog(
                         title: const Text('双线融合 · Beta'),
                         content: const Text(
-                          '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。每位成员需分别开启。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
+                          '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网仍保持备用，会继续产生流量。建立 Wi-Fi Direct 可能切换手机的无线网络；不支持并发的手机会回退公网。',
                         ),
                         actions: [
                           TextButton(

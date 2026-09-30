@@ -85,6 +85,10 @@ class _InternetHomePageState extends State<InternetHomePage> {
     final session = _activeSession;
     if (!mounted || session == null) return;
     if (session.roomEnded) {
+      if (!session.hasTextMessages && !_roomPageOpen) {
+        _setActiveSession(null);
+        unawaited(session.disposeSession());
+      }
       _rememberedInvites.remove(_inviteKey(session.profile, session.roomId));
       setState(() {});
       return;

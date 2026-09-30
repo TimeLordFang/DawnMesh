@@ -91,6 +91,7 @@ class InternetRoomSession extends ChangeNotifier {
     Future<void> Function(String kind, String name)? presenceForTesting,
     VoidCallback? mediaReadyForTesting,
     Future<void> Function()? audioRecoveryForTesting,
+    Future<void> Function(bool, String?)? hybridActiveForTesting,
     // ignore: prefer_initializing_formals
   }) : _nickname = nickname,
        resumeToken = 'test-resume-token',
@@ -104,6 +105,7 @@ class InternetRoomSession extends ChangeNotifier {
     _presenceForTesting = presenceForTesting;
     _mediaReadyForTesting = mediaReadyForTesting;
     _audioRecoveryForTesting = audioRecoveryForTesting;
+    _hybridActiveForTesting = hybridActiveForTesting;
     _summary = summary;
     _connectionState = InternetConnectionState.connected;
   }
@@ -125,10 +127,49 @@ class InternetRoomSession extends ChangeNotifier {
 
   Room? _livekitRoom;
   HybridAudio? _hybrid;
+  Future<void> Function(bool, String?)? _hybridActiveForTesting;
+  @visibleForTesting
+  Future<void> refreshFeaturesForTesting() => _refreshFeatures();
   InternetFeatures features = const InternetFeatures();
   Timer? _featuresTimer;
   Future<void>? _hybridQueue;
-  bool get hybridEnabled => _hybrid != null;
+  bool get hybridEnabled => _summary?.hybridAudioEnabled ?? false;
+  bool get hybridAvailable =>
+      features.hybridAudio && (_summary?.hybridAudioSupported ?? false);
+  String? _hybridHostId;
+  String? _activeHybridHostId;
+  DateTime? _hybridRetryAfter;
+
+  Future<void> setHybridEnabled(bool enabled) async {
+    if (!isHost || !summary.hybridAudioSupported) {
+      throw StateError('只有房主可以修改双线融合');
+    }
+    final updated = await api.setHybridAudio(roomId, enabled, resumeToken);
+    if (_closed || _roomEnded) return;
+    _summary = updated;
+    _hybridRetryAfter = null;
+    await _reconcileHybrid();
+    notifyListeners();
+  }
+
+  Future<void> _reconcileHybrid() async {
+    final hostId = _hybridHostId ?? (isHost ? memberId : null);
+    final shouldEnable =
+        hybridAvailable &&
+        hybridEnabled &&
+        hostId != null &&
+        !_closed &&
+        !_roomEnded &&
+        !_managementRecovering &&
+        _connectionState == InternetConnectionState.connected &&
+        (_hybridRetryAfter == null ||
+            DateTime.now().isAfter(_hybridRetryAfter!));
+    if (_hybrid != null && _activeHybridHostId != hostId) {
+      await _setHybridActive(false);
+    }
+    await _setHybridActive(shouldEnable);
+  }
+
   int get directAudioCount => _hybrid?.directCount ?? 0;
 
   Future<void> _refreshFeatures() async {
@@ -136,7 +177,7 @@ class InternetRoomSession extends ChangeNotifier {
       final info = await api.info();
       if (_closed) return;
       features = info.features;
-      if (!features.hybridAudio) await setHybridEnabled(false);
+      await _reconcileHybrid();
       _hybrid?.features = features;
       notifyListeners();
     } catch (error) {
@@ -144,7 +185,9 @@ class InternetRoomSession extends ChangeNotifier {
     }
   }
 
-  Future<void> setHybridEnabled(bool enabled) {
+  Future<void> _setHybridActive(bool enabled) {
+    final test = _hybridActiveForTesting;
+    if (test != null) return test(enabled, _hybridHostId);
     if (!enabled && _hybrid == null && _hybridQueue == null) {
       return Future<void>.value();
     }
@@ -154,6 +197,8 @@ class InternetRoomSession extends ChangeNotifier {
         _hybrid = null;
         await previous?.close();
       } else if (_hybrid == null &&
+          hybridEnabled &&
+          !_managementRecovering &&
           features.hybridAudio &&
           !_closed &&
           !_roomEnded &&
@@ -172,8 +217,16 @@ class InternetRoomSession extends ChangeNotifier {
           features: features,
         );
         _hybrid = hybrid;
-        await hybrid.start(isHost: isHost, roomKey: _roomKey);
-        await _syncMicrophone();
+        _activeHybridHostId = _hybridHostId ?? memberId;
+        try {
+          await hybrid.start(hostId: _activeHybridHostId!, roomKey: _roomKey);
+          await _syncMicrophone();
+        } catch (error) {
+          _hybrid = null;
+          _hybridRetryAfter = DateTime.now().add(const Duration(seconds: 60));
+          AppLog.warn('Hybrid', '直连启动失败，继续使用公网并稍后重试：$error');
+          await hybrid.close();
+        }
       }
       if (!_closed) notifyListeners();
     });
@@ -188,7 +241,7 @@ class InternetRoomSession extends ChangeNotifier {
       },
     );
     _hybridQueue = settled;
-    return task;
+    return settled;
   }
 
   Future<void> _sendHybridSignal(String? to, Map<String, dynamic> data) async {
@@ -275,6 +328,9 @@ class InternetRoomSession extends ChangeNotifier {
   bool _closed = false;
   bool _roomEnded = false;
   bool sessionReplaced = false;
+  bool get hasTextMessages =>
+      _messages.any((m) => !m.hasImage && m.text.trim().isNotEmpty);
+  Future<void>? _roomEndTask;
   bool _muted = false;
   bool _policyCanSpeak = true;
   bool _mediaCanPublish = true;
@@ -615,6 +671,7 @@ class InternetRoomSession extends ChangeNotifier {
             event['room'] as Map<String, dynamic>,
           );
           _presence.enabled = summary.presenceAnnouncementsEnabled;
+          await _reconcileHybrid();
           notifyListeners();
         case 'member_left':
           if (!_managementRecovering &&
@@ -635,7 +692,9 @@ class InternetRoomSession extends ChangeNotifier {
           _applyMembers(event['members']);
           _requestMediaPermission();
         case 'role_changed':
-          isHost = event['hostMemberId'] == memberId;
+          _hybridHostId = event['hostMemberId'] as String?;
+          isHost = _hybridHostId == memberId;
+          await _reconcileHybrid();
           _applyMembers(event['members']);
           await _syncMicrophone();
           await _syncBackgroundControls();
@@ -710,10 +769,12 @@ class InternetRoomSession extends ChangeNotifier {
     }
     _managementRecovering = false;
     _presence.enabled = summary.presenceAnnouncementsEnabled;
-    isHost = event['hostMemberId'] == memberId;
+    _hybridHostId = event['hostMemberId'] as String?;
+    isHost = _hybridHostId == memberId;
     _policyCanSpeak = event['canSpeak'] as bool? ?? _policyCanSpeak;
     if (!canSpeak) _pttPressed = false;
     _applyMembers(event['members']);
+    await _reconcileHybrid();
     _requestMediaPermission();
     await _syncMicrophone();
     await _syncBackgroundControls();
@@ -820,7 +881,7 @@ class InternetRoomSession extends ChangeNotifier {
       try {
         final grant = await _resume();
         if (_closed || _roomEnded) return;
-        await setHybridEnabled(false);
+        await _setHybridActive(false);
         await _listener?.dispose();
         await _livekitRoom?.dispose();
         await _connectLiveKit(grant);
@@ -861,10 +922,14 @@ class InternetRoomSession extends ChangeNotifier {
 
   void _setConnectionState(InternetConnectionState value) {
     if (value != InternetConnectionState.connected && _hybrid != null) {
-      unawaited(setHybridEnabled(false));
+      _hybridRetryAfter = DateTime.now().add(const Duration(seconds: 60));
+      unawaited(_setHybridActive(false));
     }
     if (_connectionState == value) return;
     _connectionState = value;
+    if (value == InternetConnectionState.connected) {
+      unawaited(_reconcileHybrid());
+    }
     if (value != InternetConnectionState.connected) _presence.suspend();
     _refreshMembers();
   }
@@ -1496,11 +1561,23 @@ class InternetRoomSession extends ChangeNotifier {
     await NoiseReductionSettings.stopInternet();
   }
 
-  Future<void> _finishEndedRoom() async {
+  Future<void> _finishEndedRoom() {
+    if (_roomEndTask != null) return _roomEndTask!;
+    if (_roomEnded || _closed) return Future<void>.value();
+    final task = _cleanupEndedRoom();
+    late final Future<void> settled;
+    settled = task.whenComplete(() {
+      if (identical(_roomEndTask, settled)) _roomEndTask = null;
+    });
+    _roomEndTask = settled;
+    return settled;
+  }
+
+  Future<void> _cleanupEndedRoom() async {
     if (_closed || _roomEnded) return;
     _roomEnded = true;
     _featuresTimer?.cancel();
-    await setHybridEnabled(false);
+    await _setHybridActive(false);
     await _microphoneQueue;
     _presence.dispose();
     _mediaPermissionTimer?.cancel();
@@ -1531,10 +1608,11 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   Future<void> disposeSession() async {
+    await _roomEndTask;
     if (_closed) return;
     _closed = true;
     _featuresTimer?.cancel();
-    await setHybridEnabled(false);
+    await _setHybridActive(false);
     _audioChannel.setMethodCallHandler(null);
     await _microphoneQueue;
     _presence.dispose();

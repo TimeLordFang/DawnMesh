@@ -257,6 +257,8 @@ class LockScreenTalkActivity : Activity() {
     }
 
     private fun render() {
+        if (CallControlBridge.active) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (!CallControlBridge.active) { gesture.cancel(); finish(); return }
         val auto = CallControlBridge.automatic
         val muted = CallControlBridge.muted

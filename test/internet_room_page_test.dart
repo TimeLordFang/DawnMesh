@@ -93,6 +93,38 @@ void main() {
     },
   );
 
+  testWidgets('empty ended room exits automatically even while chat is open', (
+    tester,
+  ) async {
+    final session = makeSession();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      InternetRoomPage(session: session, isNight: false),
+                ),
+              ),
+              child: const Text('进入'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('进入'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('open-chat-history')));
+    await tester.pumpAndSettle();
+    await session.receiveRoomEndedForTesting();
+    await tester.pumpAndSettle();
+    expect(find.byType(InternetRoomPage), findsNothing);
+    expect(find.text('进入'), findsOneWidget);
+  });
+
   testWidgets('incoming chat shows a badge and opening chat clears it', (
     tester,
   ) async {
@@ -121,6 +153,7 @@ void main() {
     tester,
   ) async {
     final session = makeSession(isHost: true);
+    session.receiveChatForTesting(text: '需要保留的文本');
     addTearDown(session.disposeSession);
     await tester.pumpWidget(
       MaterialApp(home: InternetRoomPage(session: session, isNight: false)),

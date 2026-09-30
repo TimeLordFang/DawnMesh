@@ -16,6 +16,7 @@ internal object CallControlBridge {
     var pressed = false; private set
     var muted = false; private set
     var observer: (() -> Unit)? = null
+    var screenObserver: (() -> Unit)? = null
 
     fun attach(context: Context, messenger: BinaryMessenger) {
         this.context = WeakReference(context.applicationContext)
@@ -50,6 +51,7 @@ internal object CallControlBridge {
 
     private fun notifyState() {
         observer?.invoke()
+        screenObserver?.invoke()
         context?.get()?.let { IntercomForegroundService.refreshNotification(it) }
     }
 
@@ -57,6 +59,7 @@ internal object CallControlBridge {
         active = false
         pressed = false
         observer?.invoke()
+        screenObserver?.invoke()
         channel?.setMethodCallHandler(null)
         channel = null
         context = null

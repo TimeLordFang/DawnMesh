@@ -12,6 +12,7 @@ import '../transport/wifi_direct_credentials.dart';
 import '../transport/wifi_direct_manager.dart';
 import 'internet_features.dart';
 import 'exclusive_audio_switch.dart';
+import 'hybrid_wifi_link.dart';
 
 /// One capture, two transports, one audible receiver per member. SFU remains
 /// subscribed as a warm fallback. Direct RTP uses DTLS-SRTP; its SDP fingerprints
@@ -37,8 +38,7 @@ class HybridAudio {
   Timer? _timer;
   bool _closed = false;
   bool _sending = false;
-  bool _ownsWifiGroup = false;
-  Future<void>? _wifiSetup;
+  HybridWifiLink? _wifi;
   int _tickCount = 0;
   bool _tickPending = false;
   void cloudTrackChanged(String id) {
@@ -50,7 +50,10 @@ class HybridAudio {
 
   int get directCount => _peers.values.where((p) => p.audible).length;
 
-  Future<void> start({required bool isHost, required Uint8List roomKey}) async {
+  Future<void> start({
+    required String hostId,
+    required Uint8List roomKey,
+  }) async {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_tickPending || _closed) return;
       _tickPending = true;
@@ -62,35 +65,29 @@ class HybridAudio {
         }
       });
     });
-    // Group formation is optional: devices on the same LAN can connect too.
-    // Never bind the whole process to P2P: the SFU must retain Internet access.
-    _wifiSetup = _setupWifi(isHost, roomKey);
-    await signal(null, {'kind': 'hello'});
-  }
-
-  Future<void> _setupWifi(bool host, Uint8List key) async {
-    final wifi = WifiDirectManager.instance;
-    try {
-      if ((await wifi.getConnectionInfo()).groupFormed || _closed) return;
-      final hash = sha256.convert([
-        ...utf8.encode('DawnMesh hybrid v1'),
-        ...key,
-      ]).toString();
-      final credentials = WifiDirectCredentials(
+    final hash = sha256.convert([
+      ...utf8.encode('DawnMesh hybrid v2:$hostId'),
+      ...roomKey,
+    ]).toString();
+    final manager = WifiDirectManager.instance;
+    _wifi = HybridWifiLink(
+      selfId: selfId,
+      hostId: hostId,
+      credentials: WifiDirectCredentials(
         networkName:
             'DIRECT-${hash.substring(0, 2)}-DM-${hash.substring(2, 10)}',
         passphrase: hash.substring(10, 34),
-      );
-      _ownsWifiGroup = host
-          ? await wifi.createGroup(credentials)
-          : await wifi.connectKnownGroup(credentials);
-      if (_closed && _ownsWifiGroup) {
-        await wifi.disconnect();
-        _ownsWifiGroup = false;
-      }
-    } catch (error) {
-      AppLog.warn('Hybrid', 'Wi-Fi Direct 不可用，保留公网：$error');
-    }
+      ),
+      signal: (data) => signal(null, data),
+      info: manager.getConnectionInfo,
+      create: manager.createGroup,
+      join: manager.connectKnownGroup,
+      disconnect: () async {
+        await manager.disconnect();
+        return manager.removeGroup();
+      },
+    )..start();
+    await signal(null, {'kind': 'hello'});
   }
 
   void _enqueue(Future<void> Function() work) {
@@ -106,6 +103,10 @@ class HybridAudio {
   void receive(String from, Map<String, dynamic> data) => _enqueue(() async {
     if (!room.remoteParticipants.containsKey(from)) return;
     final kind = data['kind'];
+    if (kind == 'wifi_ready') {
+      _wifi?.receive(from, data);
+      return;
+    }
     if (kind == 'hello') {
       _available[from] = DateTime.now();
       if (!_peers.containsKey(from) &&
@@ -410,11 +411,7 @@ class HybridAudio {
         AppLog.warn('Hybrid', '关闭直连音轨失败：$error');
       }
     }
-    await _wifiSetup;
-    if (_ownsWifiGroup) {
-      await WifiDirectManager.instance.disconnect();
-      _ownsWifiGroup = false;
-    }
+    await _wifi?.close();
     try {
       await signal(null, {'kind': 'bye'});
     } catch (_) {}

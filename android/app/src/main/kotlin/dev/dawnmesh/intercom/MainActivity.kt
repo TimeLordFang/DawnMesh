@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.content.Context
 import android.net.wifi.WifiManager
 import io.flutter.embedding.android.FlutterActivity
@@ -35,6 +36,11 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         DebugLogBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         CallControlBridge.attach(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        CallControlBridge.screenObserver = {
+            if (CallControlBridge.active) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        CallControlBridge.screenObserver?.invoke()
         nicknamePreferences = NicknamePreferencesPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
             "dev.dawnmesh.intercom/permissions").apply {
@@ -123,6 +129,8 @@ class MainActivity : FlutterActivity() {
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         CallControlBridge.detach()
+        CallControlBridge.screenObserver = null
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         nicknamePreferences?.dispose()
         nicknamePreferences = null
         permissionResult?.error("CANCELLED", "权限请求已取消", null)
