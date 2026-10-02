@@ -160,7 +160,8 @@ void main() {
     formed = true;
     await link.tick();
     expect(signals.single['kind'], 'wifi_ready');
-    expect(link.status, contains('Wi-Fi 已连接'));
+    expect(link.status, contains('直连入口已就绪'));
+    expect(link.status, isNot(contains('正在协商语音')));
     await link.close();
   });
   test(

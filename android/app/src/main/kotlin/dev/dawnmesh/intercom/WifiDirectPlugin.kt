@@ -49,6 +49,7 @@ class WifiDirectPlugin(
 
     private val peers = mutableListOf<WifiP2pDevice>()
     private var currentConnectionInfo: WifiP2pInfo? = null
+    private val fusionDiscovery = FusionWifiDiscovery({ manager }, { channel }, { sendPeersEvent() })
 
     init {
         methodChannel.setMethodCallHandler(this)
@@ -156,14 +157,15 @@ class WifiDirectPlugin(
     }
 
     private fun sendPeersEvent() {
-        val peerData = peers.map { device ->
+        val knownFusion = fusionDiscovery.peers()
+        val peerData = peers.filter { device -> knownFusion.none { it["address"] == device.deviceAddress } }.map { device ->
             mapOf(
                 "name" to (device.deviceName ?: "未知设备"),
                 "address" to (device.deviceAddress ?: ""),
                 "status" to device.status,
                 "isGroupOwner" to device.isGroupOwner,
             )
-        }
+        } + knownFusion
         eventSink?.success(
             mapOf(
                 "type" to "peers",
@@ -244,13 +246,26 @@ class WifiDirectPlugin(
 
     @SuppressLint("MissingPermission")
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method in setOf("createGroup", "removeGroup", "discoverPeers", "connect", "connectKnownGroup", "disconnect") &&
+        if (call.method in setOf("createGroup", "removeGroup", "discoverPeers", "discoverFusionRooms", "advertiseFusionRoom", "connect", "connectKnownGroup", "disconnect") &&
             !hasNearbyWifiPermission()
         ) {
             result.error("PERMISSION_DENIED", "缺少附近 Wi-Fi 设备权限", null)
             return
         }
         when (call.method) {
+            "discoverFusionRooms" -> fusionDiscovery.discover { result.success(it) }
+            "advertiseFusionRoom" -> fusionDiscovery.advertise(
+                call.argument<String>("roomId") ?: "",
+                call.argument<String>("roomName") ?: "融合房",
+            ) { result.success(it) }
+            "stopFusionDiscovery" -> {
+                fusionDiscovery.stopDiscovery()
+                result.success(null)
+            }
+            "stopAdvertisingFusionRoom" -> {
+                fusionDiscovery.stopAdvertising()
+                result.success(null)
+            }
             "isSupported" -> {
                 result.success(manager != null && channel != null)
             }
@@ -455,6 +470,8 @@ class WifiDirectPlugin(
 
     fun dispose() {
         try {
+            fusionDiscovery.stopDiscovery()
+            fusionDiscovery.stopAdvertising()
             receiver?.let { context.unregisterReceiver(it) }
             receiver = null
             methodChannel.setMethodCallHandler(null)

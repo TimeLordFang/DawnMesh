@@ -96,7 +96,11 @@ class HybridWifiLink {
       if (current.networkName.isNotEmpty) {
         _ownsGroup = current.networkName == credentials.networkName;
       }
-      _status(_ownsGroup ? 'Wi-Fi 已连接，正在协商语音' : '正在尝试现有局域网直连');
+      _status(
+        _ownsGroup
+            ? (current.isGroupOwner ? 'Wi-Fi 直连入口已就绪，等待队友连接' : '已加入直连群组，正在连接房间')
+            : '正在尝试现有局域网直连',
+      );
       if (selfId == hostId && _ownsGroup && current.isGroupOwner) {
         await signal({'kind': 'wifi_ready', ...credentials.toMap()});
       }

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio/audio_io.dart';
 import '../../core/fusion/fusion_identity.dart';
+import '../../core/fusion/fusion_room_directory.dart';
+import '../../core/fusion/fusion_server_api.dart';
 import '../../core/fusion/fusion_transport.dart';
 import '../../core/internet/internet_models.dart';
 import '../../core/internet/server_profile_store.dart';
@@ -37,6 +39,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
   final _discovery = LanRoomDiscovery(
     port: FusionTransport.discoveryPort,
     magic: FusionTransport.discoveryMagic,
+    includeOwnRoom: true,
   );
   final _http = HttpClient()..connectionTimeout = const Duration(seconds: 4);
   List<ServerProfile> _profiles = [];
@@ -47,6 +50,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
   Timer? _refresh;
   bool _busy = false;
   bool _loadingRemote = false;
+  bool _scanningNearby = false;
   String? _cloudStatus;
   String? _error;
 
@@ -57,10 +61,13 @@ class _FusionHomePageState extends State<FusionHomePage> {
     _peerSubscription = WifiDirectManager.instance.peersStream.listen((peers) {
       if (mounted) setState(() => _peers = peers);
     });
-    unawaited(WifiDirectManager.instance.discoverPeers());
+    unawaited(_scanNearby());
     unawaited(_loadProfiles());
     _refresh = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!_busy) unawaited(_loadRemote());
+      if (!_busy) {
+        unawaited(_loadRemote());
+        unawaited(_scanNearby());
+      }
     });
   }
 
@@ -81,49 +88,36 @@ class _FusionHomePageState extends State<FusionHomePage> {
     if (profile == null || _loadingRemote) return;
     _loadingRemote = true;
     try {
-      final request = await _http
-          .getUrl(FusionTransport.endpoint(profile, '/rooms'))
-          .timeout(const Duration(seconds: 4));
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer ${profile.accessToken}',
-      );
-      final response = await request.close().timeout(
-        const Duration(seconds: 4),
-      );
-      if (response.statusCode != 200) {
-        throw HttpException('${response.statusCode}');
-      }
-      final text = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(const Duration(seconds: 4));
-      final json = jsonDecode(text) as Map<String, dynamic>;
-      if (json['protocolVersion'] != 1) throw const FormatException();
-      final rooms = (json['rooms'] as List)
-          .whereType<Map<String, dynamic>>()
-          .where(
-            (r) =>
-                r['id'] is String &&
-                RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(r['id'] as String),
-          )
-          .take(256)
-          .toList();
+      final rooms = await FusionServerApi.rooms(_http, profile);
       if (mounted && identical(profile, _profile)) {
         setState(() {
           _remoteRooms = rooms;
           _cloudStatus = '已连接服务器 · 附近成员可代为同步';
         });
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted && identical(profile, _profile)) {
         setState(() {
           _remoteRooms = [];
-          _cloudStatus = '公网暂不可用或服务器尚未支持融合房，仍可在附近建房、加入';
+          _cloudStatus = FusionServerException.describe(error);
         });
       }
     } finally {
       _loadingRemote = false;
+      if (mounted && !identical(profile, _profile)) unawaited(_loadRemote());
+    }
+  }
+
+  Future<void> _scanNearby() async {
+    if (!mounted || _busy || _scanningNearby) return;
+    _scanningNearby = true;
+    final manager = WifiDirectManager.instance;
+    try {
+      if (!await manager.discoverFusionRooms() && mounted && !_busy) {
+        await manager.discoverPeers();
+      }
+    } finally {
+      _scanningNearby = false;
     }
   }
 
@@ -148,6 +142,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
     RoomSession? session;
     FusionTransport? transport;
     try {
+      await WifiDirectManager.instance.stopFusionDiscovery();
       final identity = await FusionIdentity.create('${widget.nickname}的融合房');
       session = await _newSession(identity.roomId, invite);
       transport = FusionTransport(
@@ -159,6 +154,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
       session.attachTransport(transport, reconnect: transport.reconnect);
       await transport.start(session);
       await session.createRoom(startAudio: false);
+      unawaited(transport.synchronize());
       // Local LAN/hotspot works even on phones without Wi-Fi Direct support.
       final manager = WifiDirectManager.instance;
       if (await manager.createGroup(WifiDirectCredentials.fromInvite(invite))) {
@@ -194,14 +190,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
     return session;
   }
 
-  Future<void> _join({
-    String? id,
-    String? name,
-    String? host,
-    int port = FusionTransport.defaultPort,
-    WifiP2pPeer? peer,
-    bool cloud = false,
-  }) async {
+  Future<void> _join({FusionRoomEntry? room, WifiP2pPeer? peer}) async {
     if (_busy) return;
     final invite = await requestRoomInvite(context);
     if (invite == null || !mounted) return;
@@ -211,49 +200,87 @@ class _FusionHomePageState extends State<FusionHomePage> {
     });
     RoomSession? session;
     bool ownsGroup = false;
+    String? id = room?.id;
+    String? name = room?.name;
+    String? directHost;
+
+    Future<String> openDirect(WifiP2pPeer target) async {
+      final info = await WifiDirectManager.instance.connectAndWait(
+        target.address,
+        credentials: WifiDirectCredentials.fromInvite(invite),
+      );
+      if (info == null || !info.isConnected || info.groupOwnerAddress.isEmpty) {
+        throw const SocketException('Wi-Fi Direct unavailable');
+      }
+      ownsGroup = true;
+      final host = info.groupOwnerAddress;
+      final request = await _http
+          .getUrl(Uri.http('$host:${FusionTransport.defaultPort}', '/fusion'))
+          .timeout(const Duration(seconds: 4));
+      request.followRedirects = false;
+      final response = await request.close().timeout(
+        const Duration(seconds: 4),
+      );
+      final data = jsonDecode(
+        await response
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 4)),
+      ) as Map<String, dynamic>;
+      final foundId = data['id'];
+      if (!validFusionRoomId(foundId) || (id != null && foundId != id)) {
+        throw const FormatException('Discovered room changed');
+      }
+      id = foundId as String;
+      name ??= data['name'] as String?;
+      return host;
+    }
+
     try {
-      if (peer != null) {
-        final info = await WifiDirectManager.instance.connectAndWait(
-          peer.address,
-          credentials: WifiDirectCredentials.fromInvite(invite),
-        );
-        if (info == null ||
-            !info.isConnected ||
-            info.groupOwnerAddress.isEmpty) {
-          throw const SocketException('Wi-Fi Direct unavailable');
-        }
-        ownsGroup = true;
-        host = info.groupOwnerAddress;
-        final request = await _http
-            .getUrl(Uri.http('$host:$port', '/fusion'))
-            .timeout(const Duration(seconds: 4));
-        final response = await request.close().timeout(
-          const Duration(seconds: 4),
-        );
-        final data = jsonDecode(
-          await response
-              .transform(utf8.decoder)
-              .join()
-              .timeout(const Duration(seconds: 4)),
-        ) as Map<String, dynamic>;
-        id = data['id'] as String;
-        name = data['name'] as String;
-      }
-      if (id == null || !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(id)) {
-        throw const FormatException();
-      }
-      session = await _newSession(id, invite);
+      await WifiDirectManager.instance.stopFusionDiscovery();
+      if (peer != null) directHost = await openDirect(peer);
+      if (!validFusionRoomId(id)) throw const FormatException();
+      session = await _newSession(id!, invite);
       final transport = FusionTransport(
-        roomId: id,
+        roomId: id!,
         roomName: name ?? '融合房',
         profile: _profile,
       );
-      if (ownsGroup) transport.onStop = WifiDirectManager.instance.removeGroup;
+      transport.onStop = () async {
+        if (ownsGroup) await WifiDirectManager.instance.removeGroup();
+      };
       session.attachTransport(transport, reconnect: transport.reconnect);
       await transport.start(session);
-      final connected = cloud
-          ? await transport.connectCloud()
-          : await transport.connectLocal(host!, port: port);
+      var connected = false;
+      for (final route in room?.local ?? <DiscoveredRoom>[]) {
+        if (await transport.connectLocal(
+          route.hostAddress.address,
+          port: route.port,
+        )) {
+          connected = true;
+          break;
+        }
+      }
+      // Use an existing route first. Public entrants automatically negotiate
+      // nearby Wi-Fi after admission, without another invite dialog.
+      if (!connected && room?.cloud == true) {
+        connected = await transport.connectCloud();
+      }
+      if (!connected && directHost != null) {
+        connected = await transport.connectLocal(directHost);
+      }
+      if (!connected) {
+        for (final route in room?.direct ?? <WifiP2pPeer>[]) {
+          try {
+            directHost = await openDirect(route);
+            connected = await transport.connectLocal(directHost);
+            if (connected) break;
+          } catch (_) {
+            if (ownsGroup) await WifiDirectManager.instance.removeGroup();
+            ownsGroup = false;
+          }
+        }
+      }
       if (!connected) throw const SocketException('No route');
       final joined = session.stateStream
           .firstWhere((s) => s == RoomState.inRoom)
@@ -282,6 +309,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
   void dispose() {
     _refresh?.cancel();
     _peerSubscription?.cancel();
+    unawaited(WifiDirectManager.instance.stopFusionDiscovery());
     _discovery.dispose();
     _http.close(force: true);
     super.dispose();
@@ -299,7 +327,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
             onPressed: _busy
                 ? null
                 : () {
-                    unawaited(WifiDirectManager.instance.discoverPeers());
+                    unawaited(_scanNearby());
                     unawaited(_loadRemote());
                   },
             icon: const Icon(Icons.refresh_rounded),
@@ -338,54 +366,12 @@ class _FusionHomePageState extends State<FusionHomePage> {
               ),
             ),
           const SizedBox(height: 18),
-          Text('附近房间', style: Theme.of(context).textTheme.titleMedium),
-          StreamBuilder<List<DiscoveredRoom>>(
-            stream: _discovery.roomsStream,
-            initialData: _discovery.currentRooms,
-            builder: (_, snapshot) {
-              final rooms = snapshot.data ?? [];
-              return Column(
-                children: [
-                  for (final room in rooms)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.wifi_rounded),
-                      title: Text(room.roomName),
-                      subtitle: Text('${room.memberCount} 人 · 本地连接'),
-                      onTap: _busy
-                          ? null
-                          : () => _join(
-                              id: room.roomId,
-                              name: room.roomName,
-                              host: room.hostAddress.address,
-                              port: room.port,
-                            ),
-                    ),
-                  if (rooms.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        '同一 Wi-Fi 或热点下的融合房会显示在这里。也可在下方选择附近设备建立 Wi-Fi 直连。',
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          for (final peer in _peers)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.wifi_tethering_rounded),
-              title: Text(peer.name),
-              subtitle: const Text('通过 Wi-Fi 直连加入融合房'),
-              onTap: _busy ? null : () => _join(peer: peer),
-            ),
           const Divider(height: 32),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  '公网桥接（可选）',
+                  '公网服务器（可选）',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -405,6 +391,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
                 setState(() {
                   _profile = p;
                   _remoteRooms = [];
+                  _cloudStatus = '正在连接融合房服务器…';
                 });
                 unawaited(_store.saveSelectedId(p.id));
                 unawaited(_loadRemote());
@@ -414,22 +401,59 @@ class _FusionHomePageState extends State<FusionHomePage> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(_cloudStatus ?? '未配置服务器也能在附近使用；配置同一服务器的联网成员会自动接通公网。'),
           ),
-          for (final room in _remoteRooms)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.public_rounded),
-              title: Text(room['name'] as String? ?? '融合房'),
-              subtitle: Text(
-                '${(room['members'] as List?)?.length ?? 0} 人 · 经联网成员接入',
-              ),
-              onTap: _busy
-                  ? null
-                  : () => _join(
-                      id: room['id'] as String,
-                      name: room['name'] as String?,
-                      cloud: true,
+          const Divider(height: 24),
+          Text('可加入的融合房', style: Theme.of(context).textTheme.titleMedium),
+          StreamBuilder<List<DiscoveredRoom>>(
+            stream: _discovery.roomsStream,
+            initialData: _discovery.currentRooms,
+            builder: (_, snapshot) {
+              final rooms = FusionRoomEntry.merge(
+                local: snapshot.data ?? [],
+                direct: _peers,
+                remote: _remoteRooms,
+              );
+              return Column(
+                children: [
+                  for (final room in rooms)
+                    ListTile(
+                      key: ValueKey('fusion-room-${room.id}'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        room.local.isNotEmpty || room.direct.isNotEmpty
+                            ? Icons.wifi_rounded
+                            : Icons.public_rounded,
+                      ),
+                      title: Text(room.name),
+                      subtitle: Text(
+                        '${room.memberCount > 0 ? '${room.memberCount} 人 · ' : ''}${room.sources}',
+                      ),
+                      onTap: _busy ? null : () => _join(room: room),
                     ),
-            ),
+                  if (rooms.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        '暂未发现融合房。联网后显示所选服务器中的房间，也会自动搜索同一 Wi-Fi、热点和附近的直连房间。',
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          if (_peers.any((p) => !validFusionRoomId(p.fusionRoomId))) ...[
+            const SizedBox(height: 12),
+            Text('附近设备（未识别房间）', style: Theme.of(context).textTheme.titleSmall),
+            for (final peer in _peers.where(
+              (p) => !validFusionRoomId(p.fusionRoomId),
+            ))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.wifi_tethering_rounded),
+                title: Text(peer.name),
+                subtitle: const Text('旧版或未广播房间信息的设备，可尝试直连'),
+                onTap: _busy ? null : () => _join(peer: peer),
+              ),
+          ],
         ],
       ),
     ),

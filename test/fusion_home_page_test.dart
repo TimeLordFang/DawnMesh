@@ -30,7 +30,7 @@ void main() {
       await tester.pump();
       final create = find.byKey(const ValueKey('create-fusion-room'));
       expect(tester.widget<FilledButton>(create).onPressed, isNotNull);
-      expect(find.text('附近房间'), findsOneWidget);
+      expect(find.text('可加入的融合房'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(create);
       await tester.pump();

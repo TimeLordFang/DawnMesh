@@ -18,6 +18,7 @@ import '../session/room_session.dart';
 import '../transport/lan_discovery.dart';
 import '../transport/room_transport.dart';
 import 'fusion_identity.dart';
+import 'fusion_server_api.dart';
 
 /// Deduplicate the *same encrypted packet*, not a sender's wrapping uint16
 /// sequence. This also stops loops when several phones bridge the same LAN.
@@ -86,6 +87,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   final _ownAddresses = <String>{};
   final _connectedTargets = <String, WebSocket>{};
   final _dialing = <String>{};
+  bool _advertisingDirect = false;
+  Future<bool>? _advertisingTask;
 
   @override
   Stream<Frame> get incoming => _incoming.stream;
@@ -95,14 +98,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   bool get cloudConnected => _cloud != null && _cloudAuthenticated;
   Uint8List? get signedState => _state;
 
-  static Uri endpoint(ServerProfile profile, String suffix) {
-    final base = Uri.parse(profile.baseUrl);
-    return base.replace(
-      path: '${base.path.replaceAll(RegExp(r'/+$'), '')}/api/v1/fusion$suffix',
-      query: null,
-      fragment: null,
-    );
-  }
+  static Uri endpoint(ServerProfile profile, String suffix) =>
+      FusionServerApi.endpoint(profile, suffix);
 
   Future<void> start(RoomSession session) async {
     _session = session;
@@ -272,7 +269,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     } catch (error) {
       AppLog.warn('Fusion', 'Cloud connection unavailable: $error');
       lastConnectionError = '$error';
-      _cloudError = '公网暂不可用，本地仍可通话';
+      _cloudError = FusionServerException.describe(error);
       _updateStatus();
       return false;
     }
@@ -397,6 +394,20 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     _ticking = true;
     try {
       if (_session?.state == RoomState.inRoom) await _publishState();
+      // Only the creator advertises a joinable P2P group. Other members still
+      // advertise their reachable IP endpoints through LAN discovery.
+      if (!_stopped &&
+          advertise &&
+          !_advertisingDirect &&
+          _wifi != null &&
+          _session?.isHost == true) {
+        _advertisingTask = WifiDirectManager.instance.advertiseFusionRoom(
+          roomId,
+          roomName,
+        );
+        _advertisingDirect = await _advertisingTask!;
+        _advertisingTask = null;
+      }
       if (_wifi != null && _local.isEmpty && _session?.isHost == false) {
         final info = await WifiDirectManager.instance.getConnectionInfo();
         if (info.groupFormed &&
@@ -422,15 +433,16 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
           await _upload();
         }
       }
-    } catch (_) {
-      _cloudError = '成员同步等待公网恢复';
+    } catch (error) {
+      _cloudError = FusionServerException.describe(error);
+      AppLog.warn('Fusion', 'Room synchronization failed: $error');
     } finally {
       _ticking = false;
       _updateStatus();
     }
   }
 
-  @visibleForTesting
+  /// Publish a newly created room immediately, then keep it fresh periodically.
   Future<void> synchronize() => _tick();
 
   @override
@@ -449,6 +461,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     final request = await _http
         .putUrl(endpoint(server, '/rooms/$roomId'))
         .timeout(const Duration(seconds: 4));
+    request.followRedirects = false;
     request.headers.set(
       HttpHeaders.authorizationHeader,
       'Bearer ${server.accessToken}',
@@ -463,9 +476,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     );
     final response = await request.close().timeout(const Duration(seconds: 4));
     await response.drain<void>().timeout(const Duration(seconds: 4));
-    if (response.statusCode != 200) {
-      throw HttpException('Fusion sync: ${response.statusCode}');
-    }
+    FusionServerException.checkStatus(response.statusCode, uploading: true);
     _uploadedRevision = ByteData.sublistView(state).getUint64(0);
     _cloudError = null;
   }
@@ -476,7 +487,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         ? ' · ${_wifi!.status}'
         : '';
     status.value =
-        '本地连接 ${_local.length} · ${cloudConnected ? '已接通公网' : (_cloudError ?? (profile == null ? '离线可用' : '等待公网'))}$wifiHint';
+        '${_local.isEmpty ? '暂无本地队友连接' : '本地连接 ${_local.length}'} · '
+        '${cloudConnected ? '已接通公网' : (_cloudError ?? (profile == null ? '未配置公网服务器' : '正在连接融合房服务器'))}$wifiHint';
   }
 
   Future<bool> reconnect() async {
@@ -513,6 +525,11 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       } catch (_) {}
     }
     _stopped = true;
+    await _advertisingTask;
+    if (_advertisingDirect) {
+      await WifiDirectManager.instance.stopAdvertisingFusionRoom();
+      _advertisingDirect = false;
+    }
     _discovery?.dispose();
     await _server?.close(force: true);
     _http.close(force: true);

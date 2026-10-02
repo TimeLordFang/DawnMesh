@@ -171,6 +171,51 @@ void main() {
     expect(host.session.members.length, 1);
   });
 
+  test('solo host distinguishes an old server and connects as soon as it supports fusion', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final sockets = <WebSocket>[];
+    var supported = false;
+    server.listen((request) async {
+      if (supported && WebSocketTransformer.isUpgradeRequest(request)) {
+        final socket = await WebSocketTransformer.upgrade(request);
+        sockets.add(socket);
+        socket.listen((_) {});
+      } else {
+        await request.drain<void>();
+        request.response.statusCode = supported ? 200 : 404;
+        await request.response.close();
+      }
+    });
+    addTearDown(() async {
+      for (final socket in sockets) {
+        await socket.close();
+      }
+      await server.close(force: true);
+    });
+    final room = await FusionIdentity.create('独自建房');
+    final host = await _node(
+      room,
+      RoomInvite.parse('2134'),
+      1,
+      host: true,
+      server: ServerProfile(
+        id: 'test',
+        name: 'test',
+        baseUrl: 'http://127.0.0.1:${server.port}',
+      ),
+    );
+    await host.link.synchronize();
+    expect(host.session.members, hasLength(1));
+    expect(host.link.status.value, contains('更新服务端'));
+    expect(host.link.status.value, isNot(contains('公网暂不可用')));
+    supported = true;
+    await host.link.synchronize();
+    expect(host.link.cloudConnected, isTrue);
+    expect(host.link.status.value, contains('暂无本地队友连接'));
+    expect(host.link.status.value, contains('已接通公网'));
+    expect(host.link.status.value, isNot(contains('更新服务端')));
+  });
+
   final integrationURL = Platform.environment['DAWNMESH_FUSION_TEST_URL'];
   test(
     'real Go relay: offline host, online gateways, remote admission and uplink loss',

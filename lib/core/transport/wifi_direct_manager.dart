@@ -12,12 +12,16 @@ class WifiP2pPeer {
   final String address;
   final int status;
   final bool isGroupOwner;
+  final String? fusionRoomId;
+  final String? fusionRoomName;
 
   const WifiP2pPeer({
     required this.name,
     required this.address,
     required this.status,
     required this.isGroupOwner,
+    this.fusionRoomId,
+    this.fusionRoomName,
   });
 
   factory WifiP2pPeer.fromMap(Map<dynamic, dynamic> map) {
@@ -26,6 +30,8 @@ class WifiP2pPeer {
       address: (map['address'] as String?) ?? '',
       status: (map['status'] as int?) ?? 0,
       isGroupOwner: (map['isGroupOwner'] as bool?) ?? false,
+      fusionRoomId: map['fusionRoomId'] as String?,
+      fusionRoomName: map['fusionRoomName'] as String?,
     );
   }
 }
@@ -131,7 +137,10 @@ class WifiDirectManager {
                 [];
             if (!_peersController.isClosed) {
               final signature = peerList
-                  .map((p) => '${p.address}|${p.name}')
+                  .map(
+                    (p) =>
+                        '${p.address}|${p.name}|${p.fusionRoomId}|${p.fusionRoomName}',
+                  )
                   .join(';');
               if (signature != _lastPeersSignature) {
                 _lastPeersSignature = signature;
@@ -207,6 +216,41 @@ class WifiDirectManager {
       AppLog.debug(_tag, '发起 Wi-Fi Direct 搜索未完成: $e');
       return false;
     }
+  }
+
+  /// DNS-SD identifies a room before joining its Wi-Fi Direct group.
+  Future<bool> discoverFusionRooms() async {
+    if (!await isSupported()) return false;
+    await startListeningEvents();
+    try {
+      return await _channel.invokeMethod<bool>('discoverFusionRooms') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> advertiseFusionRoom(String id, String name) async {
+    try {
+      return await _channel.invokeMethod<bool>('advertiseFusionRoom', {
+            'roomId': id,
+            'roomName': name,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> stopFusionDiscovery() async {
+    try {
+      await _channel.invokeMethod<void>('stopFusionDiscovery');
+    } catch (_) {}
+  }
+
+  Future<void> stopAdvertisingFusionRoom() async {
+    try {
+      await _channel.invokeMethod<void>('stopAdvertisingFusionRoom');
+    } catch (_) {}
   }
 
   Future<bool> connect(
