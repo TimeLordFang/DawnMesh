@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0-beta.5\nGuards microphone activation during public-room and direct-link reconnection. Idle push-to-talk stays silent even if the SDK requests unmute; releasing the button closes the audio track immediately. Replacement capture tracks check the latest local talk state before attachment. Requires an APK update; no server upgrade needed.'
-      : '1.1.0-beta.5\n修复公网融合房重连期间可能绕过按住对讲的开麦入口。未按键时拦截底层解除静音，松手立即关闭音轨；重建采集时先检查本机发言状态，再接入发送器。本次需更新 APK，无需升级服务端。';
+      ? '1.1.0-beta.6\nPublic rooms are now Internet-only. Separate fusion rooms support offline creation and local admission; any admitted online member can synchronize signed membership and bridge remote teammates. Multiple routes deliver each voice packet once. Up to six members; requires the new APK and Server 0.3.0-beta.4.'
+      : '1.1.0-beta.6\n公网房恢复纯公网模式，新增独立融合房：无需公网即可创建、就近验证入房；任一联网成员可同步签名名单并连接远程队友，多路数据去重避免重复语音。融合房最多 6 人，保留按住通话和降噪。需同步更新 APK 与 Server 0.3.0-beta.4。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

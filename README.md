@@ -7,11 +7,12 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前测试版本：`1.1.0-beta.5`（正式版仍为 `1.0.4`）。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前测试版本：`1.1.0-beta.6`（正式版仍为 `1.0.4`）。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
 - **三种近场链路**：同一局域网、Wi-Fi Direct、BLE 发现 + L2CAP 数据通道。
+- **独立融合房**：最多 6 人，支持离线建房、经附近任一成员入房；任一已入房的联网成员可向同一自部署服务器同步签名名单并中继远程通信，多路数据去重。需 Android beta.6 与 Server 0.3.0-beta.4，详见 [融合房设计与边界](docs/FUSION_ROOMS.md)。
 - **自部署公网房**：可保存并切换多个 HTTPS 服务器，默认 25 人；公网语音使用 LiveKit/WebRTC，语音与聊天均端到端加密。
 - **公网音频三档**：清晰、平衡、省流可在通话中切换；Wi-Fi 默认提高清晰度，移动网络默认使用低码率 Opus 与 DTX 静音抑制。
 - **统一成员头像**：Wi-Fi、蓝牙和公网房均按昵称缩写及设备短码生成轻量头像，正在发言和禁麦状态可以直接辨认。
@@ -30,13 +31,13 @@
 
 4 位邀请码适合当面口述和临时小组访问控制。它不能抵御持码成员冒名，也不等同于长期高强度密码。请只把邀请码告诉可信成员。
 
-三种房间新增本地人声降噪，可在房内选择关闭、标准、强力，默认标准。Wi-Fi、蓝牙共存与半小时恢复的本次修复说明见 [1.0.1 发布说明](docs/RELEASE_1.0.1.md)。公网半小时成员与空房保留需要同步升级 DawnMesh Server。
+所有房型均支持本地人声降噪，可在房内选择关闭、标准、强力，默认标准。Wi-Fi、蓝牙共存与半小时恢复的本次修复说明见 [1.0.1 发布说明](docs/RELEASE_1.0.1.md)。公网半小时成员与空房保留需要同步升级 DawnMesh Server。
 
 详细设计和已知边界见 [安全审查](docs/SECURITY_REVIEW.md)。发现安全问题时，请避免在公开 Issue 中附带邀请码、设备地址、签名材料或完整原始日志。
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.0-beta.5-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.0-beta.6-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -148,4 +149,4 @@ scripts/   本机工具链与校验脚本
 
 DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。
 
-1.1.0-beta.5 补上公网融合房重连时的底层麦克风保护：未按键时拦截 SDK 开麦，松手立即静音，新音轨挂载前检查本机状态。需更新 APK；继续兼容 Server 0.3.0-beta.3，无需为本修复升级服务端。详见 [Beta 发布说明](docs/RELEASE_1.1.0-beta.5.md) 与 [误开麦排查](docs/PTT_RECONNECT_INVESTIGATION.md)。
+1.1.0-beta.6 将融合房独立为第四种房型，普通公网房恢复为纯 LiveKit 通信。融合房支持从零离线建房和加入、任一联网成员上传签名名单和转发远程通信，并保留 beta.5 的按住通话保护。需 APK 与 Server 0.3.0-beta.4 同步升级。详见 [Beta 发布说明](docs/RELEASE_1.1.0-beta.6.md)、[融合房设计](docs/FUSION_ROOMS.md) 与 [误开麦排查](docs/PTT_RECONNECT_INVESTIGATION.md)。

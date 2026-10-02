@@ -32,7 +32,7 @@ class _Hybrid extends Fake implements HybridAudio {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('guest follows persisted room policy; hot disable and re-enable apply without rejoin', () async {
+  test('public room ignores legacy hybrid flags across hot refresh and host changes', () async {
     var available = true;
     final applied = <bool>[];
     final hosts = <String?>[];
@@ -86,9 +86,9 @@ void main() {
       'room': room(true),
       'members': <dynamic>[],
     });
-    expect(applied.last, isTrue);
+    expect(applied.last, isFalse);
     expect(hosts.last, 'host');
-    expect(session.hybridEnabled, isTrue);
+    expect(session.hybridEnabled, isFalse);
     await expectLater(session.setHybridEnabled(false), throwsStateError);
     expect(writes, 0);
     available = false;
@@ -96,11 +96,11 @@ void main() {
     expect(applied.last, isFalse);
     expect(
       session.hybridEnabled,
-      isTrue,
-    ); // Owner preference survives global capability disable.
+      isFalse,
+    ); // Public mode stays isolated from legacy room preferences.
     available = true;
     await session.refreshFeaturesForTesting();
-    expect(applied.last, isTrue);
+    expect(applied.last, isFalse);
     await session.receiveManagementForTesting({
       'type': 'room_updated',
       'room': room(false),
@@ -110,7 +110,7 @@ void main() {
       'type': 'room_updated',
       'room': room(true),
     });
-    expect(applied.last, isTrue);
+    expect(applied.last, isFalse);
     await session.receiveManagementForTesting({
       'type': 'role_changed',
       'hostMemberId': 'new-host',
@@ -118,7 +118,7 @@ void main() {
     });
     expect(hosts.last, 'new-host');
   });
-  test('session retains hybrid through public media loss and hot refresh; fresh removal closes it', () async {
+  test('public room tears down a legacy direct link on refresh', () async {
     const profile = ServerProfile(
       id: 's',
       name: 's',
@@ -167,15 +167,16 @@ void main() {
     session.attachHybridForTesting(hybrid, 'host');
     session.receiveMediaRosterForTesting({}, connected: false);
     await session.refreshFeaturesForTesting();
-    expect(hybrid.closed, false);
+    expect(hybrid.closed, true);
     expect(hybrid.cloudAvailable, false);
-    expect(session.hybridStatus, contains('直连已连接 1'));
+    expect(session.hybridEnabled, false);
+    expect(session.hybridAvailable, false);
     await session.receiveMediaPermissionForTesting(false);
-    expect(session.canSpeak, true);
+    expect(session.canSpeak, false);
     // A recovered SFU initially denies publishing until policy sync completes.
-    // Keep the authenticated direct microphone working during that interval.
+    // A public-only room obeys the SFU permission until it is restored.
     session.receiveMediaRosterForTesting({'host', 'guest'}, connected: true);
-    expect(session.canSpeak, true);
+    expect(session.canSpeak, false);
     await session.receiveVoicePolicyForTesting(false);
     expect(session.canSpeak, false);
     await session.receiveManagementForTesting({

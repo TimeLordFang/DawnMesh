@@ -29,7 +29,7 @@ import 'host_transfer.dart';
 import 'member.dart';
 import 'reconnect_controller.dart';
 
-enum RoomMode { wifiFullDuplex, bluetoothPtt }
+enum RoomMode { wifiFullDuplex, bluetoothPtt, fusion }
 
 enum VoiceMode { pushToTalk, automatic }
 
@@ -515,6 +515,12 @@ class RoomSession {
         break;
       case FrameType.nicknameUpdate:
         _handleNicknameUpdate(frame);
+        break;
+      case FrameType.fusionState:
+        final target = transport;
+        if (mode == RoomMode.fusion && target is FusionControlTransport) {
+          await (target as FusionControlTransport).receiveControl(frame);
+        }
         break;
       case FrameType.handshakeHello:
       case FrameType.handshakeConfirm:
@@ -1220,6 +1226,18 @@ class RoomSession {
   /// Hook for network transmission
   void Function(Frame frame)? onSendFrame;
 
+  Future<void> sendFusionControl(Uint8List payload) {
+    if (mode != RoomMode.fusion) return Future.value();
+    return sendFrame(
+      Frame(
+        type: FrameType.fusionState,
+        senderId: _selfMemberId,
+        seq: _nextSeq(),
+        payload: payload,
+      ),
+    );
+  }
+
   Future<void> sendFrame(Frame frame, {int? diagnosticStartedAtMicros}) {
     if (_closed || (roomInvite != null && secureCodec == null)) {
       return Future.value();
@@ -1876,6 +1894,10 @@ class RoomSession {
   /// until the user explicitly exits. Guests receive leave reason 3.
   Future<void> endRoom() async {
     if (!_isHost || _roomEnded || _closed) return;
+    final link = transport;
+    if (link is FusionControlTransport) {
+      await (link as FusionControlTransport).prepareEnd();
+    }
     final frame = Frame(
       type: FrameType.leave,
       senderId: _selfMemberId,
@@ -1898,6 +1920,10 @@ class RoomSession {
     _roomEndTask = settled;
     return settled;
   }
+
+  /// Fusion transport calls this only after verifying the creator's signature.
+  Future<void> acceptFusionEnd() =>
+      mode == RoomMode.fusion ? _finishEndedRoom() : Future.value();
 
   Future<void> _cleanupEndedRoom() async {
     if (_roomEnded || _closed) return;
@@ -1926,6 +1952,10 @@ class RoomSession {
 
   Future<void> leave() async {
     await _roomEndTask;
+    final link = transport;
+    if (_isHost && link is FusionControlTransport) {
+      await (link as FusionControlTransport).prepareEnd();
+    }
     _audioStarted = false;
     isPttPressed = false;
     _voiceGate.reset();

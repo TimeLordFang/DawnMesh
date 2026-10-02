@@ -16,7 +16,8 @@ enum FrameType {
   chatDelete(0x0e),
   chatImage(0x0f),
   admission(0x10),
-  nicknameUpdate(0x11);
+  nicknameUpdate(0x11),
+  fusionState(0x12);
 
   final int value;
   const FrameType(this.value);

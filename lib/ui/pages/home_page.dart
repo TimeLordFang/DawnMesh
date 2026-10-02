@@ -23,6 +23,7 @@ import '../transitions/stage_choreography.dart';
 import '../../core/update/update_service.dart';
 import '../../l10n/app_strings.dart';
 import 'internet_home_page.dart';
+import 'fusion_home_page.dart';
 
 void _noop() {}
 
@@ -127,6 +128,29 @@ class _HomeContentState extends State<HomeContent> {
         ),
       ),
     );
+  }
+
+  Future<void> _openFusion() async {
+    if (_busy || _hasAnyActiveRoom) return;
+    await _stopBleScanning();
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
+    final result = await Navigator.push<(RoomSession, String)>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FusionHomePage(
+          audioIo: widget.audioIo,
+          nickname: _identityNickname,
+          isNight: widget.isNight,
+        ),
+      ),
+    );
+    if (result == null) return;
+    if (!mounted) {
+      await result.$1.dispose();
+      return;
+    }
+    widget.onEnterRoom(result.$1, result.$2);
   }
 
   Timer? _scanTimer;
@@ -585,9 +609,23 @@ class _HomeContentState extends State<HomeContent> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              _InternetEntryCard(
-                                isNight: isNight,
-                                onTap: _openInternet,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _InternetEntryCard(
+                                      isNight: isNight,
+                                      onTap: _openInternet,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _InternetEntryCard(
+                                      isNight: isNight,
+                                      onTap: _openFusion,
+                                      fusion: true,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           );
@@ -1417,95 +1455,68 @@ class _ActiveNetworkRoomCard extends StatelessWidget {
 }
 
 class _InternetEntryCard extends StatelessWidget {
-  const _InternetEntryCard({required this.isNight, required this.onTap});
-
+  const _InternetEntryCard({
+    required this.isNight,
+    required this.onTap,
+    this.fusion = false,
+  });
   final bool isNight;
   final VoidCallback onTap;
+  final bool fusion;
 
   @override
   Widget build(BuildContext context) {
     final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
-    final textPrimary = isNight
-        ? AppTheme.darkTextPrimary
-        : AppTheme.lightTextPrimary;
-    final textSecondary = isNight
-        ? AppTheme.darkTextSecondary
-        : AppTheme.lightTextSecondary;
-    final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
-
     return Material(
-      color: Colors.transparent,
+      color: isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: accent.withValues(alpha: .46)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: accent.withValues(alpha: 0.46),
-              width: 1.2,
-            ),
-          ),
-          child: Row(
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.public_rounded, color: accent, size: 22),
+              Row(
+                children: [
+                  Icon(
+                    fusion ? Icons.hub_outlined : Icons.public_rounded,
+                    color: accent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      fusion ? '融合房' : '公网对讲',
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: isNight
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.lightTextPrimary,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: accent, size: 16),
+                ],
               ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '公网对讲',
-                          style: TextStyle(
-                            color: textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            '自部署',
-                            style: TextStyle(
-                              color: accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '配置服务器，创建或加入远程房间',
-                      style: TextStyle(color: textSecondary, fontSize: 13),
-                    ),
-                  ],
+              const SizedBox(height: 4),
+              Text(
+                fusion ? '离线入房 · 联网同步' : '自部署 · 远程通信',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isNight
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
-              const SizedBox(width: 8),
-              Icon(Icons.arrow_forward_ios_rounded, color: accent, size: 17),
             ],
           ),
         ),

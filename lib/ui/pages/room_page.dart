@@ -6,6 +6,7 @@ import '../../core/session/chat_message.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
+import '../../core/fusion/fusion_transport.dart';
 import '../../core/platform/chat_media_service.dart';
 import '../theme/app_theme.dart';
 import '../transitions/stage_choreography.dart';
@@ -192,6 +193,19 @@ class _RoomContentState extends State<RoomContent> {
         child: Column(
           children: [
             SizedBox(height: keyboardOpen ? 2 : (compactHeight ? 4 : 12)),
+
+            if (widget.session.transport case final FusionTransport transport)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: ValueListenableBuilder<String>(
+                  valueListenable: transport.status,
+                  builder: (_, status, _) => Text(
+                    status,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
 
             // 1. 成员轨道
             if (!keyboardOpen)

@@ -33,6 +33,14 @@ class DiscoveredRoom {
 
 /// 局域网/热点下的零配置房间发现（UDP 8990 广播）。
 class LanRoomDiscovery {
+  LanRoomDiscovery({
+    this.port = discoveryPort,
+    this.magic = magicHeader,
+    this.includeOwnRoom = false,
+  });
+  final int port;
+  final String magic;
+  final bool includeOwnRoom;
   static const int discoveryPort = 8990;
   static const String magicHeader = "DAWN_MESH_DISCOVERY_V1";
 
@@ -45,6 +53,8 @@ class LanRoomDiscovery {
   static const int maxAdvertisedTextLength = 64;
 
   RawDatagramSocket? _socket;
+  bool _disposed = false;
+  int _generation = 0;
   Timer? _broadcastTimer;
   Timer? _pruneTimer;
   final Map<String, DiscoveredRoom> _discoveredRooms = {};
@@ -66,9 +76,17 @@ class LanRoomDiscovery {
   /// 开始监听 UDP 8990 上的房间广播。
   Future<bool> startListening() async {
     await stop();
+    if (_disposed) return false;
+    final generation = _generation;
 
     // reusePort 在 Windows 上不被支持，会直接抛异常，退回不带该选项重试。
-    _socket = await _bind(reusePort: true) ?? await _bind(reusePort: false);
+    final socket =
+        await _bind(reusePort: true) ?? await _bind(reusePort: false);
+    if (_disposed || generation != _generation) {
+      socket?.close();
+      return false;
+    }
+    _socket = socket;
 
     if (_socket == null) {
       AppLog.error(_tag, '无法监听 UDP $discoveryPort，扫描不到附近的房间');
@@ -90,7 +108,7 @@ class LanRoomDiscovery {
     try {
       return await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
-        discoveryPort,
+        port,
         reuseAddress: true,
         reusePort: reusePort,
       );
@@ -201,7 +219,7 @@ class LanRoomDiscovery {
     if (socket == null) return;
 
     final jsonPayload = jsonEncode({
-      "magic": magicHeader,
+      "magic": magic,
       "roomId": roomId,
       "roomName": roomName,
       "hostNickname": hostNickname,
@@ -215,7 +233,7 @@ class LanRoomDiscovery {
     final targets = await _getBroadcastAddresses();
     for (final target in targets) {
       try {
-        socket.send(bytes, target, discoveryPort);
+        socket.send(bytes, target, port);
       } catch (_) {
         // 部分接口若不支持广播，静默跳过
       }
@@ -232,18 +250,27 @@ class LanRoomDiscovery {
       return;
     }
 
-    if (json["magic"] != magicHeader) return;
+    if (json["magic"] != magic) return;
 
     try {
       final roomId = json["roomId"] as String;
 
       // 广播是发到 255.255.255.255 的，自己也会收到自己的包。
-      if (roomId == _selfRoomId) return;
+      if (!includeOwnRoom && roomId == _selfRoomId) return;
 
       // 收到解散通知，即刻移除。广播谁都能发，只有与该房间最后一次
       // 广播同源的解散包才算数——否则任何设备都能把别人列表里的
       // 房间踢掉。
       if (json["action"] == "ROOM_CLOSED") {
+        if (includeOwnRoom) {
+          _discoveredRooms.removeWhere(
+            (_, known) =>
+                known.roomId == roomId &&
+                known.hostAddress.address == datagram.address.address,
+          );
+          _notifyRoomsChanged();
+          return;
+        }
         final known = _discoveredRooms[roomId];
         if (known != null &&
             known.hostAddress.address == datagram.address.address) {
@@ -257,6 +284,9 @@ class LanRoomDiscovery {
       final port = json["port"] as int;
       // 字段边界检查：广播是匿名的，畸形/恶意的大数值不能往下游传。
       if (port <= 0 || port > 65535) return;
+      final cacheKey = includeOwnRoom
+          ? '$roomId@${datagram.address.address}:$port'
+          : roomId;
 
       final room = DiscoveredRoom(
         roomId: roomId,
@@ -270,13 +300,13 @@ class LanRoomDiscovery {
 
       // 防伪造洪水：过期清理是 3.5 秒一次，短时间灌入大量假 roomId
       // 会把列表撑爆，超过上限的陌生房间直接不收。
-      if (!_discoveredRooms.containsKey(roomId) &&
+      if (!_discoveredRooms.containsKey(cacheKey) &&
           _discoveredRooms.length >= maxDiscoveredRooms) {
         AppLog.warn(_tag, '发现列表已满（$maxDiscoveredRooms），忽略新房间 $roomId');
         return;
       }
 
-      _discoveredRooms[roomId] = room;
+      _discoveredRooms[cacheKey] = room;
       _ensurePruneTimer();
       _pruneStaleRooms();
       _notifyRoomsChanged();
@@ -329,6 +359,7 @@ class LanRoomDiscovery {
   }
 
   Future<void> stop() async {
+    _generation++;
     stopAdvertising();
     _pruneTimer?.cancel();
     _pruneTimer = null;
@@ -339,6 +370,7 @@ class LanRoomDiscovery {
   }
 
   void dispose() {
+    _disposed = true;
     stop();
     _roomsController.close();
   }

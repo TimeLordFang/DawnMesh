@@ -170,7 +170,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
   Future<void> _editProfile({ServerProfile? existing}) async {
     final result = await showDialog<ServerProfile>(
       context: context,
-      builder: (_) => _ServerProfileDialog(existing: existing),
+      builder: (_) => ServerProfileDialog(existing: existing),
     );
     if (result == null) return;
     final profiles = existing == null
@@ -611,14 +611,14 @@ class _ActiveInternetRoomCard extends StatelessWidget {
   );
 }
 
-class _ServerProfileDialog extends StatefulWidget {
-  const _ServerProfileDialog({this.existing});
+class ServerProfileDialog extends StatefulWidget {
+  const ServerProfileDialog({super.key, this.existing});
   final ServerProfile? existing;
   @override
-  State<_ServerProfileDialog> createState() => _ServerProfileDialogState();
+  State<ServerProfileDialog> createState() => _ServerProfileDialogState();
 }
 
-class _ServerProfileDialogState extends State<_ServerProfileDialog> {
+class _ServerProfileDialogState extends State<ServerProfileDialog> {
   late final TextEditingController _name = TextEditingController(
     text: widget.existing?.name ?? '',
   );
@@ -629,6 +629,14 @@ class _ServerProfileDialogState extends State<_ServerProfileDialog> {
     text: widget.existing?.accessToken ?? '',
   );
   String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _url.dispose();
+    _token.dispose();
+    super.dispose();
+  }
 
   void _submit() {
     final raw = _url.text.trim();

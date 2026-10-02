@@ -167,23 +167,16 @@ class InternetRoomSession extends ChangeNotifier {
   InternetFeatures features = const InternetFeatures();
   Timer? _featuresTimer;
   Future<void>? _hybridQueue;
-  bool get hybridEnabled => _summary?.hybridAudioEnabled ?? false;
-  bool get hybridAvailable =>
-      features.hybridAudio && (_summary?.hybridAudioSupported ?? false);
+  // Public rooms are always SFU-only. Old server flags must never enable a
+  // second audio path; offline admission belongs to the separate fusion mode.
+  bool get hybridEnabled => false;
+  bool get hybridAvailable => false;
   String? _hybridHostId;
   String? _activeHybridHostId;
   DateTime? _hybridRetryAfter;
 
   Future<void> setHybridEnabled(bool enabled) async {
-    if (!isHost || !summary.hybridAudioSupported) {
-      throw StateError('只有房主可以修改双线融合');
-    }
-    final updated = await api.setHybridAudio(roomId, enabled, resumeToken);
-    if (_closed || _roomEnded) return;
-    _summary = updated;
-    _hybridRetryAfter = null;
-    await _reconcileHybrid();
-    notifyListeners();
+    throw StateError('请在首页选择独立的融合房');
   }
 
   Future<void> _reconcileHybrid() async {

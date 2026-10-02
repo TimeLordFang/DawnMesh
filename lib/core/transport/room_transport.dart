@@ -84,3 +84,9 @@ abstract class RoomTransport {
 abstract interface class AuthenticatedRelayTransport {
   void relayAuthenticated(Frame sealed, {required bool realtime});
 }
+
+/// Called only after room encryption and admission checks have succeeded.
+abstract interface class FusionControlTransport {
+  Future<void> receiveControl(Frame frame);
+  Future<void> prepareEnd();
+}

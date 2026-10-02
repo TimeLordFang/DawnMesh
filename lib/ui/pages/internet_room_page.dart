@@ -58,41 +58,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     }
   }
 
-  Future<void> _toggleHybrid() async {
-    final session = widget.session;
-
-    if (!session.hybridEnabled) {
-      final enable = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('双线融合 · Beta'),
-          content: const Text(
-            '尝试与附近成员建立 Wi-Fi 直连，质量稳定时优先使用，变差时回到公网。房主开启后，成员会自动跟随，后来加入的成员也无需操作。\n\n公网可用时仍保持备用，会继续产生流量。已建立直连后关闭移动数据，可在 30 分钟重连窗口内继续通话，请保持 Wi-Fi 开启。新成员入房和管理仍需公网。建立 Wi-Fi Direct 可能切换手机的无线网络，效果取决于机型。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('开启'),
-            ),
-          ],
-        ),
-      );
-      if (enable != true) return;
-    }
-    try {
-      await session.setHybridEnabled(!session.hybridEnabled);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('直连暂不可用，继续使用公网')));
-      }
-    }
-  }
-
   void _scheduleInviteHide() {
     _inviteTimer?.cancel();
     if (!_inviteVisible || _shownInviteCode == null) return;
@@ -371,24 +336,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                       subtitle: const Text('只影响本机发出的语音'),
                       trailing: NoiseReductionControl(isNight: widget.isNight),
                     ),
-                  if (!session.roomEnded &&
-                      session.isHost &&
-                      session.hybridAvailable)
-                    ListTile(
-                      title: const Text('双线融合'),
-                      subtitle: Text(
-                        session.hybridEnabled
-                            ? session.hybridStatus
-                            : '房主开启，全体成员自动连接',
-                      ),
-                      trailing: Switch(
-                        value: session.hybridEnabled,
-                        onChanged: (_) {
-                          Navigator.pop(sheetContext);
-                          unawaited(_toggleHybrid());
-                        },
-                      ),
-                    ),
                   if (!session.roomEnded && session.isHost)
                     ListTile(
                       title: const Text('成员离线／退出提示'),
@@ -408,11 +355,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                         _rename();
                       },
                     ),
-                  if (session.hybridEnabled && !session.isHost)
-                    ListTile(
-                      title: const Text('双线融合'),
-                      subtitle: Text(session.hybridStatus),
-                    ),
                   if (session.roomEnded)
                     const ListTile(title: Text('通话已结束，聊天记录保留到退出')),
                 ],
@@ -429,29 +371,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             ),
             child: Column(
               children: [
-                if (!keyboardOpen &&
-                    !session.roomEnded &&
-                    session.hybridEnabled)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.wifi_tethering_rounded,
-                          size: 16,
-                          color: accent,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            session.hybridStatus,
-                            key: const ValueKey('hybrid-connection-status'),
-                            style: TextStyle(fontSize: 12, color: accent),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 if (!keyboardOpen && session.features.notice.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
