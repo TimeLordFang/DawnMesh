@@ -86,6 +86,9 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   HybridWifiLink? _wifi;
   final _ownAddresses = <String>{};
   final _connectedTargets = <String, WebSocket>{};
+  final _socketNodes = <WebSocket, String>{};
+  final _peerRoutes = <int, _FusionPeerRoute>{};
+  Future<void>? _peerConnectTask;
   final _dialing = <String>{};
   bool _advertisingDirect = false;
   Future<bool>? _advertisingTask;
@@ -166,7 +169,11 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         await socket.close();
         return;
       }
-      _attach(socket, cloud: false);
+      _attach(
+        socket,
+        cloud: false,
+        nodeId: request.headers.value('X-Fusion-Node'),
+      );
     } catch (_) {
       /* A failed local handshake must not end the room. */
     }
@@ -176,7 +183,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     final previous = _localTarget;
     final target = 'ws://$host:$port/fusion/$roomId';
     _localTarget = target;
-    final connected = await _connectLocalTarget();
+    final connected = await _dialLocal(target);
     if (!connected && _localTarget == target) _localTarget = previous;
     return connected;
   }
@@ -184,6 +191,18 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   Future<bool> _connectLocalTarget() async {
     final target = _localTarget;
     if (target == null || _stopped) return false;
+    return _dialLocal(target);
+  }
+
+  Future<bool> _dialLocal(String target, {String? nodeId}) async {
+    if (_stopped) return false;
+    if (nodeId != null &&
+        _socketNodes.entries.any(
+          (entry) =>
+              entry.value == nodeId && entry.key.readyState == WebSocket.open,
+        )) {
+      return true;
+    }
     if (_connectedTargets.containsKey(target)) return true;
     if (!_dialing.add(target)) return false;
     try {
@@ -196,7 +215,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         await socket.close();
         return false;
       }
-      _attach(socket, cloud: false);
+      _attach(socket, cloud: false, nodeId: nodeId);
       _connectedTargets[target] = socket;
       return true;
     } catch (_) {
@@ -247,7 +266,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     final server = profile;
     if (server == null || _stopped) return false;
     try {
-      if (identity != null && _state != null) await _upload();
+      if (identity != null && _state != null && _stateIsFresh) await _upload();
       final uri = endpoint(server, '/rooms/$roomId/relay');
       final socket = await WebSocket.connect(
         uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws').toString(),
@@ -275,8 +294,9 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     }
   }
 
-  void _attach(WebSocket socket, {required bool cloud}) {
+  void _attach(WebSocket socket, {required bool cloud, String? nodeId}) {
     if (!cloud) _local.add(socket);
+    if (!cloud && nodeId != null) _socketNodes[socket] = nodeId;
     socket.pingInterval = const Duration(seconds: 5);
     var window = DateTime.now();
     var count = 0;
@@ -308,6 +328,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       onError: (Object _) {},
       onDone: () {
         _local.remove(socket);
+        _socketNodes.remove(socket);
         _connectedTargets.removeWhere((_, value) => identical(value, socket));
         if (identical(_cloud, socket)) {
           _cloud = null;
@@ -348,6 +369,15 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       if (identity != null && _cloud != null && !_cloudAuthenticated) {
         _cloud!.add(jsonEncode({'key': identity!.relayToken}));
         _cloudAuthenticated = true;
+      }
+    } else if (frame.payload[0] == 4 &&
+        _session?.hasFusionIdentity == true &&
+        _session!.members.any((member) => member.memberId == frame.senderId) &&
+        frame.senderId != _session!.selfMemberId) {
+      final route = _FusionPeerRoute.decode(data);
+      if (route != null && route.nodeId != _nodeId) {
+        _peerRoutes[frame.senderId] = route;
+        unawaited(_connectPeerRoutes());
       }
     } else if (frame.payload[0] == 3 && frame.senderId == 1) {
       try {
@@ -394,6 +424,10 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     _ticking = true;
     try {
       if (_session?.state == RoomState.inRoom) await _publishState();
+      if (_session?.hasFusionIdentity == true) {
+        await _announcePeerRoutes();
+        unawaited(_connectPeerRoutes());
+      }
       // Only the creator advertises a joinable P2P group. Other members still
       // advertise their reachable IP endpoints through LAN discovery.
       if (!_stopped &&
@@ -416,7 +450,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
           await connectLocal(info.groupOwnerAddress);
         }
       }
-      if (_local.length < 5 && _session?.state == RoomState.inRoom) {
+      if (_local.isEmpty && _session?.hasFusionIdentity == true) {
         for (final room in _discovery?.currentRooms ?? <DiscoveredRoom>[]) {
           if (room.roomId == roomId &&
               room.memberCount > 0 &&
@@ -429,7 +463,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       if (identity != null && _state != null && profile != null) {
         if (_cloud == null) {
           await connectCloud();
-        } else if (_uploadedRevision < _revision) {
+        } else if (_uploadedRevision < _revision && _stateIsFresh) {
           await _upload();
         }
       }
@@ -444,6 +478,84 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
 
   /// Publish a newly created room immediately, then keep it fresh periodically.
   Future<void> synchronize() => _tick();
+
+  bool get _stateIsFresh =>
+      _state != null &&
+      DateTime.now().millisecondsSinceEpoch -
+              ByteData.sublistView(_state!).getUint64(0) <
+          85000;
+
+  Future<void> _announcePeerRoutes() async {
+    try {
+      final networks = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+      );
+      _ownAddresses.clear();
+      for (final network in networks) {
+        _ownAddresses.addAll(
+          network.addresses.map((address) => address.address),
+        );
+      }
+      final addresses = _ownAddresses
+          .where(
+            (address) =>
+                _FusionPeerRoute.isLocalAddress(address) &&
+                !InternetAddress(address).isLoopback,
+          )
+          .take(4)
+          .toList();
+      if (addresses.isEmpty || _stopped) return;
+      await _session!.sendFusionControl(
+        Uint8List.fromList([
+          4,
+          ...utf8.encode(
+            jsonEncode({
+              'node': _nodeId,
+              'port': boundPort,
+              'addresses': addresses,
+            }),
+          ),
+        ]),
+      );
+    } catch (error) {
+      AppLog.debug('Fusion', '成员直连地址暂未就绪：$error');
+    }
+  }
+
+  Future<void> _connectPeerRoutes() {
+    if (_peerConnectTask != null) return _peerConnectTask!;
+    late final Future<void> task;
+    task = _dialPeerRoutes().whenComplete(() {
+      if (identical(_peerConnectTask, task)) _peerConnectTask = null;
+    });
+    _peerConnectTask = task;
+    return task;
+  }
+
+  Future<void> _dialPeerRoutes() async {
+    final session = _session;
+    if (_stopped || session?.hasFusionIdentity != true) return;
+    final known = session!.members.map((member) => member.memberId).toSet();
+    _peerRoutes.removeWhere((id, _) => !known.contains(id));
+    // One dialer per pair avoids two parallel sockets for every pair. These
+    // addresses travel over the admitted encrypted channel, never a public list.
+    final routes = _peerRoutes.entries
+        .where((entry) => session.selfMemberId < entry.key)
+        .toList();
+    await Future.wait(
+      routes.map((entry) async {
+        for (final address in entry.value.addresses) {
+          if (_stopped) return;
+          if (await _dialLocal(
+            'ws://$address:${entry.value.port}/fusion/$roomId',
+            nodeId: entry.value.nodeId,
+          )) {
+            return;
+          }
+        }
+      }),
+    );
+  }
 
   @override
   Future<void> prepareEnd() async {
@@ -487,6 +599,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         ? ' · ${_wifi!.status}'
         : '';
     status.value =
+        '${_session?.fusionHostUnavailable == true && _session?.hasActiveFusionPeer == true ? '房主暂离线，成员间可通话 · ' : ''}'
         '${_local.isEmpty ? '暂无本地队友连接' : '本地连接 ${_local.length}'} · '
         '${cloudConnected ? '已接通公网' : (_cloudError ?? (profile == null ? '未配置公网服务器' : '正在连接融合房服务器'))}$wifiHint';
   }
@@ -494,8 +607,10 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   Future<bool> reconnect() async {
     if (_stopped) return false;
     // Do not tear down a working local link when only the cloud disappeared.
-    if (peerCount > 0) return true;
-    return await _connectLocalTarget() || await connectCloud();
+    await _connectPeerRoutes();
+    if (_local.isEmpty) await _connectLocalTarget();
+    if (_cloud == null && profile != null) await connectCloud();
+    return peerCount > 0;
   }
 
   @override
@@ -537,6 +652,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       unawaited(socket.close());
     }
     _local.clear();
+    _socketNodes.clear();
+    _peerRoutes.clear();
     _cloud = null;
     await _wifi?.close();
     await onStop?.call();
@@ -547,5 +664,49 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     await stop();
     if (!_incoming.isClosed) await _incoming.close();
     status.dispose();
+  }
+}
+
+class _FusionPeerRoute {
+  _FusionPeerRoute(this.nodeId, this.port, this.addresses);
+  final String nodeId;
+  final int port;
+  final List<String> addresses;
+
+  static bool isLocalAddress(String value) {
+    final address = InternetAddress.tryParse(value);
+    if (address?.type != InternetAddressType.IPv4) return false;
+    final bytes = address!.rawAddress;
+    return address.isLoopback ||
+        bytes[0] == 10 ||
+        (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+        (bytes[0] == 192 && bytes[1] == 168) ||
+        (bytes[0] == 169 && bytes[1] == 254);
+  }
+
+  static _FusionPeerRoute? decode(List<int> bytes) {
+    try {
+      final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      final node = data['node'],
+          port = data['port'],
+          addresses = data['addresses'];
+      if (node is! String ||
+          node.length != 24 ||
+          port is! int ||
+          port < 1 ||
+          port > 65535 ||
+          addresses is! List) {
+        return null;
+      }
+      final valid = addresses
+          .whereType<String>()
+          .where(isLocalAddress)
+          .take(4)
+          .toSet()
+          .toList();
+      return valid.isEmpty ? null : _FusionPeerRoute(node, port, valid);
+    } catch (_) {
+      return null;
+    }
   }
 }

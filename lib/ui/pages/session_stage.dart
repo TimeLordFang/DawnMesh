@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../widgets/noise_reduction_control.dart';
 import '../widgets/room_settings_button.dart';
+import '../widgets/fusion_audio_profile_control.dart';
 import '../../core/audio/audio_io.dart';
 import '../../core/internet/internet_room_session.dart';
 import '../../core/platform/platform_audio_channel.dart';
@@ -629,6 +630,8 @@ class _SessionStageState extends State<SessionStage>
               (state) => state == RoomState.ended,
             ),
             items: (sheetContext) => [
+              if (!session.roomEnded && session.mode == RoomMode.fusion)
+                FusionAudioProfileControl(settings: session.fusionAudio),
               if (!session.roomEnded)
                 ListTile(
                   title: const Text('麦克风降噪'),

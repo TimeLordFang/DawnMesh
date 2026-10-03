@@ -35,6 +35,7 @@ Future<_Node> _node(
   int installation, {
   bool host = false,
   ServerProfile? server,
+  DateTime Function()? now,
 }) async {
   final audio = MockAudioIo();
   final proof = base64Encode(List.filled(32, installation));
@@ -42,6 +43,7 @@ Future<_Node> _node(
     audioIo: audio,
     selfNickname: 'member$installation',
     mode: RoomMode.fusion,
+    now: now,
     sessionToken: FusionIdentity.memberToken(proof, room.roomId),
   );
   final link = FusionTransport(
@@ -169,6 +171,63 @@ void main() {
     expect(bad.session.state, RoomState.connecting);
     expect(bad.session.secureCodec, isNull);
     expect(host.session.members.length, 1);
+  });
+
+  test('members negotiate a direct socket and keep voice after host disappears', () async {
+    var now = DateTime.now();
+    final room = await FusionIdentity.create('成员互连');
+    final invite = RoomInvite.parse('1234');
+    final host = await _node(room, invite, 1, host: true);
+    final a = await _node(room, invite, 2, now: () => now);
+    final b = await _node(room, invite, 3, now: () => now);
+    await _joinLocal(a, host);
+    await _joinLocal(b, host);
+    await _until(() => a.session.members.length == 3);
+    // Loopback endpoints stand in for the phones' private interface addresses.
+    // The real admitted encrypted control channel carries the route through H.
+    await b.session.sendFusionControl(
+      Uint8List.fromList([
+        4,
+        ...utf8.encode(
+          jsonEncode({
+            'node': base64UrlEncode(List.filled(16, 3)),
+            'port': b.link.boundPort,
+            'addresses': ['127.0.0.1'],
+          }),
+        ),
+      ]),
+    );
+    await _until(() => a.link.peerCount >= 2 && b.link.peerCount >= 2);
+    final originalCodec = a.session.secureCodec;
+    // Remove the signer to simulate process/radio loss without producing the
+    // signed end-room message that an intentional host exit must send.
+    host.link.identity = null;
+    await host.link.stop(); // Abrupt loss, not the host's explicit room end.
+    await _until(() => a.link.peerCount == 1 && b.link.peerCount == 1);
+    now = now.add(const Duration(seconds: 20));
+    await b.session.sendFusionControl(Uint8List.fromList([99]));
+    await a.session.sendFusionControl(Uint8List.fromList([99]));
+    await _until(
+      () => a.session.hasActiveFusionPeer && b.session.hasActiveFusionPeer,
+    );
+    a.session.checkHostFailover();
+    b.session.checkHostFailover();
+    expect(a.session.fusionHostUnavailable, true);
+    expect(a.session.state, RoomState.inRoom);
+    expect(b.session.state, RoomState.inRoom);
+    expect(a.session.secureCodec, same(originalCodec));
+    await a.session.startAudio();
+    a.session.setPtt(true);
+    a.audio.emitEncodedFrame(Uint8List.fromList([1, 2, 3]));
+    await _until(() => b.audio.submittedFrames.length == 1);
+    expect(host.audio.submittedFrames, isEmpty);
+    a.session.triggerDisconnect();
+    await b.session.sendFusionControl(Uint8List.fromList([99]));
+    await _until(() => a.session.state == RoomState.inRoom);
+    expect(a.session.isPttPressed, false);
+    a.audio.emitEncodedFrame(Uint8List.fromList([4, 5, 6]));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(b.audio.submittedFrames, hasLength(1));
   });
 
   test('solo host distinguishes an old server and connects as soon as it supports fusion', () async {

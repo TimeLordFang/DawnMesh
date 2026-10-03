@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../audio/audio_io.dart';
 import '../audio/voice_activity_gate.dart';
+import '../fusion/fusion_audio_settings.dart';
 import '../platform/background_call_controls.dart';
 import '../platform/platform_audio_channel.dart';
 import '../diagnostics/app_log.dart';
@@ -62,6 +63,7 @@ class RoomSession {
   String get selfNickname => _selfNickname;
   final Uint8List sessionToken;
   final RoomMode mode;
+  final DateTime Function() _now;
   late VoiceMode _voiceMode = mode == RoomMode.wifiFullDuplex
       ? VoiceMode.automatic
       : VoiceMode.pushToTalk;
@@ -71,6 +73,14 @@ class RoomSession {
   final _controlsController = StreamController<void>.broadcast();
   Stream<void> get controlsStream => _controlsController.stream;
   BackgroundCallControls? _backgroundControls;
+  FusionAudioSettings? _fusionAudio;
+  FusionAudioSettings get fusionAudio => _fusionAudio ??= FusionAudioSettings(
+    applyBitrate: audioIo.setBitrate,
+    changed: _notifyControls,
+  );
+  int get audioBitrate => mode == RoomMode.fusion
+      ? fusionAudio.bitrate
+      : (isBluetooth ? _bluetoothBitrate : _wifiBitrate);
 
   void setVoiceMode(VoiceMode value) {
     if (_closed || _roomEnded || _voiceMode == value) return;
@@ -152,6 +162,23 @@ class RoomSession {
   bool _transferInProgress = false;
 
   final Map<int, Member> _members = {};
+  final Map<int, DateTime> _fusionPeerActivity = {};
+  bool get hasFusionIdentity =>
+      mode == RoomMode.fusion && secureCodec != null && (_admitted || _isHost);
+  bool get hasActiveFusionPeer =>
+      hasFusionIdentity &&
+      _fusionPeerActivity.entries.any(
+        (entry) =>
+            entry.key != _selfMemberId &&
+            _members.containsKey(entry.key) &&
+            _now().difference(entry.value) < _hostSilenceBeforeReconnect,
+      );
+  bool get fusionHostUnavailable =>
+      hasFusionIdentity &&
+      !_isHost &&
+      (_fusionPeerActivity[1] == null ||
+          _now().difference(_fusionPeerActivity[1]!) >=
+              _hostSilenceBeforeReconnect);
 
   /// 每个成员最后一次送到音频帧的时间，用来判断说话是否已经结束。
   final Map<int, DateTime> _lastAudioAt = {};
@@ -219,10 +246,13 @@ class RoomSession {
     required String selfNickname,
     this.mode = RoomMode.wifiFullDuplex,
     Uint8List? sessionToken,
+    DateTime Function()? now,
     // ignore: prefer_initializing_formals
   }) : _selfNickname = selfNickname,
+       _now = now ?? DateTime.now,
        sessionToken = sessionToken ?? _generateSessionToken() {
     _reconnectController = ReconnectController(
+      now: _now,
       onAttemptReconnect: _attemptReconnect,
       onMaxRetriesReached: () {
         unawaited(_finishReconnectWindow());
@@ -344,6 +374,8 @@ class RoomSession {
       return;
     }
     _audioStarted = true;
+    if (mode == RoomMode.fusion) await fusionAudio.start();
+    if (!_audioStarted || _closed || _roomEnded) return;
     if (audioIo is PlatformAudioChannel) {
       _backgroundControls = BackgroundCallControls(this);
       await _backgroundControls!.bind((command, value) async {
@@ -530,6 +562,22 @@ class RoomSession {
   }
 
   void _markAuthenticatedHostActivity(Frame frame) {
+    if (hasFusionIdentity &&
+        frame.senderId != _selfMemberId &&
+        _members.containsKey(frame.senderId) &&
+        frame.type != FrameType.leave) {
+      final now = _now();
+      _fusionPeerActivity[frame.senderId] = now;
+      _members[frame.senderId]!.lastActiveAt = now;
+      if (_state == RoomState.reconnecting) {
+        _reconnectController.cancel();
+        _updateState(RoomState.inRoom);
+        // Preserve both the selected voice mode and the released PTT gate.
+        // A recovered heartbeat must never start automatic transmission.
+        _notifyControls();
+        AppLog.info('重连', '已验证成员链路恢复，沿用原身份继续通话');
+      }
+    }
     if (_isHost) return;
     for (final member in _members.values) {
       if (member.isHost && member.memberId == frame.senderId) {
@@ -678,6 +726,10 @@ class RoomSession {
     }
 
     if (roomInvite != null && !_members.containsKey(_selfMemberId)) return;
+    if (hasFusionIdentity) {
+      _fusionPeerActivity.removeWhere((id, _) => !_members.containsKey(id));
+      if (frame.senderId == 1) _fusionPeerActivity[1] = _now();
+    }
     final recovered = _state == RoomState.reconnecting;
     if (_state != RoomState.inRoom) {
       _updateState(RoomState.inRoom);
@@ -725,6 +777,7 @@ class RoomSession {
       return;
     }
     _members.remove(frame.senderId);
+    _fusionPeerActivity.remove(frame.senderId);
     _lastAudioAt.remove(frame.senderId);
     audioIo.removeRemoteMember(frame.senderId);
     _notifyMembers();
@@ -798,6 +851,13 @@ class RoomSession {
   /// 房主超时后自动迁移。
   void checkHostFailover() {
     if (_isHost || _transferInProgress || _state != RoomState.inRoom) return;
+
+    if (hasFusionIdentity) {
+      if (!hasActiveFusionPeer) {
+        _beginReconnect('暂时收不到已验证成员的数据，恢复原连接');
+      }
+      return;
+    }
 
     final currentHost = _members.values.cast<Member?>().firstWhere(
       (m) => m?.isHost == true,
@@ -1025,12 +1085,15 @@ class RoomSession {
           diagnosticStartedAtMicros: audioStarted,
         );
       }
-    }, bitrateBps: isBluetooth ? _bluetoothBitrate : _wifiBitrate);
+    }, bitrateBps: audioBitrate);
     if (!_audioStarted || _closed) {
       await audioIo.stopCapture();
       await audioIo.stopPlayback();
       return;
     }
+
+    if (mode == RoomMode.fusion) await audioIo.setBitrate(audioBitrate);
+    if (!_audioStarted || _closed || _roomEnded) return;
 
     // 播放不再需要 Dart 定时器：抖动缓冲、解码、混音、送扬声器全在原生侧，
     // 由 AudioTrack 的写阻塞天然定速（原来的 Timer.periodic(20ms) 有调度漂移）。
@@ -1137,6 +1200,24 @@ class RoomSession {
     if (_closed || _isHost) return false;
     final reconnect = _reconnectTransport;
     if (reconnect == null) return false;
+    if (hasFusionIdentity) {
+      // Restore transport only. Re-running PAKE requires the original host and
+      // discards working peer sessions, even though their room keys are valid.
+      await reconnect();
+      if (_closed || _roomEnded || _state == RoomState.disconnected) {
+        return false;
+      }
+      if (_state == RoomState.inRoom) return true;
+      await sendFrame(
+        Frame(
+          type: FrameType.heartbeat,
+          senderId: _selfMemberId,
+          seq: _nextSeq(),
+          payload: Uint8List(0),
+        ),
+      );
+      return false; // Only authenticated peer traffic confirms recovery.
+    }
     _updateState(RoomState.reconnecting);
     AppLog.info(
       '重连',
@@ -1198,8 +1279,10 @@ class RoomSession {
     _voiceGate.reset();
     _notifyControls();
     unawaited(audioIo.clearRemoteMembers());
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = null;
+    if (!hasFusionIdentity) {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+    }
     _updateState(RoomState.reconnecting);
     AppLog.warn('重连', '$reason；将在 30 分钟内自动恢复');
     _reconnectController.start();
@@ -1212,6 +1295,8 @@ class RoomSession {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _audioStarted = false;
+    _fusionAudio?.dispose();
+    _fusionAudio = null;
     isPttPressed = false;
     _voiceGate.reset();
     await _backgroundControls?.close();
@@ -1928,6 +2013,8 @@ class RoomSession {
   Future<void> _cleanupEndedRoom() async {
     if (_roomEnded || _closed) return;
     _roomEnded = true;
+    _fusionAudio?.dispose();
+    _fusionAudio = null;
     _audioStarted = false;
     isPttPressed = false;
     _voiceGate.reset();
@@ -1952,6 +2039,8 @@ class RoomSession {
 
   Future<void> leave() async {
     await _roomEndTask;
+    _fusionAudio?.dispose();
+    _fusionAudio = null;
     final link = transport;
     if (_isHost && link is FusionControlTransport) {
       await (link as FusionControlTransport).prepareEnd();
@@ -2002,6 +2091,7 @@ class RoomSession {
 
     _members.clear();
     _lastAudioAt.clear();
+    _fusionPeerActivity.clear();
     _cachedPlan = null;
     _highestSeenJoinOrder = 0;
     _transferInProgress = false;

@@ -7,6 +7,7 @@ import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
 import '../../core/fusion/fusion_transport.dart';
+import '../../core/internet/internet_audio_profile.dart';
 import '../../core/platform/chat_media_service.dart';
 import '../theme/app_theme.dart';
 import '../transitions/stage_choreography.dart';
@@ -200,7 +201,7 @@ class _RoomContentState extends State<RoomContent> {
                 child: ValueListenableBuilder<String>(
                   valueListenable: transport.status,
                   builder: (_, status, _) => Text(
-                    status,
+                    '$status · ${widget.session.fusionAudio.profile.label} ${widget.session.audioBitrate ~/ 1000}k',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),

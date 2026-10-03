@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0-beta.7\nFusion rooms now merge public-server, LAN and Wi-Fi Direct discovery by room ID. Connection status distinguishes a ready direct group from connected teammates, and identifies unsupported servers, credential errors and timeouts. Update the APK; requires Server 0.3.0-beta.4 or later. The six-member limit is unchanged.'
-      : '1.1.0-beta.7\n融合房合并公网、同网和 Wi-Fi 直连发现结果，按房间 ID 去重。修正独自建房时的直连提示，区分服务端未支持融合房、凭证错误和连接超时。需更新 APK，服务端至少为 0.3.0-beta.4；已满足要求的服务端无需再次升级。6 人上限保持不变。';
+      ? '1.1.0-beta.8\nFusion rooms add Clarity, Balanced and Data Saver voice quality. Admitted members automatically connect to reachable local peers and keep their identities when the host goes offline. Losing all peers starts a 30-minute recovery window; reconnecting never presses PTT. Update the APK and Server to 0.3.0-beta.5. A working local or public network path is still required.'
+      : '1.1.0-beta.8\n融合房新增清晰、平衡、省流音质。已入房成员自动建立可达的本地互连，房主离线后保留身份继续通话；全部队友失联才进入 30 分钟恢复期，重连不会误开按住对讲。需更新 APK 和 Server 0.3.0-beta.5；仍需可用的本地或公网链路。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'

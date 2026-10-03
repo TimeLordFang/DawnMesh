@@ -7,7 +7,7 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前测试版本：`1.1.0-beta.7`（正式版仍为 `1.0.4`）。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前测试版本：`1.1.0-beta.8`（正式版仍为 `1.0.4`）。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -37,7 +37,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.0-beta.7-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.0-beta.8-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -149,4 +149,4 @@ scripts/   本机工具链与校验脚本
 
 DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。
 
-1.1.0-beta.7 将融合房的公网、局域网和 Wi-Fi Direct 发现结果按房间 ID 合并，并修正独自建房及旧服务端场景下的状态提示。需更新 APK，服务端至少为 0.3.0-beta.4；已满足要求的服务端无需再次升级。6 人上限不变。详见 [Beta 发布说明](docs/RELEASE_1.1.0-beta.7.md)、[融合房设计](docs/FUSION_ROOMS.md) 与 [误开麦排查](docs/PTT_RECONNECT_INVESTIGATION.md)。
+1.1.0-beta.8 为融合房增加清晰、平衡、省流音质和成员自动互连。房主离线不再触发重新验码；全部队友失联后保留身份重连 30 分钟。需更新 APK，并配套 Server 0.3.0-beta.5 支持房主名单过期后的老成员中继恢复。仍需可用的本地或公网链路，6 人上限不变。详见 [Beta 发布说明](docs/RELEASE_1.1.0-beta.8.md)、[融合房设计](docs/FUSION_ROOMS.md) 与 [误开麦排查](docs/PTT_RECONNECT_INVESTIGATION.md)。
