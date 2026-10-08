@@ -36,12 +36,13 @@ Future<_Node> _node(
   bool host = false,
   ServerProfile? server,
   DateTime Function()? now,
+  String? nickname,
 }) async {
   final audio = MockAudioIo();
   final proof = base64Encode(List.filled(32, installation));
   final session = RoomSession(
     audioIo: audio,
-    selfNickname: 'member$installation',
+    selfNickname: nickname ?? 'member$installation',
     mode: RoomMode.fusion,
     now: now,
     sessionToken: FusionIdentity.memberToken(proof, room.roomId),
@@ -172,6 +173,54 @@ void main() {
     expect(bad.session.secureCodec, isNull);
     expect(host.session.members.length, 1);
   });
+
+  test('16 fusion members receive complete signed long rosters and deduplicated voice', () async {
+    final room = await FusionIdentity.create('16-person room');
+    final invite = RoomInvite.parse('1234');
+    final host = await _node(
+      room,
+      invite,
+      1,
+      host: true,
+      nickname: '1${'声' * 20}',
+    );
+    final nodes = [host];
+    for (var id = 2; id <= 16; id++) {
+      final guest = await _node(room, invite, id, nickname: '$id${'声' * 20}');
+      nodes.add(guest);
+      await _joinLocal(guest, host);
+    }
+    await _until(
+      () => nodes.every((node) => node.session.members.length == 16),
+    );
+    await host.link.synchronize();
+    await _until(
+      () => nodes.skip(1).every((node) => node.link.signedState?[9] == 16),
+    );
+    final state = nodes.last.link.signedState!;
+    expect(state.length, greaterThan(512));
+    expect(await nodes.last.link.identity!.verifyState(state), true);
+    expect(host.session.members.last.memberId, 16);
+    await nodes.last.session.startAudio();
+    nodes.last.session.setPtt(true);
+    nodes.last.audio.emitEncodedFrame(Uint8List.fromList([7, 8, 9]));
+    await _until(
+      () =>
+          nodes.take(15).every((node) => node.audio.submittedFrames.isNotEmpty),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(
+      nodes.take(15).every((node) => node.audio.submittedFrames.length == 1),
+      true,
+    );
+    nodes.last.session.setPtt(false);
+    final extra = await _node(room, invite, 17);
+    await extra.link.connectLocal('127.0.0.1', port: host.link.boundPort);
+    await extra.session.joinRoom(startAudio: false);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(extra.session.state, RoomState.connecting);
+    expect(host.session.members, hasLength(16));
+  }, timeout: const Timeout(Duration(seconds: 60)));
 
   test('members negotiate a direct socket and keep voice after host disappears', () async {
     var now = DateTime.now();

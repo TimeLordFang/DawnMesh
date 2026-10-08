@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio/audio_io.dart';
 import '../../core/fusion/fusion_identity.dart';
+import '../../core/protocol/room_limits.dart';
 import '../../core/fusion/fusion_room_directory.dart';
 import '../../core/fusion/fusion_server_api.dart';
 import '../../core/fusion/fusion_transport.dart';
@@ -350,7 +351,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
             key: const ValueKey('create-fusion-room'),
             onPressed: _busy ? null : _create,
             icon: const Icon(Icons.add_rounded),
-            label: const Text('创建融合房 · 最多 6 人'),
+            label: const Text('创建融合房 · 最多 ${RoomLimits.fusionMembers} 人'),
           ),
           if (_busy)
             const Padding(
@@ -427,7 +428,10 @@ class _FusionHomePageState extends State<FusionHomePage> {
                       subtitle: Text(
                         '${room.memberCount > 0 ? '${room.memberCount} 人 · ' : ''}${room.sources}',
                       ),
-                      onTap: _busy ? null : () => _join(room: room),
+                      onTap:
+                          _busy || room.memberCount >= RoomLimits.fusionMembers
+                          ? null
+                          : () => _join(room: room),
                     ),
                   if (rooms.isEmpty)
                     const Padding(

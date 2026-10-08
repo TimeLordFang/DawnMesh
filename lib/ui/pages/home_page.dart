@@ -13,6 +13,7 @@ import '../../core/security/room_invite.dart';
 import '../widgets/room_invite_dialog.dart';
 import '../../core/session/device_code.dart';
 import '../../core/session/room_session.dart';
+import '../../core/protocol/room_limits.dart';
 import '../../core/transport/ble_l2cap_transport.dart';
 import '../../core/transport/lan_discovery.dart';
 import '../../core/transport/lan_transport.dart';
@@ -290,9 +291,12 @@ class _HomeContentState extends State<HomeContent> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text('${room.memberCount}/6 · ${room.rssi} dBm'),
+                subtitle: Text(
+                  '${room.memberCount}/${RoomLimits.bluetoothMembers} · ${room.rssi} dBm',
+                ),
                 trailing: TextButton(
-                  onPressed: _busy || room.memberCount >= 6
+                  onPressed:
+                      _busy || room.memberCount >= RoomLimits.bluetoothMembers
                       ? null
                       : () => _onJoinBleRoom(room),
                   child: Text(s.joinRoom),
@@ -879,7 +883,7 @@ class _HomeContentState extends State<HomeContent> {
                                               s.roomHostInfo(
                                                 room.hostNickname,
                                                 room.memberCount,
-                                                6,
+                                                RoomLimits.wifiMembers,
                                               ),
                                               style: TextStyle(
                                                 color: textSecondary,
@@ -891,7 +895,11 @@ class _HomeContentState extends State<HomeContent> {
                                       ),
                                       const SizedBox(width: 12),
                                       ElevatedButton(
-                                        onPressed: () => _onJoinRoom(room),
+                                        onPressed:
+                                            room.memberCount >=
+                                                RoomLimits.wifiMembers
+                                            ? null
+                                            : () => _onJoinRoom(room),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: isNight
                                               ? AppTheme.nightSkyBlue

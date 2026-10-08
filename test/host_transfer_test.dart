@@ -151,12 +151,12 @@ void main() {
       );
     });
 
-    test('成员数超过 6 被拒绝', () {
+    test('成员数超过 16 被拒绝', () {
       expect(
         () => HostTransferPlan(
           successorId: 2,
           members: [
-            for (int i = 2; i <= 8; i++) member(i, i, 'M$i', '10.0.0.$i'),
+            for (int i = 1; i <= 17; i++) member(i, i, 'M$i', '10.0.0.$i'),
           ],
         ),
         throwsArgumentError,

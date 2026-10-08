@@ -11,6 +11,8 @@ import '../platform/platform_audio_channel.dart';
 import '../diagnostics/app_log.dart';
 import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
+import '../protocol/control_fragments.dart';
+import '../protocol/room_limits.dart';
 import '../protocol/frame_type.dart';
 import '../protocol/payloads/chat_delete.dart';
 import '../protocol/payloads/chat_image.dart';
@@ -63,6 +65,13 @@ class RoomSession {
   String get selfNickname => _selfNickname;
   final Uint8List sessionToken;
   final RoomMode mode;
+  int get maxMembers => switch (mode) {
+    RoomMode.wifiFullDuplex => RoomLimits.wifiMembers,
+    RoomMode.fusion => RoomLimits.fusionMembers,
+    RoomMode.bluetoothPtt => RoomLimits.bluetoothMembers,
+  };
+  final _controlFragments = ControlFragments();
+  int _controlMessageId = Random.secure().nextInt(0x100000000);
   final DateTime Function() _now;
   late VoiceMode _voiceMode = mode == RoomMode.wifiFullDuplex
       ? VoiceMode.automatic
@@ -127,6 +136,7 @@ class RoomSession {
     _admission = RoomAdmission(
       passwordScalar: await invite.passwordScalar(),
       token: sessionToken,
+      maxPending: maxMembers - 1,
       send: (frame) => _emitFrame(frame),
       onReady: (codec) async {
         if (_closed) return;
@@ -454,11 +464,7 @@ class RoomSession {
         final relay = transport;
         if (_isHost &&
             relay is AuthenticatedRelayTransport &&
-            opened.type != FrameType.roster &&
-            opened.type != FrameType.hostHandover &&
-            opened.type != FrameType.hostAnnounce &&
-            opened.type != FrameType.chatSync &&
-            opened.type != FrameType.admission) {
+            !_isHostControl(opened)) {
           (relay as AuthenticatedRelayTransport).relayAuthenticated(
             frame,
             realtime: opened.type == FrameType.audio,
@@ -481,12 +487,7 @@ class RoomSession {
   Future<void> _dispatchIncomingFrame(Frame frame) async {
     if (_closed || _roomEnded || _state == RoomState.disconnected) return;
     if (secureCodec != null) {
-      final hostCommand =
-          frame.type == FrameType.roster ||
-          frame.type == FrameType.hostHandover ||
-          frame.type == FrameType.hostAnnounce ||
-          frame.type == FrameType.chatSync;
-      if (hostCommand && (_isHost || frame.senderId != 1)) return;
+      if (_isHostControl(frame) && (_isHost || frame.senderId != 1)) return;
     }
     if (roomInvite != null &&
         !_isHost &&
@@ -502,7 +503,7 @@ class RoomSession {
             frame.senderId == 1 &&
             frame.payload.length == 17 &&
             frame.payload[0] >= 2 &&
-            frame.payload[0] <= 6 &&
+            frame.payload[0] <= maxMembers &&
             _tokensEqual(frame.payload.sublist(1), sessionToken)) {
           _admitted = true;
           _selfMemberId = frame.payload[0];
@@ -554,12 +555,20 @@ class RoomSession {
           await (target as FusionControlTransport).receiveControl(frame);
         }
         break;
+      case FrameType.controlFragment:
+        final completed = _controlFragments.accept(frame, _now());
+        if (completed != null) await _dispatchIncomingFrame(completed);
+        break;
       case FrameType.handshakeHello:
       case FrameType.handshakeConfirm:
       case FrameType.sealed:
         break;
     }
   }
+
+  static bool _isHostControl(Frame frame) =>
+      frame.type.isHostCommand ||
+      ControlFragments.originalType(frame)?.isHostCommand == true;
 
   void _markAuthenticatedHostActivity(Frame frame) {
     if (hasFusionIdentity &&
@@ -672,10 +681,10 @@ class RoomSession {
 
     if (allocatedId == 0) {
       int newId = 2;
-      while (_members.containsKey(newId) && newId <= 6) {
+      while (_members.containsKey(newId) && newId <= maxMembers) {
         newId++;
       }
-      if (newId > 6) return; // Room is full (max 6)
+      if (newId > maxMembers) return;
       allocatedId = newId;
     }
 
@@ -1005,13 +1014,9 @@ class RoomSession {
     if (plan == null) return;
 
     _cachedPlan = plan;
-    await sendFrame(
-      Frame(
-        type: FrameType.hostAnnounce,
-        senderId: _selfMemberId,
-        seq: _nextSeq(),
-        payload: HostTransferCodec.encode(plan),
-      ),
+    await _sendControlPayload(
+      FrameType.hostAnnounce,
+      HostTransferCodec.encode(plan),
     );
   }
 
@@ -1037,13 +1042,7 @@ class RoomSession {
       hostId: _selfMemberId,
       members: rosterMembers,
     );
-    final frame = Frame(
-      type: FrameType.roster,
-      senderId: _selfMemberId,
-      seq: _nextSeq(),
-      payload: payload.encode(),
-    );
-    sendFrame(frame);
+    unawaited(_sendControlPayload(FrameType.roster, payload.encode()));
   }
 
   /// 把在册成员号同步给传输层。房主侧的 UDP 端点注册与转发只认这份
@@ -1305,6 +1304,7 @@ class RoomSession {
     await audioIo.stopPlayback();
     await audioIo.clearRemoteMembers();
     await transport?.stop();
+    _controlFragments.clear();
     _updateState(RoomState.disconnected);
   }
 
@@ -1313,14 +1313,23 @@ class RoomSession {
 
   Future<void> sendFusionControl(Uint8List payload) {
     if (mode != RoomMode.fusion) return Future.value();
-    return sendFrame(
-      Frame(
-        type: FrameType.fusionState,
-        senderId: _selfMemberId,
-        seq: _nextSeq(),
-        payload: payload,
-      ),
+    return _sendControlPayload(FrameType.fusionState, payload);
+  }
+
+  Future<void> _sendControlPayload(FrameType type, Uint8List payload) {
+    final frames = ControlFragments.split(
+      type: type,
+      senderId: _selfMemberId,
+      messageId: _controlMessageId++ & 0xffffffff,
+      payload: payload,
+      maxPayload: secureCodec == null
+          ? Frame.maxPayloadSize
+          : SecureFrameCodec.maxPlaintextPayload,
+      nextSeq: _nextSeq,
     );
+    // Enqueue the whole message before yielding so later snapshots cannot
+    // interleave fragments and overwrite an incompletely received roster.
+    return Future.wait(frames.map(sendFrame)).then((_) {});
   }
 
   Future<void> sendFrame(Frame frame, {int? diagnosticStartedAtMicros}) {
@@ -1413,13 +1422,9 @@ class RoomSession {
       return;
     }
 
-    await sendFrame(
-      Frame(
-        type: FrameType.hostHandover,
-        senderId: _selfMemberId,
-        seq: _nextSeq(),
-        payload: HostTransferCodec.encode(plan),
-      ),
+    await _sendControlPayload(
+      FrameType.hostHandover,
+      HostTransferCodec.encode(plan),
     );
     AppLog.info('RoomSession', '把房主转移给「${target.nickname}」');
 
@@ -2013,6 +2018,7 @@ class RoomSession {
   Future<void> _cleanupEndedRoom() async {
     if (_roomEnded || _closed) return;
     _roomEnded = true;
+    _controlFragments.clear();
     _fusionAudio?.dispose();
     _fusionAudio = null;
     _audioStarted = false;
@@ -2092,6 +2098,7 @@ class RoomSession {
     _members.clear();
     _lastAudioAt.clear();
     _fusionPeerActivity.clear();
+    _controlFragments.clear();
     _cachedPlan = null;
     _highestSeenJoinOrder = 0;
     _transferInProgress = false;

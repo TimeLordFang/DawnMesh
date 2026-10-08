@@ -17,10 +17,18 @@ enum FrameType {
   chatImage(0x0f),
   admission(0x10),
   nicknameUpdate(0x11),
-  fusionState(0x12);
+  fusionState(0x12),
+  controlFragment(0x13);
 
   final int value;
   const FrameType(this.value);
+
+  bool get isHostCommand =>
+      this == roster ||
+      this == hostHandover ||
+      this == hostAnnounce ||
+      this == chatSync ||
+      this == admission;
 
   static FrameType? fromValue(int value) {
     for (final type in FrameType.values) {

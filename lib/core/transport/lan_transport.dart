@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import '../diagnostics/app_log.dart';
 import '../protocol/frame.dart';
+import '../protocol/control_fragments.dart';
+import '../protocol/room_limits.dart';
 import '../protocol/frame_type.dart';
 import 'room_transport.dart';
 
@@ -71,8 +73,8 @@ class LanTransport implements RoomTransport {
   static const int controlPort = 8988;
   static const int audioPort = 8989;
 
-  /// 房主自己占 1 个位置，所以最多再接 5 台，合计 6 台。
-  static const int maxClients = 5;
+  /// One slot belongs to the host.
+  static const int maxClients = RoomLimits.wifiMembers - 1;
 
   TransportRole _role = TransportRole.idle;
 
@@ -117,10 +119,9 @@ class LanTransport implements RoomTransport {
   bool get isHost => _role == TransportRole.host;
 
   @override
-  int get peerCount =>
-      _role == TransportRole.host
-          ? _clientLabels.length
-          : (_hostSocket == null ? 0 : 1);
+  int get peerCount => _role == TransportRole.host
+      ? _clientLabels.length
+      : (_hostSocket == null ? 0 : 1);
 
   /// 成员号是房主通过名单帧分配的，拿到后要同步进来，
   /// 否则房主无法把语音端点和成员对应起来。
@@ -258,10 +259,8 @@ class LanTransport implements RoomTransport {
         for (final frame in accumulator.add(chunk)) {
           // These commands are emitted by the host only. A client TCP link
           // must not replace everyone else's roster or force a host migration.
-          if (frame.type == FrameType.roster ||
-              frame.type == FrameType.hostHandover ||
-              frame.type == FrameType.hostAnnounce ||
-              frame.type == FrameType.chatSync) {
+          if (frame.type.isHostCommand ||
+              ControlFragments.originalType(frame)?.isHostCommand == true) {
             continue;
           }
           _relayControl(frame, exclude: socket);
@@ -337,12 +336,10 @@ class LanTransport implements RoomTransport {
           _deliver(frame);
         }
       },
-      onError:
-          (Object e) =>
-              _handleHostDisconnect(socket, generation, 'socket_error', e),
-      onDone:
-          () =>
-              _handleHostDisconnect(socket, generation, 'remote_closed', null),
+      onError: (Object e) =>
+          _handleHostDisconnect(socket, generation, 'socket_error', e),
+      onDone: () =>
+          _handleHostDisconnect(socket, generation, 'remote_closed', null),
       cancelOnError: true,
     );
 

@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../protocol/frame.dart';
+import '../protocol/room_limits.dart';
+import '../protocol/bounded_utf8.dart';
 
 /// 房主转移的候选成员快照。
 class TransferCandidate {
@@ -53,16 +54,13 @@ class HostTransferMember {
 /// 校验规则逐条对齐已发布的 Kotlin 版（`transport/HostTransfer.kt`）。
 /// 这些断言不是防御性冗余——成员号或端点重复会让重连时两个人抢同一个身份。
 class HostTransferPlan {
-  static const int maxMembers = 6;
+  static const int maxMembers = RoomLimits.wifiMembers;
 
   final int successorId;
   final List<HostTransferMember> members;
 
-  HostTransferPlan({
-    required this.successorId,
-    required this.members,
-  }) {
-    if (successorId < 1 || successorId > 255) {
+  HostTransferPlan({required this.successorId, required this.members}) {
+    if (successorId < 1 || successorId > maxMembers) {
       throw ArgumentError('继任成员 ID 越界: $successorId');
     }
     if (members.isEmpty || members.length > maxMembers) {
@@ -82,7 +80,7 @@ class HostTransferPlan {
       throw ArgumentError('交接成员表不含继任者 $successorId');
     }
     for (final m in members) {
-      if (m.memberId < 1 || m.memberId > 255) {
+      if (m.memberId < 1 || m.memberId > maxMembers) {
         throw ArgumentError('交接成员 ID 越界: ${m.memberId}');
       }
       if (m.joinOrder < 0) {
@@ -117,12 +115,14 @@ class HostElection {
     return HostTransferPlan(
       successorId: active.first.memberId,
       members: active
-          .map((c) => HostTransferMember(
-                memberId: c.memberId,
-                joinOrder: c.joinOrder,
-                nickname: c.nickname,
-                endpoint: c.endpoint,
-              ))
+          .map(
+            (c) => HostTransferMember(
+              memberId: c.memberId,
+              joinOrder: c.joinOrder,
+              nickname: c.nickname,
+              endpoint: c.endpoint,
+            ),
+          )
           .toList(),
     );
   }
@@ -171,20 +171,18 @@ class HostTransferSeed {
   /// 下一个新成员该拿的 joinOrder。
   final int nextJoinOrder;
 
-  const HostTransferSeed({
-    required this.members,
-    required this.nextJoinOrder,
-  });
+  const HostTransferSeed({required this.members, required this.nextJoinOrder});
 
   SeededTransferMember get host => members.first;
 
   /// 按端点索引除房主外的成员，新房主用它认领重连上来的人。
   Map<String, SeededTransferMember> expectedByEndpoint() => {
-        for (final m in members.skip(1)) m.endpoint: m,
-      };
+    for (final m in members.skip(1)) m.endpoint: m,
+  };
 
   static HostTransferSeed from(HostTransferPlan plan) {
-    final ordered = [...plan.members]..sort((a, b) {
+    final ordered = [...plan.members]
+      ..sort((a, b) {
         final byOrder = a.joinOrder.compareTo(b.joinOrder);
         return byOrder != 0 ? byOrder : a.memberId.compareTo(b.memberId);
       });
@@ -197,13 +195,11 @@ class HostTransferSeed {
       for (int i = 0; i < rest.length; i++) _seed(rest[i], i + 1),
     ];
 
-    final maxOrder =
-        ordered.map((m) => m.joinOrder).reduce((a, b) => a > b ? a : b);
+    final maxOrder = ordered
+        .map((m) => m.joinOrder)
+        .reduce((a, b) => a > b ? a : b);
 
-    return HostTransferSeed(
-      members: remapped,
-      nextJoinOrder: maxOrder + 1,
-    );
+    return HostTransferSeed(members: remapped, nextJoinOrder: maxOrder + 1);
   }
 
   static SeededTransferMember _seed(HostTransferMember m, int newId) =>
@@ -227,7 +223,7 @@ class HostTransferSeed {
 ///   nickLen(1) | nickname(UTF-8) | epLen(1) | endpoint(ASCII)
 /// ```
 ///
-/// 总长不得超过 [Frame.maxPayloadSize]（512）。
+/// Large plans are carried in bounded control fragments.
 class HostTransferCodec {
   static const int version = 1;
 
@@ -241,7 +237,7 @@ class HostTransferCodec {
     out.addByte(plan.members.length);
 
     for (final m in plan.members) {
-      final nickname = _truncateUtf8(m.nickname, maxNicknameBytes);
+      final nickname = boundedUtf8(m.nickname, maxNicknameBytes);
       final endpoint = _asciiBytes(m.endpoint);
 
       out.addByte(m.memberId);
@@ -253,7 +249,7 @@ class HostTransferCodec {
     }
 
     final bytes = out.toBytes();
-    if (bytes.length > Frame.maxPayloadSize) {
+    if (bytes.length > RoomLimits.maxControlMessageBytes) {
       throw ArgumentError('交接载荷超上限: ${bytes.length}');
     }
     return bytes;
@@ -262,7 +258,7 @@ class HostTransferCodec {
   /// 解码失败一律抛异常：交接载荷坏掉时宁可放弃这次交接，
   /// 也不能拿半份名单去重建房间。
   static HostTransferPlan decode(Uint8List payload) {
-    if (payload.length > Frame.maxPayloadSize) {
+    if (payload.length > RoomLimits.maxControlMessageBytes) {
       throw ArgumentError('交接载荷超上限: ${payload.length}');
     }
     final reader = _ByteReader(payload);
@@ -295,12 +291,14 @@ class HostTransferCodec {
         throw ArgumentError('交接成员 $i 端点不是 ASCII');
       }
 
-      members.add(HostTransferMember(
-        memberId: memberId,
-        joinOrder: joinOrder,
-        nickname: nickname,
-        endpoint: String.fromCharCodes(endpointBytes),
-      ));
+      members.add(
+        HostTransferMember(
+          memberId: memberId,
+          joinOrder: joinOrder,
+          nickname: nickname,
+          endpoint: String.fromCharCodes(endpointBytes),
+        ),
+      );
     }
 
     if (reader.remaining != 0) {
@@ -314,17 +312,6 @@ class HostTransferCodec {
     final bytes = Uint8List(8);
     ByteData.sublistView(bytes).setInt64(0, value, Endian.big);
     return bytes;
-  }
-
-  /// 按 UTF-8 字节数截断且不切断多字节字符（中文昵称会踩到）。
-  static Uint8List _truncateUtf8(String text, int maxBytes) {
-    var candidate = text;
-    while (candidate.isNotEmpty) {
-      final bytes = utf8.encode(candidate);
-      if (bytes.length <= maxBytes) return Uint8List.fromList(bytes);
-      candidate = candidate.substring(0, candidate.length - 1);
-    }
-    return Uint8List(0);
   }
 
   static Uint8List _asciiBytes(String endpoint) {
@@ -349,8 +336,11 @@ class _ByteReader {
   int readUint8() => _data[_offset++];
 
   int readInt64() {
-    final value =
-        ByteData.sublistView(_data, _offset, _offset + 8).getInt64(0, Endian.big);
+    final value = ByteData.sublistView(
+      _data,
+      _offset,
+      _offset + 8,
+    ).getInt64(0, Endian.big);
     _offset += 8;
     return value;
   }

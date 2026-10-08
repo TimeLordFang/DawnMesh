@@ -1,6 +1,8 @@
 import 'dart:typed_data';
+
 import '../diagnostics/app_log.dart';
 import 'frame_type.dart';
+import 'room_limits.dart';
 
 /// DawnMesh 6-byte Header Binary Frame.
 ///
@@ -32,6 +34,19 @@ class Frame {
     required Uint8List payload,
   }) : payload = _capPayload(type, payload);
 
+  /// A complete control message assembled from authenticated wire fragments.
+  /// It is dispatched locally; senders must fragment it again before encoding.
+  Frame.reassembled({
+    required this.type,
+    required this.senderId,
+    required this.seq,
+    required Uint8List payload,
+  }) : payload = Uint8List.fromList(payload) {
+    if (payload.length > RoomLimits.maxControlMessageBytes) {
+      throw ArgumentError('Control message exceeds assembly limit');
+    }
+  }
+
   /// 超长载荷仍然截断（否则 16 位长度字段会溢出），但不再静默——
   /// 截断意味着音频/名单数据已经损坏，必须留下痕迹。
   static Uint8List _capPayload(FrameType type, Uint8List payload) {
@@ -45,6 +60,9 @@ class Frame {
 
   /// Encodes this Frame into a raw byte buffer.
   Uint8List encode() {
+    if (payload.length > maxPayloadSize) {
+      throw StateError('Control message must be fragmented before encoding');
+    }
     final length = payload.length;
     final buffer = Uint8List(headerSize + length);
     final byteData = ByteData.sublistView(buffer);

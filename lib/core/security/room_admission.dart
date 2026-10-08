@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
 import '../protocol/frame.dart';
 import '../protocol/frame_type.dart';
 import 'session_crypto.dart';
@@ -12,6 +13,7 @@ import 'spake2.dart';
 class RoomAdmission {
   final BigInt passwordScalar;
   final Uint8List token;
+  final int maxPending;
   final void Function(Frame) send;
   final Future<void> Function(SecureFrameCodec) onReady;
   bool _host = false;
@@ -27,9 +29,10 @@ class RoomAdmission {
   RoomAdmission({
     required this.passwordScalar,
     required this.token,
+    this.maxPending = 5,
     required this.send,
     required this.onReady,
-  });
+  }) : assert(maxPending > 0 && maxPending <= 15);
 
   Future<void> startHost() async {
     _host = true;
@@ -86,8 +89,8 @@ class RoomAdmission {
       if (kind == 1 && body.length == 65) {
         _attempts.removeWhere((time) => now.difference(time).inSeconds >= 60);
         if (_pending.containsKey(index) ||
-            _pending.length >= 5 ||
-            _attempts.length >= 10 ||
+            _pending.length >= maxPending ||
+            _attempts.length >= max(10, maxPending * 2) ||
             _totalAttempts >= 120) {
           return;
         }

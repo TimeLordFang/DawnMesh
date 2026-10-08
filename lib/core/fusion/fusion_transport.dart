@@ -13,11 +13,13 @@ import '../security/room_invite.dart';
 import '../transport/wifi_direct_manager.dart';
 import '../transport/wifi_direct_credentials.dart';
 import '../protocol/frame.dart';
+import '../protocol/room_limits.dart';
 import '../protocol/frame_type.dart';
 import '../session/room_session.dart';
 import '../transport/lan_discovery.dart';
 import '../transport/room_transport.dart';
 import 'fusion_identity.dart';
+import 'fusion_peer_topology.dart';
 import 'fusion_server_api.dart';
 
 /// Deduplicate the *same encrypted packet*, not a sender's wrapping uint16
@@ -27,7 +29,7 @@ class FusionPacketCache {
   bool accept(List<int> packet, DateTime now) {
     while (_seen.isNotEmpty &&
         (now.difference(_seen.values.first).inSeconds >= 15 ||
-            _seen.length >= 8192)) {
+            _seen.length >= 16384)) {
       _seen.remove(_seen.keys.first);
     }
     final key = sha256.convert(packet).toString();
@@ -154,7 +156,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     }
     if (request.headers.value('X-Fusion-Node') == _nodeId ||
         request.uri.path != '/fusion/$roomId' ||
-        _local.length >= 12 ||
+        _local.length >= RoomLimits.fusionMembers * 2 ||
         !WebSocketTransformer.isUpgradeRequest(request)) {
       request.response.statusCode = HttpStatus.notFound;
       await request.response.close();
@@ -308,7 +310,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
           window = now;
           count = 0;
         }
-        if (message.length > Frame.maxTotalSize || ++count > 400) {
+        if (message.length > Frame.maxTotalSize ||
+            ++count > RoomLimits.fusionMembers * 64) {
           unawaited(socket.close());
           return;
         }
@@ -537,10 +540,11 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     if (_stopped || session?.hasFusionIdentity != true) return;
     final known = session!.members.map((member) => member.memberId).toSet();
     _peerRoutes.removeWhere((id, _) => !known.contains(id));
-    // One dialer per pair avoids two parallel sockets for every pair. These
-    // addresses travel over the admitted encrypted channel, never a public list.
+    // Two adjacent member links form a ring independently of the creator.
+    // One dialer per pair; keep existing bootstrap links as additional paths.
+    final targets = FusionPeerTopology.dialTargets(session.selfMemberId, known);
     final routes = _peerRoutes.entries
-        .where((entry) => session.selfMemberId < entry.key)
+        .where((entry) => targets.contains(entry.key))
         .toList();
     await Future.wait(
       routes.map((entry) async {

@@ -5,6 +5,8 @@ import 'package:crypto/crypto.dart' as hashes;
 import 'package:cryptography/cryptography.dart';
 
 import '../session/member.dart';
+import '../protocol/room_limits.dart';
+import '../protocol/bounded_utf8.dart';
 
 /// The room's public key is its identity. Only its creator signs membership;
 /// every admitted phone can carry that signed state to a server.
@@ -23,19 +25,10 @@ class FusionIdentity {
   final Uint8List signature;
   final SimpleKeyPair? _keyPair;
   static final _algorithm = Ed25519();
+  static const maxStateBytes = 74 + RoomLimits.fusionMembers * (18 + 40);
   String get roomId => base64Url.encode(publicKey).replaceAll('=', '');
   String get relayToken => base64Encode(secret);
   bool get canSign => _keyPair != null;
-
-  static Uint8List boundedText(String text, int maxBytes) {
-    final result = <int>[];
-    for (final rune in text.runes) {
-      final bytes = utf8.encode(String.fromCharCode(rune));
-      if (result.length + bytes.length > maxBytes) break;
-      result.addAll(bytes);
-    }
-    return Uint8List.fromList(result);
-  }
 
   static Future<FusionIdentity> create(String name) async {
     final pair = await _algorithm.newKeyPair();
@@ -43,7 +36,7 @@ class FusionIdentity {
     final secret = Uint8List.fromList(
       (await SecretKeyData.random(length: 32).extractBytes()),
     );
-    final text = boundedText(name, 64);
+    final text = boundedUtf8(name, 64);
     final body = [
       1,
       ...public,
@@ -114,7 +107,7 @@ class FusionIdentity {
     int revision, {
     bool ended = false,
   }) async {
-    if (_keyPair == null || members.length > 6) {
+    if (_keyPair == null || members.length > RoomLimits.fusionMembers) {
       throw StateError('Invalid room signer');
     }
     final header = ByteData(10)
@@ -123,7 +116,7 @@ class FusionIdentity {
       ..setUint8(9, members.length);
     final body = <int>[...header.buffer.asUint8List()];
     for (final member in members) {
-      final name = boundedText(member.nickname, 40);
+      final name = boundedUtf8(member.nickname, 40);
       // A room-scoped pseudonym, never the installation proof or admission token.
       final id = hashes.sha256
           .convert(member.sessionToken ?? [member.memberId])
@@ -141,16 +134,18 @@ class FusionIdentity {
 
   Future<bool> verifyState(Uint8List state) async {
     if (state.length < 74 ||
-        state.length > 422 ||
+        state.length > maxStateBytes ||
         state[8] > 1 ||
-        state[9] > 6) {
+        state[9] > RoomLimits.fusionMembers) {
       return false;
     }
     var offset = 10;
     final ids = <int>{};
     for (var i = 0; i < state[9]; i++) {
       if (offset + 18 > state.length - 64) return false;
-      if (state[offset] < 1 || state[offset] > 6 || !ids.add(state[offset])) {
+      if (state[offset] < 1 ||
+          state[offset] > RoomLimits.fusionMembers ||
+          !ids.add(state[offset])) {
         return false;
       }
       final length = state[offset + 17];
