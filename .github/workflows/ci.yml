@@ -59,7 +59,9 @@ jobs:
           echo "$(dirname "${sdkmanager}")" >> "${GITHUB_PATH}"
           echo "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
           echo "${sdk_root}/build-tools/37.0.0" >> "${GITHUB_PATH}"
-          "${sdkmanager}" "cmdline-tools;latest" "platform-tools"
+          "${sdkmanager}" "cmdline-tools;23.0" "platform-tools"
+          sdkmanager="${sdk_root}/cmdline-tools/23.0/bin/sdkmanager"
+          echo "$(dirname "${sdkmanager}")" >> "${GITHUB_PATH}"
           "${sdkmanager}" \
             "platforms;android-37.2" \
             "build-tools;37.0.0" \
