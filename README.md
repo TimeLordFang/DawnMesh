@@ -47,26 +47,26 @@
 
 | 工具 | 版本 |
 | --- | --- |
-| Flutter / Dart | Flutter **3.47.2** / Dart **3.13.2** |
-| JDK | Temurin **25 LTS**，用于运行 Gradle |
-| Gradle / Android Gradle Plugin | **9.7.1** / **9.4.0** |
-| Kotlin | **2.4.10** |
-| Android SDK | compileSdk / targetSdk **36** |
-| Android Build-Tools | **36.1.0** |
-| Android NDK | **28.2.13676358** |
-| CMake | **3.22.1** |
+| Flutter / Dart | Flutter **3.47.7** / Dart **3.13.5** |
+| JDK | Temurin **27**，用于运行 Gradle |
+| Gradle / Android Gradle Plugin | **9.8.1** / **9.4.1** |
+| Kotlin | **2.4.21** |
+| Android SDK | compileSdk **37.2** / targetSdk **37** |
+| Android Build-Tools | **37.0.0** |
+| Android NDK | **30.0.16248370** |
+| CMake | **4.1.2** |
 
-Gradle 使用 JDK 25 运行，但 Android Java/Kotlin 字节码目标保持为 Java 17，JDK 版本不会提高应用的 Android 系统要求。
+Gradle 使用 JDK 27 运行，但 Android Java/Kotlin 字节码目标保持为 Java 17，JDK 版本不会提高应用的 Android 系统要求。
 
 安装 Android SDK 组件：
 
 ```sh
 sdkmanager \
   "platform-tools" \
-  "platforms;android-36" \
-  "build-tools;36.1.0" \
-  "ndk;28.2.13676358" \
-  "cmake;3.22.1"
+  "platforms;android-37.2" \
+  "build-tools;37.0.0" \
+  "ndk;30.0.16248370" \
+  "cmake;4.1.2"
 flutter doctor --android-licenses
 ```
 

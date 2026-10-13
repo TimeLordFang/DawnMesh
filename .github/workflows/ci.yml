@@ -1,0 +1,105 @@
+name: Android checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Java 27
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "27"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: "3.47.7"
+          channel: stable
+          cache: true
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "${sdk_root}" ]]; then
+            for candidate in "/usr/local/lib/android/sdk" "${HOME}/Android/Sdk"; do
+              if [[ -d "${candidate}" ]]; then
+                sdk_root="${candidate}"
+                break
+              fi
+            done
+          fi
+          [[ -n "${sdk_root}" && -d "${sdk_root}" ]] || {
+            echo "::error::Android SDK directory was not found"
+            exit 1
+          }
+          sdkmanager="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "${sdkmanager}" ]]; then
+            sdkmanager="$(find "${sdk_root}/cmdline-tools" -type f -name sdkmanager -perm -u+x -print -quit 2>/dev/null || true)"
+          fi
+          [[ -x "${sdkmanager}" ]] || {
+            echo "::error::sdkmanager was not found under ${sdk_root}/cmdline-tools"
+            exit 1
+          }
+          echo "ANDROID_SDK_ROOT=${sdk_root}" >> "${GITHUB_ENV}"
+          echo "ANDROID_HOME=${sdk_root}" >> "${GITHUB_ENV}"
+          echo "$(dirname "${sdkmanager}")" >> "${GITHUB_PATH}"
+          echo "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
+          echo "${sdk_root}/build-tools/37.0.0" >> "${GITHUB_PATH}"
+          "${sdkmanager}" \
+            "platforms;android-37.2" \
+            "build-tools;37.0.0" \
+            "ndk;30.0.16248370" \
+            "cmake;4.1.2"
+
+      - name: Install latest stable CMake
+        run: ./scripts/setup-cmake-ci.sh
+
+      - name: Analyze, test and build debug APK
+        shell: bash
+        run: |
+          set +e
+          (
+            set -e
+            flutter pub get --enforce-lockfile
+            flutter analyze
+            flutter test --concurrency=1
+            ./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug
+            cmake -S native -B /tmp/dawnmesh-native-test -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+            cmake --build /tmp/dawnmesh-native-test --parallel 2
+            ctest --test-dir /tmp/dawnmesh-native-test --output-on-failure
+            flutter build apk --debug
+            python3 scripts/check_apk_elf_alignment.py build/app/outputs/flutter-apk/app-debug.apk
+          ) > "$RUNNER_TEMP/dawnmesh-android-checks.log" 2>&1
+          dawnmesh_status=$?
+          cat "$RUNNER_TEMP/dawnmesh-android-checks.log"
+          if [ "$dawnmesh_status" -ne 0 ]; then
+            python3 - "$RUNNER_TEMP/dawnmesh-android-checks.log" <<'PYTHON'
+          import pathlib, sys
+          lines = pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          errors = [line[:400] for line in lines if any(word in line.lower() for word in ['error', 'failed', 'exception', 'unresolved'])]
+          message = '\n'.join(errors[:8] + errors[-4:] + lines[-8:])[:3800]
+          print('::error title=Android checks::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PYTHON
+          fi
+          exit "$dawnmesh_status"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: DawnMesh-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

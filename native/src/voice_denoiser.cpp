@@ -11,7 +11,7 @@ constexpr double pi = 3.14159265358979323846;
 float bounded(float value) {
   return std::isfinite(value) ? std::clamp(value, -32768.f, 32767.f) : 0.f;
 }
-// RNNoise v0.1 lazily initializes shared FFT tables. Warm them exactly once,
+// RNNoise initializes shared FFT tables. Warm them exactly once,
 // before any instance can process a frame on another capture thread.
 std::once_flag initialize_model;
 }
@@ -52,7 +52,7 @@ void VoiceDenoiser::Resampler::run(const float* input, float* output) {
 }
 VoiceDenoiser::VoiceDenoiser(int rate) : rate_(rate), state_(nullptr) {
   std::call_once(initialize_model, [] {
-    auto* warm = rnnoise_create();
+    auto* warm = rnnoise_create(nullptr);
     if (warm) {
       float silence[480]{};
       rnnoise_process_frame(warm, silence, silence);
@@ -60,7 +60,7 @@ VoiceDenoiser::VoiceDenoiser(int rate) : rate_(rate), state_(nullptr) {
     }
   });
   if (rate != 16000 && rate != 32000 && rate != 48000) return;
-  state_ = rnnoise_create();
+  state_ = rnnoise_create(nullptr);
   up_.init(rate / 100, 480);
   down_.init(480, rate / 100);
 }
@@ -69,7 +69,7 @@ bool VoiceDenoiser::processFloat(float* samples, int count, int level) {
   if (!samples || !state_ || count != rate_ / 100 || level < 0 || level > 2) return false;
   if (level == 0) { last_level_ = 0; return true; }
   if (last_level_ == 0) {
-    rnnoise_init(state_); up_.reset(); down_.reset();
+    rnnoise_init(state_, nullptr); up_.reset(); down_.reset();
     previous_input_ = highpass_ = 0; gain_ = 1; speech_hold_ = 0;
   }
   if (last_level_ != level) tonal_.reset();

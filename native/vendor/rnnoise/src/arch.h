@@ -34,6 +34,24 @@
 #ifndef ARCH_H
 #define ARCH_H
 
+/* DawnMesh: isolate RNNoise CELT/FFT helpers from linked libopus. */
+#define celt_pitch_xcorr dawn_rnnoise_celt_pitch_xcorr
+#define pitch_downsample dawn_rnnoise_pitch_downsample
+#define pitch_search dawn_rnnoise_pitch_search
+#define remove_doubling dawn_rnnoise_remove_doubling
+#define opus_fft_alloc dawn_rnnoise_opus_fft_alloc
+#define opus_fft_alloc_arch_c dawn_rnnoise_opus_fft_alloc_arch_c
+#define opus_fft_alloc_twiddles dawn_rnnoise_opus_fft_alloc_twiddles
+#define opus_fft_c dawn_rnnoise_opus_fft_c
+#define opus_fft_free dawn_rnnoise_opus_fft_free
+#define opus_fft_free_arch_c dawn_rnnoise_opus_fft_free_arch_c
+#define opus_fft_impl dawn_rnnoise_opus_fft_impl
+#define opus_ifft_c dawn_rnnoise_opus_ifft_c
+#define _celt_autocorr dawn_rnnoise__celt_autocorr
+#define _celt_lpc dawn_rnnoise__celt_lpc
+#define celt_fir dawn_rnnoise_celt_fir
+#define celt_iir dawn_rnnoise_celt_iir
+
 #include "opus_types.h"
 #include "common.h"
 

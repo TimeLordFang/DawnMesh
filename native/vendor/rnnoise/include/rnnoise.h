@@ -1,4 +1,5 @@
-/* Copyright (c) 2017 Mozilla */
+/* Copyright (c) 2018 Gregor Richards
+ * Copyright (c) 2017 Mozilla */
 /*
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
@@ -24,6 +25,15 @@
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#ifndef RNNOISE_H
+#define RNNOISE_H 1
+
+#include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef RNNOISE_EXPORT
 # if defined(WIN32)
 #  if defined(RNNOISE_BUILD) && defined(DLL_EXPORT)
@@ -38,15 +48,84 @@
 # endif
 #endif
 
-
 typedef struct DenoiseState DenoiseState;
+typedef struct RNNModel RNNModel;
 
+/**
+ * Return the size of DenoiseState
+ */
 RNNOISE_EXPORT int rnnoise_get_size();
 
-RNNOISE_EXPORT int rnnoise_init(DenoiseState *st);
+/**
+ * Return the number of samples processed by rnnoise_process_frame at a time
+ */
+RNNOISE_EXPORT int rnnoise_get_frame_size();
 
-RNNOISE_EXPORT DenoiseState *rnnoise_create();
+/**
+ * Initializes a pre-allocated DenoiseState
+ *
+ * If model is NULL the default model is used.
+ *
+ * See: rnnoise_create() and rnnoise_model_from_file()
+ */
+RNNOISE_EXPORT int rnnoise_init(DenoiseState *st, RNNModel *model);
 
+/**
+ * Allocate and initialize a DenoiseState
+ *
+ * If model is NULL the default model is used.
+ *
+ * The returned pointer MUST be freed with rnnoise_destroy().
+ */
+RNNOISE_EXPORT DenoiseState *rnnoise_create(RNNModel *model);
+
+/**
+ * Free a DenoiseState produced by rnnoise_create.
+ *
+ * The optional custom model must be freed by rnnoise_model_free() after.
+ */
 RNNOISE_EXPORT void rnnoise_destroy(DenoiseState *st);
 
+/**
+ * Denoise a frame of samples
+ *
+ * in and out must be at least rnnoise_get_frame_size() large.
+ */
 RNNOISE_EXPORT float rnnoise_process_frame(DenoiseState *st, float *out, const float *in);
+
+/**
+ * Load a model from a memory buffer
+ *
+ * It must be deallocated with rnnoise_model_free() and the buffer must remain
+ * valid until after the returned object is destroyed.
+ */
+RNNOISE_EXPORT RNNModel *rnnoise_model_from_buffer(const void *ptr, int len);
+
+
+/**
+ * Load a model from a file
+ *
+ * It must be deallocated with rnnoise_model_free() and the file must not be
+ * closed until the returned object is destroyed.
+ */
+RNNOISE_EXPORT RNNModel *rnnoise_model_from_file(FILE *f);
+
+/**
+ * Load a model from a file name
+ *
+ * It must be deallocated with rnnoise_model_free()
+ */
+RNNOISE_EXPORT RNNModel *rnnoise_model_from_filename(const char *filename);
+
+/**
+ * Free a custom model
+ *
+ * It must be called after all the DenoiseStates referring to it are freed.
+ */
+RNNOISE_EXPORT void rnnoise_model_free(RNNModel *model);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

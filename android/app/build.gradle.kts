@@ -36,8 +36,10 @@ val hasReleaseSigning = listOf(
 android {
     // Kotlin namespace 与独立 applicationId 统一使用 DawnMesh 标识。
     namespace = "dev.dawnmesh.intercom"
-    compileSdk = 36
-    ndkVersion = "28.2.13676358"
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
+    ndkVersion = "30.0.16248370"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,7 +50,7 @@ android {
         applicationId = "dev.dawnmesh.intercom"
         // 项目基线是 26；不要用 flutter.minSdkVersion，它会随 Flutter 版本漂移。
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -69,7 +71,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("../../native/CMakeLists.txt")
-            version = "3.22.1"
+            version = "4.1.2"
         }
     }
 
@@ -104,8 +106,8 @@ flutter {
 
 dependencies {
     implementation(project(":flutter_webrtc"))
-    // Keep the processor ABI aligned with flutter_webrtc 1.6.0.
-    implementation("io.github.webrtc-sdk:android:144.7559.09")
+    // Keep the processor ABI aligned with flutter_webrtc 1.6.2+hotfix.4.
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
     // Opus 编解码。纯 JVM 实现，不需要额外的 .so。
     // 版本与已发布的 Kotlin 版 alpha.7 一致，保证两版音频互通。
     implementation("io.github.jaredmdobson:concentus:1.0.2")

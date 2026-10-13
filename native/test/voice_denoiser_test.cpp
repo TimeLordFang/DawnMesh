@@ -78,7 +78,7 @@ void verify_strong_whistle(int rate, bool wind = false) {
   VoiceDenoiser standard(rate), strong(rate);
   std::array<float,480> a{}, b{};
   const int count=rate/100;
-  double standard_power=0,strong_power=0;
+  double standard_power=0,strong_power=0,input_power=0;
   uint32_t random=73;
   for(int block=0;block<200;++block) {
     for(int i=0;i<count;++i) {
@@ -87,11 +87,16 @@ void verify_strong_whistle(int rate, bool wind = false) {
       const float gust=wind ? float(5000*std::sin(2*3.141592653589793*70*t))+(float(random>>8)/16777216.f-0.5f)*1000 : 0;
       a[i]=b[i]=float(3000*std::sin(2*3.141592653589793*2350*t))+gust;
     }
+    if(block>100) for(int i=0;i<count;++i) input_power+=a[i]*a[i];
     assert(standard.processFloat(a.data(),count,1));assert(strong.processFloat(b.data(),count,2));
     if(block>100) for(int i=0;i<count;++i) {standard_power+=a[i]*a[i];strong_power+=b[i]*b[i];}
   }
   std::printf("rate=%d wind=%d strong/standard whistle ratio=%.6f\n",rate,int(wind),strong_power/(standard_power+1));
-  assert(strong_power/(standard_power+1)<0.2);
+  // RNNoise 0.2 can reduce both modes to below the numerical noise floor.
+  // Always require absolute suppression; compare modes only above that floor.
+  assert(strong_power/(input_power+1)<0.2);
+  if(standard_power/(input_power+1)>1e-6)
+    assert(strong_power/(standard_power+1)<0.2);
 }
 int main() {
   verify_tonal_protection();

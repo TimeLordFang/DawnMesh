@@ -2,7 +2,7 @@
 
 仓库内的 `.github/workflows/release.yml` 会在 GitHub 收到 `v*` 标签时执行完整检查、构建签名 APK，并创建对应的 GitHub Release。也可以在 GitHub 的 **Actions → Android release → Run workflow** 中选择一个已经存在的标签重新运行。
 
-Runner 使用 Temurin **Java 25 LTS** 运行 Gradle 9.7.1。应用字节码仍以 Java 17 为目标，不会提高 Android 最低版本。
+Runner 使用 Temurin **Java 27** 运行 Gradle 9.8.1。应用字节码仍以 Java 17 为目标，不会提高 Android 最低版本。
 
 ## 一次性配置签名 Secret
 

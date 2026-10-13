@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.22)
 project(dawn_mesh_native LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -13,9 +13,17 @@ add_library(dawn_mesh_native SHARED
 )
 
 add_library(rnnoise STATIC
-    vendor/rnnoise/src/denoise.c vendor/rnnoise/src/rnn.c
-    vendor/rnnoise/src/rnn_data.c vendor/rnnoise/src/pitch.c
-    vendor/rnnoise/src/kiss_fft.c vendor/rnnoise/src/celt_lpc.c)
+    vendor/rnnoise/src/denoise.c
+    vendor/rnnoise/src/rnn.c
+    vendor/rnnoise/src/rnnoise_pitch.c
+    vendor/rnnoise/src/rnnoise_kiss_fft.c
+    vendor/rnnoise/src/rnnoise_celt_lpc.c
+    vendor/rnnoise/src/nnet.c
+    vendor/rnnoise/src/nnet_default.c
+    vendor/rnnoise/src/parse_lpcnet_weights.c
+    vendor/rnnoise/src/rnnoise_data.c
+    vendor/rnnoise/src/rnnoise_tables.c
+)
 set_target_properties(rnnoise PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)
 target_include_directories(rnnoise PUBLIC vendor/rnnoise/include PRIVATE vendor/rnnoise/src)
 target_compile_options(rnnoise PRIVATE -O3)

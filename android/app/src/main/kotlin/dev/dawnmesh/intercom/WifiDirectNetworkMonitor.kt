@@ -5,6 +5,7 @@ import org.webrtc.NetworkChangeDetector
 import org.webrtc.NetworkChangeDetector.NetworkInformation
 import org.webrtc.NetworkChangeDetector.IPAddress
 import org.webrtc.NetworkChangeDetector.ConnectionType
+import org.webrtc.NetworkChangeDetector.NetworkSlice
 import org.webrtc.NetworkMonitor
 import org.webrtc.NetworkMonitorAutoDetect
 import java.net.NetworkInterface
@@ -39,7 +40,7 @@ object WifiDirectNetworkMonitor {
             val addresses = name?.let { NetworkInterface.getByName(it)?.inetAddresses?.toList() }
             if (name.isNullOrBlank() || addresses.isNullOrEmpty()) null else NetworkInformation(
                 name, ConnectionType.CONNECTION_WIFI, ConnectionType.CONNECTION_NONE, 0L,
-                addresses.map { IPAddress(it.address) }.toTypedArray(),
+                addresses.map { IPAddress(it.address) }.toTypedArray(), NetworkSlice.NO_SLICE,
             )
         } catch (error: Exception) {
             Log.w("DawnWifiP2p", "读取直连网卡失败", error)
