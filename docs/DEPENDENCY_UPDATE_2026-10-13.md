@@ -31,7 +31,7 @@ RNNoise 0.2 使用发行源码中的内置模型，不运行时下载权重。
 
 Android：Temurin JDK 27、Gradle 9.8.1、AGP 9.4.1、Kotlin 2.4.21、
 compileSdk 37.2、targetSdk 37、Build Tools 37.0.0、NDK 30.0.16248370、
-Android SDK CMake 4.1.2。Java/Kotlin 字节码仍为 17，最低 Android API 26。
+Android SDK CMake 4.1.2、Command-line Tools 23.0、Platform Tools 37.0.1。Java/Kotlin 字节码仍为 17，最低 Android API 26。
 主分支/PR 新增 unsigned debug APK 检查；签名发布仍由版本标签触发。
 
 iOS：Opus 1.6.1、CocoaPods 1.17.0、macOS 26 GA runner，Xcode 选择镜像内
@@ -54,3 +54,11 @@ iOS：Opus 1.6.1、CocoaPods 1.17.0、macOS 26 GA runner，Xcode 选择镜像内
 源码归档 SHA-256：
 - rnnoise_src.tar.gz: `90fce4b00b9ff24c08dbfe31b82ffd43bae383d85c5535676d28b0a2b11c0d37`
 - opus_src.tar.gz: `6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1`
+
+## 本地验证结果
+
+Flutter analyze 无问题；295 项 Flutter 测试通过（1 项需要真实融合服务的集成测试跳过）；
+35 项 Kotlin/JVM 测试和 lint 通过；JDK 27 + NDK 30 已生成三 ABI debug APK。
+64 位原生库的 ELF PT_LOAD 对齐均至少 16 KB。原生 RNNoise 地址/未定义行为
+消毒检查通过。Android Concentus ↔ iOS Opus 1.6.1 的双向 raw Opus 包测试通过。
+真机三端语音、后台行为与新版模型听感仍需设备验收。
