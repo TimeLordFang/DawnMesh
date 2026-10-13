@@ -218,8 +218,8 @@ class AppStrings {
       : '这次没查到更新，稍后再试一次';
   String get changelogTitle => isEn ? 'Recent changes' : '最近的变化';
   String get changelogBody => isEn
-      ? '1.1.0\nWi-Fi and fusion rooms now support up to 16 members, with encrypted fragmentation for long rosters and fewer redundant fusion paths. Includes voice quality presets, noise reduction, stable device identities, offline fusion communication and 30-minute recovery. Update all clients and Server to 0.3.0. Actual Wi-Fi Direct group capacity depends on the phones; Bluetooth remains limited to 6 members.'
-      : '1.1.0\nWi-Fi 房和融合房扩至 16 人，长名单通过加密分片完整传输，融合房减少重复转发路径。包含音质档位、降噪、稳定设备身份、离线融合通话及 30 分钟重连。所有成员需更新客户端，服务端升级至 0.3.0。Wi-Fi 直连实际群组容量取决于手机，蓝牙房保持 6 人。';
+      ? '1.1.1\nUpdated stable audio and networking dependencies and the Android build toolchain. Retains Android, iOS and Web protocol compatibility.\n\n1.1.0\nWi-Fi and fusion rooms now support up to 16 members, with encrypted fragmentation for long rosters and fewer redundant fusion paths. Includes voice quality presets, noise reduction, stable device identities, offline fusion communication and 30-minute recovery. Update all clients and Server to 0.3.0. Actual Wi-Fi Direct group capacity depends on the phones; Bluetooth remains limited to 6 members.'
+      : '1.1.1\n升级音频、网络依赖及 Android 构建工具，保持 Android、iOS 和网页的协议兼容。\n\n1.1.0\nWi-Fi 房和融合房扩至 16 人，长名单通过加密分片完整传输，融合房减少重复转发路径。包含音质档位、降噪、稳定设备身份、离线融合通话及 30 分钟重连。所有成员需更新客户端，服务端升级至 0.3.0。Wi-Fi 直连实际群组容量取决于手机，蓝牙房保持 6 人。';
   String get licenseTitle => isEn ? 'Open source license' : '开源许可';
   String get licenseBody => isEn
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
