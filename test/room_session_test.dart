@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/audio/audio_io.dart';
-import 'package:dawn_mesh/core/ffi/native_core_ffi.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_delete.dart';
@@ -393,33 +392,6 @@ void main() {
         ).encode(),
       );
       expect(decoded!.payload.length, Frame.maxPayloadSize);
-    });
-  });
-
-  group('响度计算', () {
-    test('静音返回 0', () {
-      expect(NativeCoreFfi.calculateRms(Int16List(320)), 0.0);
-    });
-
-    test('满量程方波接近 1.0', () {
-      final samples = Int16List(320);
-      for (int i = 0; i < samples.length; i++) {
-        samples[i] = i.isEven ? 32767 : -32767;
-      }
-      expect(NativeCoreFfi.calculateRms(samples), closeTo(1.0, 0.01));
-    });
-
-    test('轻声不会被顶到满格', () {
-      // 回归测试：原实现漏了开方且只除了一次 32767，
-      // 幅度 256（约 -42 dBFS）就会 clamp 到 1.0。
-      final samples = Int16List(320);
-      for (int i = 0; i < samples.length; i++) {
-        samples[i] = i.isEven ? 256 : -256;
-      }
-
-      final rms = NativeCoreFfi.calculateRms(samples);
-      expect(rms, closeTo(256 / 32768.0, 0.001));
-      expect(rms, lessThan(0.05));
     });
   });
 

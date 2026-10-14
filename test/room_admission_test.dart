@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
@@ -113,11 +114,12 @@ void main() {
     final hostFrames = <Frame>[];
     final guestFrames = <Frame>[];
     final guestCodecs = <SecureFrameCodec>[];
+    late SecureFrameCodec hostCodec;
     final host = RoomAdmission(
       passwordScalar: BigInt.from(123456),
       token: Uint8List(16),
       send: hostFrames.add,
-      onReady: (_) async {},
+      onReady: (codec) async => hostCodec = codec,
     );
     final guest = RoomAdmission(
       passwordScalar: BigInt.from(123456),
@@ -138,8 +140,81 @@ void main() {
     }
 
     await authenticate();
+    final captured = await hostCodec.seal(
+      Frame(
+        type: FrameType.audio,
+        senderId: 1,
+        seq: 1,
+        payload: Uint8List.fromList([42]),
+      ),
+    );
+    await guestCodecs.last.open(captured);
+    final outgoing = await guestCodecs.last.seal(
+      Frame(
+        type: FrameType.audio,
+        senderId: 2,
+        seq: 1,
+        payload: Uint8List.fromList([7]),
+      ),
+    );
+    await hostCodec.open(outgoing);
+    // An interrupted fresh handshake must not discard the traffic session.
+    guest.startClient();
+    guestFrames.clear();
     await authenticate();
     expect(guestCodecs, hasLength(2));
-    expect(identical(guestCodecs.first, guestCodecs.last), isFalse);
+    expect(identical(guestCodecs.first, guestCodecs.last), isTrue);
+    await expectLater(guestCodecs.last.open(captured), throwsStateError);
+    final fresh = await hostCodec.seal(
+      Frame(
+        type: FrameType.audio,
+        senderId: 1,
+        seq: 2,
+        payload: Uint8List.fromList([43]),
+      ),
+    );
+    expect((await guestCodecs.last.open(fresh)).payload, [43]);
+    final nextOutgoing = await guestCodecs.last.seal(
+      Frame(
+        type: FrameType.audio,
+        senderId: 2,
+        seq: 2,
+        payload: Uint8List.fromList([8]),
+      ),
+    );
+    expect((await hostCodec.open(nextOutgoing)).payload, [8]);
+    expect(nextOutgoing.payload.sublist(0, 8), outgoing.payload.sublist(0, 8));
+    expect(ByteData.sublistView(nextOutgoing.payload).getUint32(8), 1);
+
+    // A different host key must establish a new replay namespace.
+    final oldCodec = guestCodecs.last;
+    final replacementHost = RoomAdmission(
+      passwordScalar: BigInt.from(123456),
+      token: Uint8List(16),
+      send: hostFrames.add,
+      onReady: (codec) async => hostCodec = codec,
+    );
+    addTearDown(replacementHost.close);
+    await replacementHost.startHost();
+    guest.startClient();
+    await replacementHost.handle(guestFrames.removeAt(0));
+    await guest.handle(hostFrames.removeAt(0));
+    await replacementHost.handle(guestFrames.removeAt(0));
+    await guest.handle(hostFrames.removeAt(0));
+    expect(identical(guestCodecs.last, oldCodec), isFalse);
+    await expectLater(guestCodecs.last.open(captured), throwsA(anything));
+    expect(
+      (await guestCodecs.last.open(
+        await hostCodec.seal(
+          Frame(
+            type: FrameType.audio,
+            senderId: 1,
+            seq: 1,
+            payload: Uint8List.fromList([44]),
+          ),
+        ),
+      )).payload,
+      [44],
+    );
   });
 }

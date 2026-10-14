@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">曙光之声</string>
+    <string name="call_microphone_permission">请允许麦克风权限后开始通话。</string>
+    <string name="call_service_failed">无法启动后台通话，请保持应用在前台并检查麦克风权限。</string>
+    <string name="call_service_cancelled">通话启动已取消。</string>
+    <string name="call_muted">已静音 · 仍可收听</string>
+    <string name="call_automatic">自动通话 · 有声音时发送</string>
+    <string name="call_ptt">按住对讲 · 点此打开锁屏对讲面板</string>
+    <string name="call_title">%1$s · 房间通话</string>
+    <string name="call_panel">通话面板</string>
+    <string name="call_channel">房间通话与锁屏控制</string>
+    <string name="call_channel_description">通话期间持续收发，点通知打开按住对讲面板</string>
 </resources>

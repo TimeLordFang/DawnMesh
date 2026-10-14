@@ -5,9 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(dawn_mesh_native SHARED
-    src/audio_dsp.cpp
-    src/ring_buffer.cpp
-    src/protocol_frame.cpp
     src/voice_denoiser.cpp
     src/tonal_suppressor.cpp
 )

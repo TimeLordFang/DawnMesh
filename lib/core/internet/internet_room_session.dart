@@ -90,6 +90,7 @@ class InternetRoomSession extends ChangeNotifier {
     required InternetRoomSummary summary,
     this.isHost = false,
     Future<void> Function(bool enabled)? microphoneForTesting,
+    IntercomAudioTrack? ownedMicrophoneForTesting,
     Future<void> Function(String kind, String name)? presenceForTesting,
     VoidCallback? mediaReadyForTesting,
     Future<void> Function()? audioRecoveryForTesting,
@@ -105,6 +106,7 @@ class InternetRoomSession extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _microphoneForTesting = microphoneForTesting {
     _presenceForTesting = presenceForTesting;
+    _ownedMicrophone = ownedMicrophoneForTesting;
     _mediaReadyForTesting = mediaReadyForTesting;
     _audioRecoveryForTesting = audioRecoveryForTesting;
     _hybridActiveForTesting = hybridActiveForTesting;
@@ -368,6 +370,8 @@ class InternetRoomSession extends ChangeNotifier {
   bool _noiseReductionAttached = false;
   static const _audioChannel = MethodChannel('dev.dawnmesh.intercom/audio');
   Future<void>? _microphoneQueue;
+  bool _audioFocusAvailable = true;
+  bool _foregroundServiceFailed = false;
   bool _audioRecoveryPending = false;
   Future<void> Function()? _audioRecoveryForTesting;
   Future<void> recoverAudioRoute() async {
@@ -550,6 +554,8 @@ class InternetRoomSession extends ChangeNotifier {
       Spake2Keys.hkdf(_roomKey, 'DawnMesh internet chat v1'),
     );
     await _connectEvents(grant.eventsUrl);
+    await _backgroundControls.bind(_handleBackgroundCommand);
+    await _syncBackgroundControls();
     await _connectLiveKit(grant);
     await _refreshFeatures();
     _featuresTimer = Timer.periodic(
@@ -559,16 +565,13 @@ class InternetRoomSession extends ChangeNotifier {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
       (results) => unawaited(_handleConnectivityChanged(results)),
     );
-    await _backgroundControls.bind(_handleBackgroundCommand);
-    await _syncBackgroundControls();
   }
 
   SessionCipher? _chatCipher;
 
   Future<void> _connectLiveKit(InternetConnectionGrant grant) async {
-    // DawnMesh is an intercom rather than an exclusive phone call. Keeping
-    // LiveKit's communication route while declining exclusive audio focus lets
-    // turn-by-turn navigation remain audible and mix/duck according to Android.
+    // The foreground service owns Android audio focus. LiveKit owns the
+    // communication route, but must not issue a competing focus request.
     await AudioManager.instance.setAudioSessionOptions(
       const AudioSessionOptions.communication(
         android: AndroidAudioSessionConfiguration(
@@ -1431,6 +1434,8 @@ class InternetRoomSession extends ChangeNotifier {
   }
 
   bool get _shouldSendVoice =>
+      !_foregroundServiceFailed &&
+      _audioFocusAvailable &&
       !_closed &&
       !_roomEnded &&
       !_leaving &&
@@ -1495,6 +1500,11 @@ class InternetRoomSession extends ChangeNotifier {
           await track.unmute(stopOnMute: false);
         } else {
           await track.mute(stopOnMute: false);
+          if (!_audioFocusAvailable || _foregroundServiceFailed) {
+            // Keep the publication identity, but release hardware capture.
+            // Route recovery replaces the stopped media track on focus gain.
+            await track.stop();
+          }
         }
       }
     }
@@ -1512,6 +1522,8 @@ class InternetRoomSession extends ChangeNotifier {
     final participant = room?.localParticipant;
     final track = _ownedMicrophone;
     if (_closed ||
+        !_audioFocusAvailable ||
+        _foregroundServiceFailed ||
         _roomEnded ||
         _leaving ||
         _publishingMicrophone != null ||
@@ -1638,6 +1650,24 @@ class InternetRoomSession extends ChangeNotifier {
 
   Future<void> _handleBackgroundCommand(String method, dynamic value) async {
     switch (method) {
+      case 'audioFocus':
+        if (_closed || _foregroundServiceFailed) return;
+        _audioFocusAvailable = value == true;
+        if (!_audioFocusAvailable) {
+          _pttPressed = false;
+          _audioRecoveryPending = true;
+        }
+        await _syncMicrophone();
+        notifyListeners();
+      case 'serviceFailed':
+        if (_closed) return;
+        _foregroundServiceFailed = true;
+        _audioFocusAvailable = false;
+        _muted = true;
+        _pttPressed = false;
+        _ownedMicrophone?.blockTransmission();
+        await _syncMicrophone();
+        notifyListeners();
       case 'automatic':
         await setVoiceMode(
           value == true ? VoiceMode.automatic : VoiceMode.pushToTalk,

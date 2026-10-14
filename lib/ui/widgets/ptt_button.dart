@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -26,13 +28,14 @@ class PttButton extends StatefulWidget {
 }
 
 class _PttButtonState extends State<PttButton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _animController;
   late Animation<double> _scaleAnim;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 140),
@@ -56,8 +59,27 @@ class _PttButtonState extends State<PttButton>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _animController.dispose();
     super.dispose();
+  }
+
+  @override
+  void deactivate() {
+    // Release after the current build to avoid mutating an ancestor during
+    // teardown. Capture the callback without accessing a disposed State.
+    if (widget.isPressed) {
+      final release = widget.onStateChanged;
+      scheduleMicrotask(() => release(false));
+    }
+    super.deactivate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && widget.isPressed) {
+      widget.onStateChanged(false);
+    }
   }
 
   void _onPressDown(TapDownDetails _) {
@@ -84,64 +106,73 @@ class _PttButtonState extends State<PttButton>
         ? const Color(0xFF5D85C2)
         : const Color(0xFFBA5F68);
 
-    return GestureDetector(
-      onTapDown: _onPressDown,
-      onTapUp: _onPressUp,
-      onTapCancel: _onPressCancel,
-      child: AnimatedBuilder(
-        animation: _scaleAnim,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnim.value,
-            child: Container(
-              width: widget.size,
-              height: widget.size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.isPressed ? pressedColor : activeColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: (widget.isPressed ? pressedColor : activeColor)
-                        .withValues(alpha: 0.38),
-                    blurRadius: widget.isPressed ? 32 : 18,
-                    spreadRadius: widget.isPressed ? 6 : 2,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.isPressed ? Icons.mic : Icons.mic_none,
-                      size: widget.size * 0.27,
-                      color: Colors.white,
-                    ),
-                    SizedBox(height: widget.size < 120 ? 6 : 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          widget.isPressed
-                              ? s.pttHoldingToTalk
-                              : s.pttHoldToTalk,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: (widget.size * 0.09).clamp(14.0, 19.0),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: widget.size < 120 ? .5 : 1.2,
-                          ),
-                        ),
-                      ),
+    return Semantics(
+      button: true,
+      toggled: widget.isPressed,
+      label: widget.isPressed ? s.pttStopSpeaking : s.pttStartSpeaking,
+      hint: s.pttAccessibleHint,
+      onTap: () => widget.onStateChanged(!widget.isPressed),
+      excludeSemantics: true,
+      child: GestureDetector(
+        excludeFromSemantics: true,
+        onTapDown: _onPressDown,
+        onTapUp: _onPressUp,
+        onTapCancel: _onPressCancel,
+        child: AnimatedBuilder(
+          animation: _scaleAnim,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnim.value,
+              child: Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isPressed ? pressedColor : activeColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (widget.isPressed ? pressedColor : activeColor)
+                          .withValues(alpha: 0.38),
+                      blurRadius: widget.isPressed ? 32 : 18,
+                      spreadRadius: widget.isPressed ? 6 : 2,
                     ),
                   ],
                 ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.isPressed ? Icons.mic : Icons.mic_none,
+                        size: widget.size * 0.27,
+                        color: Colors.white,
+                      ),
+                      SizedBox(height: widget.size < 120 ? 6 : 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            widget.isPressed
+                                ? s.pttHoldingToTalk
+                                : s.pttHoldToTalk,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: (widget.size * 0.09).clamp(14.0, 19.0),
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: widget.size < 120 ? .5 : 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

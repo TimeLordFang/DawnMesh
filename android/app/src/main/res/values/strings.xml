@@ -2,4 +2,14 @@
 <!-- 应用名默认走英文；中文由 values-zh 覆盖。桌面图标名随系统语言切换。 -->
 <resources>
     <string name="app_name">DawnMesh</string>
+    <string name="call_microphone_permission">Microphone permission is required to start a call.</string>
+    <string name="call_service_failed">Unable to start background calling. Keep the app in the foreground and check microphone permission.</string>
+    <string name="call_service_cancelled">Call startup cancelled.</string>
+    <string name="call_muted">Muted · Listening</string>
+    <string name="call_automatic">Automatic · Send when speaking</string>
+    <string name="call_ptt">Push to talk · Open lock-screen controls</string>
+    <string name="call_title">%1$s · Room call</string>
+    <string name="call_panel">Call controls</string>
+    <string name="call_channel">Room calls and lock-screen controls</string>
+    <string name="call_channel_description">Send and receive during calls. Tap to open call controls.</string>
 </resources>

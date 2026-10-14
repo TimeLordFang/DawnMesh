@@ -7,6 +7,7 @@ import 'package:dawn_mesh/core/internet/internet_models.dart';
 import 'package:dawn_mesh/core/internet/internet_room_api.dart';
 import 'package:dawn_mesh/core/internet/internet_room_session.dart';
 import 'package:dawn_mesh/core/platform/platform_audio_channel.dart';
+import 'package:dawn_mesh/core/platform/background_call_controls.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
 
 class DelayedAudio extends MockAudioIo {
@@ -34,6 +35,43 @@ class DelayedAudio extends MockAudioIo {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'service failures are delivered once and updates do not retry in a loop',
+    () async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var calls = 0;
+      messenger.setMockMethodCallHandler(BackgroundCallControls.channel, (
+        call,
+      ) async {
+        if ((call.arguments as Map)['active'] == true) {
+          calls++;
+          throw PlatformException(code: 'FOREGROUND_FAILED', message: 'denied');
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(
+          BackgroundCallControls.channel,
+          null,
+        ),
+      );
+      final controls = BackgroundCallControls(Object());
+      final commands = <String>[];
+      await controls.bind((method, value) async => commands.add(method));
+      for (var i = 0; i < 3; i++) {
+        await controls.update(
+          bluetooth: false,
+          automatic: false,
+          pressed: false,
+          muted: false,
+        );
+      }
+      expect(calls, 1);
+      expect(commands, ['serviceFailed']);
+      await controls.close();
+    },
+  );
   test('leaving during audio startup does not reopen the microphone', () async {
     final audio = DelayedAudio();
     final room = RoomSession(audioIo: audio, selfNickname: 'Host');

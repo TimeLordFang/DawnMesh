@@ -390,6 +390,15 @@ class RoomSession {
       _backgroundControls = BackgroundCallControls(this);
       await _backgroundControls!.bind((command, value) async {
         if (_closed || !_audioStarted) return;
+        if (command == 'audioFocus' && value != true) setPtt(false);
+        if (command == 'serviceFailed') {
+          _audioStarted = false;
+          setPtt(false);
+          audioIo.setMuted(true);
+          await audioIo.stopCapture();
+          _notifyControls();
+          return;
+        }
         if (command == 'ptt') setPtt(value == true);
         if (command == 'automatic') {
           setVoiceMode(

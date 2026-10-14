@@ -159,12 +159,28 @@ class PlatformAudioPlugin(
     } else null
 
     init {
+        IntercomForegroundService.focusObserver = { _ ->
+            if (!internetActive && captureRequested) {
+                Thread({
+                    synchronized(this) {
+                        if (!captureRequested || internetActive) return@synchronized
+                        if (IntercomForegroundService.hasAudioFocus) {
+                            if (startPlayback() && !startCapture()) Log.e(TAG, "Audio focus recovery failed")
+                        } else {
+                            stopCapture(false)
+                            stopPlayback()
+                        }
+                    }
+                }, "dawn-audio-focus").start()
+            }
+        }
         BluetoothAudioCoexistence.setParameters(tuningParameters)
         methodChannel.setMethodCallHandler(this)
         eventChannel.setStreamHandler(this)
     }
 
     fun dispose() {
+        IntercomForegroundService.focusObserver = null
         captureRequested = false
         routeMonitor.stop()
         voiceNoiseReduction.close()
@@ -221,35 +237,29 @@ class PlatformAudioPlugin(
                     )
                     return
                 }
-                if (!IntercomForegroundService.start(context)) {
-                    result.error("FOREGROUND_FAILED", "无法启动前台通话，请保持应用在前台并允许麦克风和通知权限", null)
-                    return
-                }
                 captureRequested = true
-                routeMonitor.start()
-                currentBitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
-
-                // AudioRecord / AudioTrack 的构造、AEC/NS/AGC 挂载、前台服务启动
-                // 加起来动辄上百毫秒。MethodChannel 的处理跑在平台线程（= 主线程），
-                // 放在这里做会直接卡住 UI，进房动画首当其冲。
-                // 挪到后台线程，结果再 post 回主线程回复。
-                Thread({
-                    val playbackOk = startPlayback()
-                    val captureOk = playbackOk && startCapture()
-                    // 收尾也在后台做：stopPlayback 会 join 播放线程。
-                    if (playbackOk && !captureOk) stopPlayback()
-                    if (!captureOk) IntercomForegroundService.stop(context)
-
-                    mainHandler.post {
-                        when {
-                            !playbackOk ->
-                                result.error("PLAYBACK_FAILED", "扬声器初始化失败", null)
-                            !captureOk ->
-                                result.error("CAPTURE_FAILED", "麦克风初始化失败，可能被其他应用占用", null)
-                            else -> result.success(true)
-                        }
+                IntercomForegroundService.start(context) { error ->
+                    if (error != null || !captureRequested) {
+                        captureRequested = false
+                        result.error("FOREGROUND_FAILED", error ?: context.getString(R.string.call_service_cancelled), null)
+                    } else {
+                        routeMonitor.start()
+                        currentBitrate = call.argument<Int>("bitrate") ?: OpusCodec.DEFAULT_BITRATE
+                        Thread({
+                            val playbackOk = captureRequested && startPlayback()
+                            val captureOk = playbackOk && startCapture()
+                            if (playbackOk && !captureOk) stopPlayback()
+                            if (!captureOk) mainHandler.post { IntercomForegroundService.stop(context) }
+                            mainHandler.post {
+                                when {
+                                    !playbackOk -> result.error("PLAYBACK_FAILED", "扬声器初始化失败", null)
+                                    !captureOk -> result.error("CAPTURE_FAILED", "麦克风初始化失败，可能被其他应用占用", null)
+                                    else -> result.success(true)
+                                }
+                            }
+                        }, "dawn-audio-start").start()
                     }
-                }, "dawn-audio-start").start()
+                }
             }
 
             "stopCapture" -> {
@@ -373,7 +383,7 @@ class PlatformAudioPlugin(
 
     @SuppressLint("MissingPermission")
     @Synchronized private fun startCapture(): Boolean {
-        if (!captureRequested) return false
+        if (!captureRequested || !IntercomForegroundService.hasAudioFocus) return false
         if (capturing.get()) return true
         // 权限可能在 MethodChannel 检查后、后台线程真正创建 AudioRecord 前被撤销。
         if (!hasMicPermission()) {
@@ -591,7 +601,7 @@ class PlatformAudioPlugin(
         BluetoothAudioCoexistence.setActive(false)
 
         audioManager.mode = previousAudioMode
-        if (stopService) IntercomForegroundService.stop(context)
+        if (stopService) mainHandler.post { IntercomForegroundService.stop(context) }
         Log.i(TAG, "麦克风已关闭")
     }
 

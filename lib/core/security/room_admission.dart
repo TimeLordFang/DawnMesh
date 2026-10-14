@@ -20,6 +20,7 @@ class RoomAdmission {
   bool _closed = false;
   bool _ready = false;
   Uint8List? _trafficKey;
+  SecureFrameCodec? _trafficCodec;
   Spake2? _client;
   Spake2Keys? _clientKeys;
   final Map<String, _Pending> _pending = {};
@@ -40,7 +41,8 @@ class RoomAdmission {
     _trafficKey = Uint8List.fromList(
       List.generate(32, (_) => random.nextInt(256)),
     );
-    await onReady(SecureFrameCodec(await SessionCipher.fromKey(_trafficKey!)));
+    _trafficCodec = SecureFrameCodec(await SessionCipher.fromKey(_trafficKey!));
+    await onReady(_trafficCodec!);
   }
 
   void startClient() {
@@ -107,6 +109,9 @@ class RoomAdmission {
         if (pending == null || !Spake2Keys.equal(body, pending.keys.confirmA)) {
           return;
         }
+        // Successful authentication is not a password guess. Retain the
+        // lifetime budget for failed/abandoned attempts, including new tokens.
+        _totalAttempts--;
         final cipher = await _wrapCipher(pending.keys);
         final encrypted = await cipher.encrypt(
           _trafficKey!,
@@ -139,7 +144,15 @@ class RoomAdmission {
         if (_closed) return;
         _ready = true;
         _clientKeys = null;
-        await onReady(SecureFrameCodec(await SessionCipher.fromKey(key)));
+        // PAKE restores admission, not a new traffic-key epoch. Preserve both
+        // replay windows and our nonce counter when the host returns the same
+        // key. The session may temporarily clear its codec while reconnecting.
+        if (_trafficKey == null || !Spake2Keys.equal(_trafficKey!, key)) {
+          _trafficKey?.fillRange(0, _trafficKey!.length, 0);
+          _trafficKey = Uint8List.fromList(key);
+          _trafficCodec = SecureFrameCodec(await SessionCipher.fromKey(key));
+        }
+        if (!_closed) await onReady(_trafficCodec!);
       }
     }
   }
@@ -152,6 +165,7 @@ class RoomAdmission {
     _closed = true;
     _trafficKey?.fillRange(0, _trafficKey!.length, 0);
     _trafficKey = null;
+    _trafficCodec = null;
     _pending.clear();
     _client = null;
     _clientKeys = null;

@@ -15,6 +15,7 @@ internal object CallControlBridge {
     var automatic = false; private set
     var pressed = false; private set
     var muted = false; private set
+    private var updateGeneration = 0
     var observer: (() -> Unit)? = null
     var screenObserver: (() -> Unit)? = null
 
@@ -29,12 +30,23 @@ internal object CallControlBridge {
                 automatic = call.argument<Boolean>("automatic") == true
                 muted = call.argument<Boolean>("muted") == true
                 pressed = active && !automatic && !muted && call.argument<Boolean>("pressed") == true
-                CallControlBridge.context?.get()?.let {
-                    if (active) IntercomForegroundService.start(it)
-                    else IntercomForegroundService.stop(it)
+                val generation = ++updateGeneration
+                val appContext = CallControlBridge.context?.get()
+                if (active && appContext != null) {
+                    IntercomForegroundService.start(appContext) { error ->
+                        if (error != null) {
+                            if (generation == updateGeneration) {
+                                active = false; pressed = false; notifyState()
+                            }
+                            result.error("FOREGROUND_FAILED", error, null)
+                        } else {
+                            notifyState(); result.success(null)
+                        }
+                    }
+                } else {
+                    appContext?.let { IntercomForegroundService.stop(it) }
+                    notifyState(); result.success(null)
                 }
-                notifyState()
-                result.success(null)
             }
         }
     }

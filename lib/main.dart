@@ -6,7 +6,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/diagnostics/app_log.dart';
 import 'core/audio/noise_reduction.dart';
-import 'core/ffi/native_core_ffi.dart';
 import 'core/platform/native_debug_log_channel.dart';
 import 'core/preferences/debug_log_settings_store.dart';
 import 'ui/pages/session_stage.dart';
@@ -18,7 +17,6 @@ Future<void> main() async {
   AppLog.setEnabled(debugLoggingEnabled);
   NativeDebugLogChannel.start();
   _installGlobalErrorLogging();
-  NativeCoreFfi.initialize();
   await NoiseReductionSettings.load();
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

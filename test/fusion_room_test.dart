@@ -332,7 +332,7 @@ void main() {
         id: 'test',
         name: 'test',
         baseUrl: integrationURL!,
-        accessToken: 'fusion-test-access',
+        accessToken: 'fusion-test-access-for-local-regression',
       );
       final room = await FusionIdentity.create('跨端融合验证');
       final invite = RoomInvite.parse('2134');

@@ -298,6 +298,10 @@ class AppStrings {
       isEn ? 'Automatic voice is listening' : '自动通话正在聆听';
   String get pttHoldingToTalk => speaking;
   String get pttHoldToTalk => isEn ? 'Hold to talk' : '按住说话';
+  String get pttStartSpeaking => isEn ? 'Start speaking' : '开始说话';
+  String get pttStopSpeaking => isEn ? 'Stop speaking' : '停止说话';
+  String get pttAccessibleHint =>
+      isEn ? 'Activate to start or stop speaking' : '激活按钮开始或停止说话';
   String get leave => isEn ? 'Leave' : '离开';
   String get microphone => isEn ? 'Microphone' : '麦克风';
 
