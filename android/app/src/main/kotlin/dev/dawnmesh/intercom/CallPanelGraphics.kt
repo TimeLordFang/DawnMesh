@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.view.View
+import androidx.core.graphics.withTranslation
 import android.view.animation.AccelerateDecelerateInterpolator
 import kotlin.math.min
 
@@ -78,40 +79,39 @@ internal class CallPanelIcon(private val kind: String, private var tint: Int) : 
         strokeJoin = Paint.Join.ROUND
     }
     override fun draw(canvas: Canvas) {
-        canvas.save()
-        canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
-        canvas.scale(bounds.width() / 24f, bounds.height() / 24f)
-        paint.color = tint
-        when (kind) {
-            "close" -> {
-                canvas.drawLine(7f, 10f, 12f, 15f, paint)
-                canvas.drawLine(12f, 15f, 17f, 10f, paint)
-            }
-            "lock" -> {
-                canvas.drawRoundRect(6f, 10f, 18f, 21f, 3f, 3f, paint)
-                canvas.drawArc(8f, 2f, 16f, 15f, 180f, 180f, false, paint)
-                canvas.drawLine(12f, 14f, 12f, 17f, paint)
-            }
-            "wave" -> {
-                for (i in 0..4) {
-                    val x = 4f + i * 4f
-                    val h = when (i) { 2 -> 16f; 1, 3 -> 10f; else -> 4f }
-                    canvas.drawLine(x, 12 - h / 2, x, 12 + h / 2, paint)
+        canvas.withTranslation(bounds.left.toFloat(), bounds.top.toFloat()) {
+            canvas.scale(bounds.width() / 24f, bounds.height() / 24f)
+            paint.color = tint
+            when (kind) {
+                "close" -> {
+                    canvas.drawLine(7f, 10f, 12f, 15f, paint)
+                    canvas.drawLine(12f, 15f, 17f, 10f, paint)
                 }
-            }
-            else -> {
-                canvas.drawRoundRect(9f, 2f, 15f, 14f, 3f, 3f, paint)
-                canvas.drawArc(5f, 5f, 19f, 18f, 0f, 180f, false, paint)
-                canvas.drawLine(5f, 10f, 5f, 11.5f, paint)
-                canvas.drawLine(19f, 10f, 19f, 11.5f, paint)
-                canvas.drawLine(12f, 18f, 12f, 22f, paint)
-                canvas.drawLine(8f, 22f, 16f, 22f, paint)
-                if (kind == "mic_off") {
-                    canvas.drawLine(3f, 3f, 21f, 21f, paint)
+                "lock" -> {
+                    canvas.drawRoundRect(6f, 10f, 18f, 21f, 3f, 3f, paint)
+                    canvas.drawArc(8f, 2f, 16f, 15f, 180f, 180f, false, paint)
+                    canvas.drawLine(12f, 14f, 12f, 17f, paint)
+                }
+                "wave" -> {
+                    for (i in 0..4) {
+                        val x = 4f + i * 4f
+                        val h = when (i) { 2 -> 16f; 1, 3 -> 10f; else -> 4f }
+                        canvas.drawLine(x, 12 - h / 2, x, 12 + h / 2, paint)
+                    }
+                }
+                else -> {
+                    canvas.drawRoundRect(9f, 2f, 15f, 14f, 3f, 3f, paint)
+                    canvas.drawArc(5f, 5f, 19f, 18f, 0f, 180f, false, paint)
+                    canvas.drawLine(5f, 10f, 5f, 11.5f, paint)
+                    canvas.drawLine(19f, 10f, 19f, 11.5f, paint)
+                    canvas.drawLine(12f, 18f, 12f, 22f, paint)
+                    canvas.drawLine(8f, 22f, 16f, 22f, paint)
+                    if (kind == "mic_off") {
+                        canvas.drawLine(3f, 3f, 21f, 21f, paint)
+                    }
                 }
             }
         }
-        canvas.restore()
     }
     override fun setAlpha(alpha: Int) { paint.alpha = alpha }
     override fun setColorFilter(filter: ColorFilter?) { paint.colorFilter = filter }
@@ -124,6 +124,8 @@ internal class CallPanelBackdrop(
     context: Context,
     private val palette: CallPanelPalette,
 ) : View(context) {
+    constructor(context: Context) : this(context, CallPanelColors.resolve(context))
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var base: Shader? = null
     private var wash: Shader? = null
@@ -149,7 +151,12 @@ internal class CallTalkPad(
     context: Context,
     private val palette: CallPanelPalette,
 ) : View(context) {
+    constructor(context: Context) : this(context, CallPanelColors.resolve(context))
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // ACTION_UP and accessibility actions share the registered click handler.
+    override fun performClick(): Boolean = super.performClick()
+
     private var automatic = false
     private var muted = false
     private var pressed = false

@@ -1,6 +1,7 @@
 package dev.dawnmesh.intercom.audio
 
 import android.content.Context
+import androidx.core.content.edit
 import com.cloudwebrtc.webrtc.FlutterWebRTCPlugin
 import com.cloudwebrtc.webrtc.audio.AudioProcessingAdapter
 import java.nio.ByteBuffer
@@ -15,7 +16,7 @@ class VoiceNoiseReduction(context: Context) : AutoCloseable {
 
     fun setLevel(value: Int) {
         require(value in 0..2)
-        preferences.edit().putInt("noise_reduction_level", value).apply()
+        preferences.edit { putInt("noise_reduction_level", value) }
         level = value
     }
 

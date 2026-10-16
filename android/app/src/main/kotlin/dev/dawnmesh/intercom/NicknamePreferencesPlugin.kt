@@ -1,6 +1,7 @@
 package dev.dawnmesh.intercom
 
 import android.content.Context
+import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import io.flutter.plugin.common.BinaryMessenger
@@ -68,6 +69,8 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                         result.error("BAD_AUDIO_PROFILE", "音频调优档位无效", null)
                     } else worker.execute {
                         val parsed = AudioTuningProfile.fromWireName(profile)
+                        // KTX edit(commit=true) returns Unit; Dart needs the actual commit result.
+                        @SuppressLint("UseKtx")
                         val saved = AudioTuningParameters.resetToProfile(preferences.edit(), parsed).commit()
                         main.post {
                             if (saved) result.success(null)
@@ -82,6 +85,8 @@ internal class NicknamePreferencesPlugin(context: Context, messenger: BinaryMess
                     } else worker.execute {
                         val current = AudioTuningParameters.load(preferences)
                         val parameters = AudioTuningParameters.fromMap(raw, current)
+                        // KTX edit(commit=true) returns Unit; Dart needs the actual commit result.
+                        @SuppressLint("UseKtx")
                         val saved = parameters.persist(preferences.edit()).commit()
                         main.post {
                             if (saved) result.success(parameters.toMap())

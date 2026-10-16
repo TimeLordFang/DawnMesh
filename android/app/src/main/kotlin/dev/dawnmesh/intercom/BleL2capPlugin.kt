@@ -1,7 +1,6 @@
 package dev.dawnmesh.intercom
 
 import android.Manifest
-import android.annotation.TargetApi
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
@@ -498,8 +497,8 @@ class BleL2capPlugin(
         }, delayMillis)
     }
 
-    @TargetApi(Build.VERSION_CODES.Q)
     private fun recoverHostRadio(generation: Int, attempt: Int) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         if (generation != hostRadioRecoveryGeneration || !isHost || !hostRadioRecoveryPending) return
         val a = adapter
         if (a == null || a.state != BluetoothAdapter.STATE_ON) {

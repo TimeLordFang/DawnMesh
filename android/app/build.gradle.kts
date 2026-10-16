@@ -105,7 +105,8 @@ flutter {
 }
 
 dependencies {
-    implementation(project(":flutter_webrtc"))
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation(dependencies.project(":flutter_webrtc"))
     // Keep the processor ABI aligned with flutter_webrtc 1.6.2+hotfix.4.
     implementation("io.github.webrtc-sdk:android:150.7871.01")
     // Opus 编解码。纯 JVM 实现，不需要额外的 .so。
@@ -114,7 +115,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-val verifyReleaseSigning by tasks.registering {
+val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     doLast {
         require(hasReleaseSigning) {
             "Release requires android/key.properties or DAWNMESH_* signing environment variables. Use --debug for testing."

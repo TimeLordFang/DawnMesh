@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 #include "kiss_fft.h"
 #include "common.h"
 #include "denoise.h"
@@ -244,23 +245,29 @@ RNNModel *rnnoise_model_from_buffer(const void *ptr, int len) {
 RNNModel *rnnoise_model_from_filename(const char *filename) {
   RNNModel *model;
   FILE *f = fopen(filename, "rb");
+  if (f == NULL) return NULL;
   model = rnnoise_model_from_file(f);
+  if (model == NULL) {
+    fclose(f);
+    return NULL;
+  }
   model->file = f;
   return model;
 }
 
 RNNModel *rnnoise_model_from_file(FILE *f) {
   RNNModel *model;
-  model = malloc(sizeof(*model));
-  model->file = NULL;
-
-  fseek(f, 0, SEEK_END);
-  model->blob_len = ftell(f);
-  fseek(f, 0, SEEK_SET);
-
-  model->const_blob = NULL;
-  model->blob = malloc(model->blob_len);
-  if (fread(model->blob, model->blob_len, 1, f) != 1)
+  long length;
+  if (f == NULL || fseek(f, 0, SEEK_END) != 0) return NULL;
+  length = ftell(f);
+  /* The weight parser accepts an int length; reject errors and oversized files
+     before narrowing or allocating. The caller retains ownership of f. */
+  if (length <= 0 || length > INT_MAX || fseek(f, 0, SEEK_SET) != 0) return NULL;
+  model = calloc(1, sizeof(*model));
+  if (model == NULL) return NULL;
+  model->blob_len = (int)length;
+  model->blob = malloc((size_t)model->blob_len);
+  if (model->blob == NULL || fread(model->blob, (size_t)model->blob_len, 1, f) != 1)
   {
     rnnoise_model_free(model);
     return NULL;
@@ -274,11 +281,11 @@ void rnnoise_model_free(RNNModel *model) {
   free(model);
 }
 
-int rnnoise_get_size() {
+int rnnoise_get_size(void) {
   return sizeof(DenoiseState);
 }
 
-int rnnoise_get_frame_size() {
+int rnnoise_get_frame_size(void) {
   return FRAME_SIZE;
 }
 

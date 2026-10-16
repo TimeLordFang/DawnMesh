@@ -146,17 +146,15 @@ class PlatformAudioPlugin(
     private var preferBuiltinMic: Boolean = false
     private var isDeviceCallbackRegistered = false
 
-    private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        object : AudioDeviceCallback() {
-            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
-                updateAudioRouting()
-            }
-
-            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
-                updateAudioRouting()
-            }
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+            updateAudioRouting()
         }
-    } else null
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+            updateAudioRouting()
+        }
+    }
 
     init {
         IntercomForegroundService.focusObserver = { _ ->
@@ -425,8 +423,8 @@ class PlatformAudioPlugin(
 
         previousAudioMode = audioManager.mode
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isDeviceCallbackRegistered) {
-            audioDeviceCallback?.let { audioManager.registerAudioDeviceCallback(it, mainHandler) }
+        if (!isDeviceCallbackRegistered) {
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
             isDeviceCallbackRegistered = true
         }
 
@@ -580,8 +578,8 @@ class PlatformAudioPlugin(
         try { audioRecord?.stop() } catch (_: IllegalStateException) {}
         if (audioRecord == null) return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isDeviceCallbackRegistered) {
-            audioDeviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
+        if (isDeviceCallbackRegistered) {
+            audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
             isDeviceCallbackRegistered = false
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -930,39 +928,37 @@ class PlatformAudioPlugin(
                 Log.i(TAG, "音频路由: 手机听筒 + 内置麦克风")
             }
         } else {
-            // API < 31 (Android 6.0 ~ 11)
+            // API 26–30 (Android 8–11)
             @Suppress("DEPRECATION")
             val record = audioRecord
             val track = audioTrack
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                val builtinMic = inputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
-                val externalMic = inputDevices.firstOrNull { dev ->
-                    dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    dev.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    dev.type == AudioDeviceInfo.TYPE_USB_HEADSET
-                }
-                val bluetoothInputAvailable = inputDevices.any {
+            val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+            val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val builtinMic = inputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+            val externalMic = inputDevices.firstOrNull { dev ->
+                dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                dev.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                dev.type == AudioDeviceInfo.TYPE_USB_HEADSET
+            }
+            val bluetoothInputAvailable = inputDevices.any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+            }
+            val bluetoothOutputAvailable = outputDevices.any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-                }
-                val bluetoothOutputAvailable = outputDevices.any {
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-                }
-                bluetoothAudioAvailable = bluetoothInputAvailable || bluetoothOutputAvailable
-                applyBluetoothCoexistenceTuning()
-                if (preferBuiltinMic || externalMic == null) {
-                    builtinMic?.let { record?.setPreferredDevice(it) }
-                } else {
-                    record?.setPreferredDevice(externalMic)
-                }
+            }
+            bluetoothAudioAvailable = bluetoothInputAvailable || bluetoothOutputAvailable
+            applyBluetoothCoexistenceTuning()
+            if (preferBuiltinMic || externalMic == null) {
+                builtinMic?.let { record?.setPreferredDevice(it) }
+            } else {
+                record?.setPreferredDevice(externalMic)
+            }
 
-                if (preferBuiltinMic) {
-                    val btOutput = outputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-                    btOutput?.let { track?.setPreferredDevice(it) }
-                }
+            if (preferBuiltinMic) {
+                val btOutput = outputDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+                btOutput?.let { track?.setPreferredDevice(it) }
             }
 
             @Suppress("DEPRECATION")

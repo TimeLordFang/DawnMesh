@@ -11,3 +11,8 @@ DawnMesh wraps the 48 kHz / 480-sample API with streaming resampling.
 Includes upstream ARM/scalar compilation fix
 https://github.com/xiph/rnnoise/commit/372f7b4b76cde4ca1ec4605353dd17898a99de38
 (which replaces absent Opus headers with RNNoise's own memory helpers).
+
+Local C compatibility/safety changes (2026-10-16): use explicit (void) prototypes;
+check file seek/tell, allocation and int-sized model length before conversion;
+close filename-owned files on load failure while preserving caller FILE ownership.
+The default model and denoising algorithm are unchanged.
