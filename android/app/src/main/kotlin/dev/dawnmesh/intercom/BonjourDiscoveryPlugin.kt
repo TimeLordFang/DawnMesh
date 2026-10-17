@@ -1,6 +1,6 @@
 package dev.dawnmesh.intercom
 
-import android.annotation.TargetApi
+import androidx.annotation.RequiresApi
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
@@ -118,7 +118,7 @@ class BonjourDiscoveryPlugin(context: Context, messenger: BinaryMessenger) :
         }
     }
 
-    @TargetApi(34)
+    @RequiresApi(34)
     private fun track(client: Client, info: NsdServiceInfo, key: String) {
         val callback = object : NsdManager.ServiceInfoCallback {
             override fun onServiceUpdated(serviceInfo: NsdServiceInfo) { publishRoom(client, serviceInfo, key) }
