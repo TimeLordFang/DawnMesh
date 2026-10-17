@@ -30,6 +30,7 @@ class MainActivity : FlutterActivity() {
     private var audioPlugin: PlatformAudioPlugin? = null
     private var blePlugin: BleL2capPlugin? = null
     private var wifiDirectPlugin: WifiDirectPlugin? = null
+    private var bonjourPlugin: BonjourDiscoveryPlugin? = null
     private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -108,6 +109,7 @@ class MainActivity : FlutterActivity() {
             applicationContext,
             flutterEngine.dartExecutor.binaryMessenger,
         )
+        bonjourPlugin = BonjourDiscoveryPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -149,6 +151,8 @@ class MainActivity : FlutterActivity() {
         blePlugin = null
         wifiDirectPlugin?.dispose()
         wifiDirectPlugin = null
+        bonjourPlugin?.dispose()
+        bonjourPlugin = null
         try {
             multicastLock?.let {
                 if (it.isHeld) it.release()
@@ -167,6 +171,7 @@ class MainActivity : FlutterActivity() {
      */
     private fun requestRuntimePermissions() {
         val wanted = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 37) wanted += Manifest.permission.ACCESS_LOCAL_NETWORK
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             wanted += Manifest.permission.BLUETOOTH_CONNECT
@@ -205,6 +210,11 @@ class MainActivity : FlutterActivity() {
         permissionsInFlight = false
         permissionResult?.success(grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED })
         permissionResult = null
+
+        if (Build.VERSION.SDK_INT >= 37 && permissions.indices.any {
+                permissions[it] == Manifest.permission.ACCESS_LOCAL_NETWORK &&
+                    grantResults.getOrNull(it) == PackageManager.PERMISSION_GRANTED
+            }) bonjourPlugin?.onLocalNetworkPermissionGranted()
 
         permissions.forEachIndexed { index, permission ->
             val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED

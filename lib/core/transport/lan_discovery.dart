@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import '../diagnostics/app_log.dart';
 
 const String _tag = '房间发现';
 
-/// 通过 UDP 广播发现到的房间。
+/// 通过局域网 DNS-SD / UDP 或苹果点对点链路发现的房间。
 class DiscoveredRoom {
   final String roomId;
   final String roomName;
@@ -14,6 +16,9 @@ class DiscoveredRoom {
   final InternetAddress hostAddress;
   final int port;
   final int memberCount;
+
+  /// Opaque native Bonjour endpoint; retains the Apple peer interface scope.
+  final String? applePeerService;
   final DateTime lastSeen;
 
   DiscoveredRoom({
@@ -24,6 +29,7 @@ class DiscoveredRoom {
     required this.port,
     required this.memberCount,
     required this.lastSeen,
+    this.applePeerService,
   });
 
   @override
@@ -31,18 +37,28 @@ class DiscoveredRoom {
       'DiscoveredRoom($roomName by $hostNickname at ${hostAddress.address}:$port, $memberCount members)';
 }
 
-/// 局域网/热点下的零配置房间发现（UDP 8990 广播）。
+/// 局域网/热点下的 DNS-SD + UDP 发现；iOS 同时保留苹果点对点端点。
 class LanRoomDiscovery {
   LanRoomDiscovery({
     this.port = discoveryPort,
     this.magic = magicHeader,
     this.includeOwnRoom = false,
     this._bindSocket,
+    this._nativeDiscoveryEnabled,
   });
   final Future<RawDatagramSocket> Function(bool reusePort)? _bindSocket;
+  final bool? _nativeDiscoveryEnabled;
+  bool get _usesBonjour =>
+      _nativeDiscoveryEnabled ?? (Platform.isIOS || Platform.isAndroid);
   final int port;
   final String magic;
   final bool includeOwnRoom;
+  static final _unicastTargets = <InternetAddress>{};
+  static void addUnicastTarget(InternetAddress address) {
+    if (address.type != InternetAddressType.IPv4 || address.isLoopback) return;
+    if (_unicastTargets.length < 16) _unicastTargets.add(address);
+  }
+
   static const int discoveryPort = 8990;
   static const String magicHeader = "DAWN_MESH_DISCOVERY_V1";
 
@@ -54,6 +70,15 @@ class LanRoomDiscovery {
   /// 会撑爆房间卡片的单行布局。
   static const int maxAdvertisedTextLength = 64;
 
+  static const _bonjour = MethodChannel('dev.dawnmesh.intercom/bonjour');
+  static final _bonjourEvents = const EventChannel(
+    'dev.dawnmesh.intercom/bonjour_events',
+  ).receiveBroadcastStream();
+  String _bonjourId = '';
+  StreamSubscription<dynamic>? _bonjourSubscription;
+  final _bonjourRooms = <String, Map<String, dynamic>>{};
+  Timer? _bonjourRefresh;
+  bool _bonjourActive = false;
   RawDatagramSocket? _socket;
   bool _disposed = false;
   int _generation = 0;
@@ -73,7 +98,7 @@ class LanRoomDiscovery {
   // 会被按秒整棵重建。
   String? _lastRoomsSignature;
 
-  bool get isListening => _socket != null;
+  bool get isListening => _socket != null || _bonjourActive;
 
   /// 开始监听 UDP 8990 上的房间广播。
   Future<bool> startListening() async {
@@ -89,13 +114,77 @@ class LanRoomDiscovery {
       return false;
     }
     _socket = socket;
+    if (_usesBonjour) {
+      final bonjourId = _bonjourId =
+          '$magic:$port:${identityHashCode(this)}:$generation';
+      var started = false;
+      _bonjourSubscription = _bonjourEvents.listen((dynamic event) {
+        if (_disposed ||
+            generation != _generation ||
+            event is! Map ||
+            event['id'] != bonjourId) {
+          return;
+        }
+        if (event['type'] == 'error') {
+          AppLog.warn(_tag, event['message'] as String? ?? 'Bonjour 发现不可用');
+          return;
+        }
+        final service = event['service'];
+        if (service is! String) return;
+        if (event['type'] == 'removed') {
+          final old = _bonjourRooms.remove(service);
+          if (old != null) {
+            _discoveredRooms.removeWhere(
+              (_, known) =>
+                  known.roomId == old['roomId'] &&
+                  (known.applePeerService == service ||
+                      (known.hostAddress.address == old['address'] &&
+                          known.port == old['port'])),
+            );
+            _notifyRoomsChanged();
+          }
+          return;
+        }
+        if (event['type'] == 'room' &&
+            _validBonjour(event) &&
+            (_bonjourRooms.containsKey(service) ||
+                _bonjourRooms.length < maxDiscoveredRooms)) {
+          _bonjourRooms[service] = Map<String, dynamic>.from(event);
+          _acceptBonjour(_bonjourRooms[service]!);
+        }
+      }, onError: (Object error) => AppLog.warn(_tag, 'Bonjour 发现失败', error));
+      try {
+        started =
+            await _bonjour.invokeMethod<bool>('start', {
+              'magic': magic,
+              'id': bonjourId,
+            }) ??
+            false;
+      } on MissingPluginException catch (error) {
+        AppLog.debug(_tag, '原生同网发现不可用，保留 UDP：$error');
+      } on PlatformException catch (error) {
+        AppLog.warn(_tag, '本地网络发现权限未就绪，可手动输入房主地址', error);
+      }
+      if (_disposed || generation != _generation) {
+        await _bonjour
+            .invokeMethod<void>('stop', {'magic': magic, 'id': bonjourId})
+            .catchError((Object _) {});
+        return false;
+      }
+      _bonjourActive = started;
+      _bonjourRefresh = Timer.periodic(const Duration(seconds: 1), (_) {
+        for (final room in _bonjourRooms.values) {
+          _acceptBonjour(room);
+        }
+      });
+    }
 
-    if (_socket == null) {
+    if (_socket == null && !_bonjourActive) {
       AppLog.error(_tag, '无法监听 UDP $discoveryPort，扫描不到附近的房间');
       return false;
     }
 
-    _socket!.broadcastEnabled = true;
+    if (_socket != null) _socket!.broadcastEnabled = true;
     var errorReported = false;
     _socket?.listen(
       (event) {
@@ -149,14 +238,32 @@ class LanRoomDiscovery {
     required int tcpPort,
     required int Function() getMemberCount,
   }) {
-    if (_socket == null) {
+    if (!isListening) {
       AppLog.error(_tag, '发现通道未就绪，房间广播没有发出，其他人搜不到这个房间');
       return;
     }
 
     _selfRoomId = roomId;
     _broadcastTimer?.cancel();
+    if (_usesBonjour) {
+      _advertiseBonjour(
+        roomId,
+        roomName,
+        hostNickname,
+        tcpPort,
+        getMemberCount(),
+      );
+    }
     _broadcastTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_usesBonjour) {
+        _advertiseBonjour(
+          roomId,
+          roomName,
+          hostNickname,
+          tcpPort,
+          getMemberCount(),
+        );
+      }
       _sendBroadcast(
         roomId: roomId,
         roomName: roomName,
@@ -171,6 +278,18 @@ class LanRoomDiscovery {
   /// 停止广播；[sendGoodbye] 为 true 时向局域网发送即时解散通知，
   /// 让其他设备列表立刻清除该房间，无需等待超时。
   void stopAdvertising({bool sendGoodbye = true}) {
+    if (_usesBonjour && _bonjourActive) {
+      unawaited(
+        _bonjour
+            .invokeMethod<void>('stopAdvertising', {
+              'magic': magic,
+              'id': _bonjourId,
+            })
+            .catchError((Object error) {
+              AppLog.debug(_tag, '停止 Bonjour 广播：$error');
+            }),
+      );
+    }
     if (sendGoodbye && _selfRoomId != null && _socket != null) {
       final lastRoomId = _selfRoomId!;
       _sendBroadcast(
@@ -200,8 +319,61 @@ class LanRoomDiscovery {
     _selfRoomId = null;
   }
 
+  bool _validBonjour(Map<dynamic, dynamic> room) {
+    final address = room['address'];
+    final tcpPort = room['port'];
+    return room['magic'] == magic &&
+        room['roomId'] is String &&
+        (room['roomId'] as String).isNotEmpty &&
+        room['roomName'] is String &&
+        room['hostNickname'] is String &&
+        address is String &&
+        InternetAddress.tryParse(address) != null &&
+        tcpPort is int &&
+        tcpPort > 0 &&
+        tcpPort <= 65535 &&
+        (room['members'] == null || room['members'] is int) &&
+        (room['peerService'] == null || room['peerService'] is String);
+  }
+
+  void _acceptBonjour(Map<String, dynamic> room) {
+    final address = InternetAddress.tryParse(room['address'] as String? ?? '');
+    if (address == null) return;
+    _handleIncomingPacket(
+      Datagram(utf8.encode(jsonEncode(room)), address, port),
+      applePeerService: room["peerService"] as String?,
+    );
+  }
+
+  void _advertiseBonjour(
+    String id,
+    String name,
+    String nickname,
+    int tcpPort,
+    int members,
+  ) {
+    unawaited(
+      _bonjour
+          .invokeMethod<void>('advertise', {
+            'id': _bonjourId,
+            'magic': magic,
+            'roomId': id,
+            'roomName': name,
+            'hostNickname': nickname,
+            'port': tcpPort,
+            'members': members,
+          })
+          .catchError((Object error) {
+            AppLog.warn(_tag, 'Bonjour 广播失败', error);
+          }),
+    );
+  }
+
   Future<List<InternetAddress>> _getBroadcastAddresses() async {
-    final addresses = <InternetAddress>{InternetAddress("255.255.255.255")};
+    final addresses = <InternetAddress>{
+      ..._unicastTargets,
+      InternetAddress("255.255.255.255"),
+    };
 
     try {
       final interfaces = await NetworkInterface.list(
@@ -259,7 +431,7 @@ class LanRoomDiscovery {
     }
   }
 
-  void _handleIncomingPacket(Datagram datagram) {
+  void _handleIncomingPacket(Datagram datagram, {String? applePeerService}) {
     final Map<String, dynamic> json;
     try {
       json = jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
@@ -314,6 +486,7 @@ class LanRoomDiscovery {
         hostAddress: datagram.address,
         port: port,
         memberCount: ((json["members"] as int?) ?? 0).clamp(0, 99),
+        applePeerService: applePeerService,
         lastSeen: DateTime.now(),
       );
 
@@ -369,7 +542,7 @@ class LanRoomDiscovery {
         .map(
           (r) =>
               '${r.roomId}|${r.roomName}|${r.hostNickname}|'
-              '${r.hostAddress.address}|${r.port}|${r.memberCount}',
+              '${r.hostAddress.address}|${r.port}|${r.memberCount}|${r.applePeerService}',
         )
         .join(';');
     if (signature == _lastRoomsSignature) return;
@@ -378,14 +551,30 @@ class LanRoomDiscovery {
   }
 
   Future<void> stop() async {
+    final bonjourId = _bonjourId;
+    final stopBonjour = _bonjourActive;
     _generation++;
     stopAdvertising();
+    _bonjourActive = false;
     _pruneTimer?.cancel();
     _pruneTimer = null;
     _socket?.close();
     _socket = null;
+    _bonjourRefresh?.cancel();
+    _bonjourRefresh = null;
+    final subscription = _bonjourSubscription;
+    _bonjourSubscription = null;
+    _bonjourRooms.clear();
     _discoveredRooms.clear();
     _notifyRoomsChanged();
+    await subscription?.cancel();
+    if (_usesBonjour && stopBonjour) {
+      await _bonjour
+          .invokeMethod<void>('stop', {'magic': magic, 'id': bonjourId})
+          .catchError((Object error) {
+            AppLog.debug(_tag, '停止原生同网发现：$error');
+          });
+    }
   }
 
   void dispose() {
