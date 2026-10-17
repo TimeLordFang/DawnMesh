@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +10,41 @@ import 'lan_transport_whitelist_test.dart' show pumpUntil;
 
 void main() {
   group('LanRoomDiscovery Tests', () {
+    test(
+      'asynchronous broadcast errors leave discovery and room reception usable',
+      () async {
+        final socket = _UnroutableDatagramSocket();
+        final discovery = LanRoomDiscovery(
+          port: 8992,
+          bindSocket: (_) async => socket,
+        );
+        addTearDown(discovery.dispose);
+        expect(await discovery.startListening(), isTrue);
+        discovery.startAdvertising(
+          roomId: 'local',
+          roomName: '本地融合房',
+          hostNickname: '房主',
+          tcpPort: 8991,
+          getMemberCount: () => 1,
+        );
+        await pumpUntil(
+          () => socket.failedSends > 0,
+          reason: 'OS should report the failed broadcast asynchronously',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(discovery.isListening, isTrue);
+        final room = discovery.roomsStream.firstWhere(
+          (rooms) => rooms.isNotEmpty,
+        );
+        socket.receiveRoom();
+        expect(
+          (await room.timeout(const Duration(seconds: 1))).single.roomName,
+          '网络恢复后的房间',
+        );
+        discovery.stopAdvertising(sendGoodbye: false);
+      },
+    );
+
     test('初始状态房间列表为空且生命周期释放正常', () async {
       final discovery = LanRoomDiscovery();
       expect(discovery.currentRooms.isEmpty, isTrue);
@@ -134,4 +171,77 @@ void main() {
       );
     });
   });
+}
+
+// RawDatagramSocket.send reports local send failures through its stream, after
+// returning the byte count. A synchronous try/catch around send cannot catch it.
+class _UnroutableDatagramSocket extends Stream<RawSocketEvent>
+    implements RawDatagramSocket {
+  final events = StreamController<RawSocketEvent>();
+  final packets = <Datagram>[];
+  int failedSends = 0;
+  @override
+  bool broadcastEnabled = false;
+
+  @override
+  StreamSubscription<RawSocketEvent> listen(
+    void Function(RawSocketEvent)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => events.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  int send(List<int> bytes, InternetAddress address, int port) {
+    scheduleMicrotask(() {
+      if (events.isClosed) return;
+      failedSends++;
+      events.addError(
+        SocketException(
+          'Send failed',
+          osError: const OSError('No route to host', 65),
+          address: address,
+          port: port,
+        ),
+      );
+    });
+    return bytes.length;
+  }
+
+  void receiveRoom() {
+    packets.add(
+      Datagram(
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'magic': LanRoomDiscovery.magicHeader,
+              'roomId': 'remote',
+              'roomName': '网络恢复后的房间',
+              'hostNickname': '另一位房主',
+              'port': 8991,
+              'members': 1,
+            }),
+          ),
+        ),
+        InternetAddress.loopbackIPv4,
+        8992,
+      ),
+    );
+    events.add(RawSocketEvent.read);
+  }
+
+  @override
+  Datagram? receive() => packets.isEmpty ? null : packets.removeAt(0);
+  @override
+  void close() {
+    unawaited(events.close());
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

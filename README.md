@@ -7,7 +7,7 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前正式版本：`1.1.5`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前正式版本：`1.1.6`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -37,7 +37,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.5-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.1.6-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -148,6 +148,8 @@ scripts/   本机工具链与校验脚本
 ## 许可与来源
 
 DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。
+
+1.1.6 修复广播无路由时的异步发现错误，配套 iOS 1.0.5；详见 [发布说明](docs/RELEASE_1.1.6.md)。
 
 1.1.5 补全安卓房主供 iOS 读取的蓝牙房名，修复邀请码输入期间名称更新和入房后的缺名标题。配套 iOS 1.0.4；详见 [1.1.5 发布说明](docs/RELEASE_1.1.5.md)。
 

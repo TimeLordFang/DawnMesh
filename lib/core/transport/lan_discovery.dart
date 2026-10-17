@@ -37,7 +37,9 @@ class LanRoomDiscovery {
     this.port = discoveryPort,
     this.magic = magicHeader,
     this.includeOwnRoom = false,
+    this._bindSocket,
   });
+  final Future<RawDatagramSocket> Function(bool reusePort)? _bindSocket;
   final int port;
   final String magic;
   final bool includeOwnRoom;
@@ -94,11 +96,27 @@ class LanRoomDiscovery {
     }
 
     _socket!.broadcastEnabled = true;
-    _socket!.listen((event) {
-      if (event != RawSocketEvent.read) return;
-      final datagram = _socket?.receive();
-      if (datagram != null) _handleIncomingPacket(datagram);
-    });
+    var errorReported = false;
+    _socket?.listen(
+      (event) {
+        if (_disposed ||
+            generation != _generation ||
+            event != RawSocketEvent.read) {
+          return;
+        }
+        final datagram = socket?.receive();
+        if (datagram != null) _handleIncomingPacket(datagram);
+      },
+      onError: (Object error) {
+        // UDP send reports local route/permission failures asynchronously through
+        // this stream. Keep listening so another interface or recovered network
+        // can still discover rooms; the active room transport is independent.
+        if (_disposed || generation != _generation || errorReported) return;
+        errorReported = true;
+        AppLog.warn(_tag, 'UDP 房间发现受限，保持房间并等待网络恢复', error);
+      },
+      cancelOnError: false,
+    );
 
     AppLog.info(_tag, '已开始监听 UDP $discoveryPort');
     return true;
@@ -106,6 +124,7 @@ class LanRoomDiscovery {
 
   Future<RawDatagramSocket?> _bind({required bool reusePort}) async {
     try {
+      if (_bindSocket != null) return await _bindSocket(reusePort);
       return await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
         port,
