@@ -29,3 +29,39 @@ iOS 保留本机 Team 和 Run scheme 偏好；发布提交排除这些本机设�
 - 两种无线模式在弱信号、系统蓝牙/Wi-Fi 开关、锁屏及后台调度中的恢复。
 
 编译与回环测试不能证明实际射频链路稳定。首次蓝牙发现/入房应保持 iOS 房主前台；后台广播对安卓的可见性受系统限制。苹果点对点路径目前仅用于普通 Wi-Fi 房；融合房继续使用同网/热点与原公网路径。
+
+
+## iOS 侧滑动画与跨端蓝牙房名（iOS 1.0.4 / 安卓 1.1.5）
+
+iOS 普通页面及公网房使用原生交互返回，支持跟手和取消回弹；本地房间的
+侧滑进度驱动既有舞台转场。聊天、成员、设置、诊断和高级调优弹层补齐侧滑
+移动及回弹动画。键盘优先返回仅收起键盘，房间最小化继续保留会话和聊天，
+并释放按住说话状态。手势启用状态改变时始终保持组件结构，避免再次销毁
+等待邀请码结果的首页。
+
+安卓旧实现将 PSM/人数放在主广播中，房名放在最多 24 字节的扫描响应中；
+iOS 原先在解析到主广播后不会继续读 GATT，因此部分发现结果只有占位房名。
+安卓现提供与 iOS 相同的只读 GATT 元数据服务，支持完整 UTF-8 名称、ATT 长读、
+人数更新、蓝牙重启恢复及退出清理。iOS 即使已读到主广播也补读 GATT，且完整
+名称不会再被后续的主广播或较短扫描响应覆盖。
+
+两端入房采用输入邀请码期间收到的最新名称。旧版安卓仍仅有占位名时，
+入房后依据已认证的房主成员信息补全标题；切换 PSM 后不复用旧房名称。
+发现信息仍仅用于展示，邀请码验证及加密帧协议保持兼容。
+
+相关平台行为见 [Flutter PopScope](https://api.flutter.dev/flutter/widgets/PopScope-class.html)
+和 [Android GATT 读取回调](https://developer.android.com/reference/android/bluetooth/BluetoothGattServerCallback#onCharacteristicReadRequest(android.bluetooth.BluetoothDevice,int,int,android.bluetooth.BluetoothGattCharacteristic))。
+
+验证结果：
+
+- iOS Flutter：316 项通过；安卓 Flutter：297 项通过。两端各 1 项真实 Go 中继测试
+  因未设置测试服务器地址而按既有配置跳过。
+- 两端 Flutter analyze 无问题；安卓 JVM 41 项通过，Android Lint 0 issues。
+- Swift 元数据、完整名称优先级和换房缓存等共 190 项检查通过。
+- iOS Release 完整未签名编译通过；安卓 Release APK 编译、签名及 16 KiB ZIP 对齐检查通过。
+
+尚未执行本次修改后的真机蓝牙验收。复测时两端都安装本次构建，安卓房主保持前台，
+先检查 iOS 附近房间的中文/emoji 长名称，再输入邀请码检查房内标题；反向建房
+亦需回归。侧滑分别检查跟手、取消、完成、聊天键盘优先收起及返回后重新进入房间。
+
+本轮版本：iOS 1.0.4+5、安卓 1.1.5+56；对应 GitHub main 上的 v1.0.4 / v1.1.5 tag。

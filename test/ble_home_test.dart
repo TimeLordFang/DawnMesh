@@ -16,6 +16,7 @@ void main() {
   late RoomInvite invite;
   late RoomSession host;
   RoomSession? entered;
+  String? enteredTitle;
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
@@ -37,6 +38,7 @@ void main() {
     calls.clear();
     advertisingWorks = true;
     entered = null;
+    enteredTitle = null;
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'startAdvertising') return advertisingWorks;
@@ -90,7 +92,10 @@ void main() {
             isNight: false,
             stage: const AlwaysStoppedAnimation(0),
             audioIo: MockAudioIo(),
-            onEnterRoom: (session, _) => entered = session,
+            onEnterRoom: (session, name) {
+              entered = session;
+              enteredTitle = name;
+            },
           ),
         ),
       ),
@@ -138,6 +143,50 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     },
   );
+
+  for (final metadataArrives in [false, true]) {
+    testWidgets(
+      'BLE join uses ${metadataArrives ? 'fresh metadata received during invite entry' : 'authenticated host when old advertisements omit the name'}',
+      (tester) async {
+        await showHome(tester);
+        void advertise(String name) => messenger.handlePlatformMessage(
+          scanChannel,
+          const StandardMethodCodec().encodeSuccessEnvelope({
+            'address': 'AA:BB:CC:DD:EE:FF',
+            'psm': 129,
+            'roomName': name,
+            'memberCount': 1,
+            'rssi': -40,
+          }),
+          (_) {},
+        );
+        advertise('蓝牙房');
+        await tester.pump();
+        await tester.runAsync(() async {
+          await tester.tap(find.text('Join room'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        if (metadataArrives) {
+          advertise('Host 的完整蓝牙房😀');
+          await tester.pump();
+        }
+        await tester.enterText(
+          find.byKey(const ValueKey('room-invite-input')),
+          invite.code,
+        );
+        await tester.tap(find.text('验证并加入'));
+        await pumpUntil(tester, () => entered != null);
+        expect(
+          enteredTitle,
+          metadataArrives ? 'Host 的完整蓝牙房😀' : "Host's chat · Bluetooth",
+        );
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 4));
+      },
+    );
+  }
 
   testWidgets('advertising failure never enters a phantom room', (
     tester,

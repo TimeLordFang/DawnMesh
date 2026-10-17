@@ -319,10 +319,16 @@ class _HomeContentState extends State<HomeContent> {
       setState(() => _busy = false);
       return;
     }
+    // Metadata may have arrived while the invite dialog was open.
+    final latestRoom =
+        _bleDiscovery.currentRooms
+            .where((candidate) => candidate.address == room.address)
+            .firstOrNull ??
+        room;
     await _stopBleScanning();
     if (!mounted) return;
     final transport = BleL2capTransport();
-    if (!await transport.connectToHost(room)) {
+    if (!await transport.connectToHost(latestRoom)) {
       await transport.dispose();
       if (mounted) setState(() => _busy = false);
       _showConnectionError('连接蓝牙房失败，请重新扫描后重试。');
@@ -358,7 +364,12 @@ class _HomeContentState extends State<HomeContent> {
       return;
     }
     setState(() => _busy = false);
-    widget.onEnterRoom(session, room.roomName);
+    final host = session.members.where((member) => member.isHost).firstOrNull;
+    final roomName = latestRoom.roomName == '蓝牙房' && host != null
+        ? AppStrings.of(context)
+              .defaultBleRoomTitle(DeviceCode.split(host.nickname).$1)
+        : latestRoom.roomName;
+    widget.onEnterRoom(session, roomName);
   }
 
   void _startPeriodicScan() {

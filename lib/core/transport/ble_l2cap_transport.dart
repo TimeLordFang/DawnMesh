@@ -492,11 +492,14 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
         final psm = event['psm'] as int?;
         if (address == null || psm == null || psm < 1 || psm > 255) return;
 
+        final name = (event['roomName'] as String?)?.trim();
+        final previous = _rooms[address];
+        final resolvedName = name == null || name.isEmpty || name == '蓝牙房'
+            ? (previous?.psm == psm ? previous!.roomName : '蓝牙房')
+            : name;
         _rooms[address] = DiscoveredBleRoom(
           address: address,
-          roomName: (event['roomName'] as String?) == '蓝牙房'
-              ? (_rooms[address]?.roomName ?? '蓝牙房')
-              : (event['roomName'] as String? ?? '蓝牙房'),
+          roomName: resolvedName,
           psm: psm,
           memberCount: event['memberCount'] as int? ?? 1,
           rssi: event['rssi'] as int? ?? 0,

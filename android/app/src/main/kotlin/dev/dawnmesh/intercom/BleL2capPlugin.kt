@@ -85,6 +85,7 @@ class BleL2capPlugin(
     private val dataChannel = EventChannel(messenger, DATA_CHANNEL)
     private val scanChannel = EventChannel(messenger, SCAN_CHANNEL)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val metadataHost = BleGattRoomHost(context)
 
     private var dataSink: EventChannel.EventSink? = null
     private var scanSink: EventChannel.EventSink? = null
@@ -215,6 +216,7 @@ class BleL2capPlugin(
                 val count = call.argument<Int>("memberCount") ?: 1
                 if (isHost && count != advertisedMemberCount) {
                     advertisedMemberCount = count
+                    if (advertisedPsm > 0) metadataHost.update(advertisedPsm, count, advertisedRoomName)
                     restartAdvertisingData()
                 }
                 result.success(true)
@@ -342,6 +344,7 @@ class BleL2capPlugin(
 
         serverSocket = server
         advertisedPsm = server.psm
+        metadataHost.start(advertisedPsm, advertisedMemberCount, advertisedRoomName)
         Log.i(TAG, "L2CAP 监听已开启，系统分配的 PSM = $advertisedPsm")
 
         accepting.set(true)
@@ -526,6 +529,7 @@ class BleL2capPlugin(
 
         serverSocket = server
         advertisedPsm = server.psm
+        metadataHost.start(advertisedPsm, advertisedMemberCount, advertisedRoomName)
         accepting.set(true)
         acceptThread = Thread({ acceptLoop(server) }, "dawn-ble-accept").apply { start() }
 
@@ -591,6 +595,7 @@ class BleL2capPlugin(
 
     /** 仅释放房主的射频资源，不清除房间身份与用于恢复的广播内容。 */
     private fun closeHostRadioResources(reason: String) {
+        metadataHost.stop()
         accepting.set(false)
         advertiseCallback?.let { callback ->
             try {
@@ -1000,6 +1005,7 @@ class BleL2capPlugin(
     // ---------------------------------------------------------------- 收尾
 
     private fun stopEverything() {
+        metadataHost.stop()
         hostRadioRecoveryGeneration++
         hostRadioRecoveryPending = false
         connectionGeneration++

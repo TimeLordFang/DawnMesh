@@ -33,6 +33,41 @@ void main() {
     }
   });
 
+  test(
+    'scan keeps a name on incomplete updates but clears it for a new PSM',
+    () async {
+      final transport = BleL2capTransport();
+      addTearDown(transport.dispose);
+      expect(await transport.startScan(), isTrue);
+      Future<void> report(String? name, int psm, int members) async {
+        messenger.handlePlatformMessage(
+          scanEventChannel,
+          const StandardMethodCodec().encodeSuccessEnvelope({
+            'address': 'AA:BB:CC:DD:EE:01',
+            'psm': psm,
+            'roomName': name,
+            'memberCount': members,
+            'rssi': -40,
+          }),
+          (_) {},
+        );
+        await _until(
+          () =>
+              transport.currentRooms.isNotEmpty &&
+              transport.currentRooms.single.memberCount == members,
+        );
+      }
+
+      await report('完整房间名😀', 129, 1);
+      await report('蓝牙房', 129, 2);
+      expect(transport.currentRooms.single.roomName, '完整房间名😀');
+      await report(null, 129, 3);
+      expect(transport.currentRooms.single.roomName, '完整房间名😀');
+      await report('  ', 130, 4);
+      expect(transport.currentRooms.single.roomName, '蓝牙房');
+    },
+  );
+
   test('reconnect rescans and uses refreshed BLE address and PSM', () async {
     final transport = BleL2capTransport();
     addTearDown(transport.dispose);
@@ -61,8 +96,9 @@ void main() {
     );
 
     expect(await reconnecting, isTrue);
-    final connects =
-        calls.where((call) => call.method == 'connectL2cap').toList();
+    final connects = calls
+        .where((call) => call.method == 'connectL2cap')
+        .toList();
     expect(connects, hasLength(2));
     expect(connects.last.arguments['address'], 'AA:BB:CC:DD:EE:99');
     expect(connects.last.arguments['psm'], 177);
