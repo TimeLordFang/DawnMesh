@@ -88,6 +88,13 @@ class BleL2capPlugin(
 
     private var dataSink: EventChannel.EventSink? = null
     private var scanSink: EventChannel.EventSink? = null
+    private val gattDiscovery = BleGattRoomDiscovery(context, mainHandler) { address, room, rssi ->
+        if (scanning) emitRoom(address, room, rssi)
+    }
+    private fun emitRoom(address: String, room: BleRoomAdvertisement.Room, rssi: Int) {
+        scanSink?.success(mapOf("address" to address, "roomName" to room.name,
+            "psm" to room.psm, "memberCount" to room.members, "rssi" to rssi))
+    }
 
     private val adapter: BluetoothAdapter?
         get() = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
@@ -637,6 +644,7 @@ class BleL2capPlugin(
     }
 
     private fun stopScan() {
+        gattDiscovery.stop()
         if (!scanning) return
         scanning = false
         try {
@@ -650,17 +658,13 @@ class BleL2capPlugin(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             val record = result?.scanRecord ?: return
-            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID) ?: return
-
+            val room = BleRoomAdvertisement.parse(record.bytes, MANUFACTURER_ID)
             val device = result.device ?: return
-            val info = mapOf(
-                "address" to device.address,
-                "roomName" to room.name,
-                "psm" to room.psm,
-                "memberCount" to room.members,
-                "rssi" to result.rssi,
-            )
-            mainHandler.post { scanSink?.success(info) }
+            mainHandler.post {
+                if (!scanning) return@post
+                if (room != null) emitRoom(device.address, room, result.rssi)
+                else gattDiscovery.observe(device, result.rssi)
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {

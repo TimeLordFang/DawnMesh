@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="18 18 72 72">
+<!-- DawnMesh: exported from Android launcher vector paths and gradients. -->
+<defs>
+<linearGradient id="background-0" gradientUnits="userSpaceOnUse" x1="54" y1="0" x2="54" y2="108"><stop offset="0" stop-color="#C97C66" stop-opacity="1.0"/><stop offset="0.55" stop-color="#9B4A52" stop-opacity="1.0"/><stop offset="1" stop-color="#392832" stop-opacity="1.0"/></linearGradient>
+<linearGradient id="foreground-0" gradientUnits="userSpaceOnUse" x1="54" y1="31" x2="54" y2="75"><stop offset="0" stop-color="#FFF0C7" stop-opacity="1.0"/><stop offset="0.58" stop-color="#F3DCAA" stop-opacity="1.0"/><stop offset="1" stop-color="#D0AC72" stop-opacity="1.0"/></linearGradient>
+</defs>
+<path d="M0,0H108V108H0Z" fill="url(#background-0)"/>
+<path d="M54,31A22,22 0,1 1,54 75A22,22 0,1 1,54 31" fill="url(#foreground-0)"/>
+<path d="M18,54H90" fill="none" stroke="#F3DCAA" stroke-opacity="0.40000000" stroke-width="1.1"/>
+<path d="M29,59Q54,83 79,59" fill="#000000" fill-opacity="0.00000000" stroke="#F3DCAA" stroke-opacity="0.85098039" stroke-width="3.4" stroke-linecap="round"/>
+<path d="M23,65Q54,94 85,65" fill="#000000" fill-opacity="0.00000000" stroke="#F3DCAA" stroke-opacity="0.65882353" stroke-width="2.9" stroke-linecap="round"/>
+<path d="M18,72Q54,104 90,72" fill="#000000" fill-opacity="0.00000000" stroke="#F3DCAA" stroke-opacity="0.47058824" stroke-width="2.4" stroke-linecap="round"/>
+</svg>
