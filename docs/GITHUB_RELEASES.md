@@ -36,24 +36,25 @@ gh secret set ANDROID_KEY_PASSWORD
 
 ## 发布一个版本
 
-先修改 `pubspec.yaml`。例如：
+先同步 `pubspec.yaml`、应用版本声明与中英文更新日志，并新增 `docs/RELEASE_<版本>.md`。以下版本号仅作正式版流程示例，实际须使用未占用的新版本：
 
 ```yaml
-version: 1.0.0-beta.2+26
+version: 1.1.8+59
 ```
 
 提交代码并把同名标签推送到 GitHub：
 
 ```bash
-git add pubspec.yaml
-git commit -m "Release 1.0.0-beta.2"
+# 按本次版本实际改动选择文件提交
+git add pubspec.yaml lib/core/update/update_service.dart lib/l10n/app_strings.dart docs/RELEASE_1.1.8.md
+git commit -m "Release 1.1.8"
 git push origin main
 git push github main
-git tag -a v1.0.0-beta.2 -m "DawnMesh 1.0.0-beta.2"
-git push origin v1.0.0-beta.2
-git push github v1.0.0-beta.2
+git tag -a v1.1.8 -m "DawnMesh 1.1.8"
+git push origin v1.1.8
+git push github v1.1.8
 ```
 
-工作流会检查标签必须等于 `v` 加 `pubspec.yaml` 的 versionName。检查通过后，Release 包含签名 APK、SHA-256 文件和 GitHub 自动生成的更新记录；名称含 `-dev`、`-alpha`、`-beta` 或其他连字符时会标为 prerelease。
+工作流会检查标签必须等于 `v` 加 `pubspec.yaml` 的 versionName。检查通过后，Release 包含签名 APK 和 SHA-256 文件；更新记录优先读取 `docs/RELEASE_<版本>.md`，文件不存在时才使用 GitHub 自动生成的记录。名称含 `-dev`、`-alpha`、`-beta` 或其他连字符时会标为 prerelease。
 
 签名由 `android/app/build.gradle.kts` 的 `release` signingConfig 在 Gradle `packageRelease` 期间完成。工作流中的 `apksigner verify` 只验证结果，`cp` 到 `dist/` 只负责按版本重命名。Runner 最后会删除临时还原的 JKS。

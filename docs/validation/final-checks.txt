@@ -1,8 +1,0 @@
-Command: ./scripts/check.sh
-Date: 2026-09-08
-Exit code: 0
-
-Flutter pub get: passed
-Flutter analyze: No issues found
-Flutter test --concurrency=1: All tests passed (167)
-C++ safety test (clang++ -fsanitize=address,undefined): passed

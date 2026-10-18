@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../internet/internet_models.dart';
 import '../diagnostics/app_log.dart';
@@ -76,6 +77,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   bool _ticking = false;
   bool _cloudAuthenticated = false;
   String? _localTarget;
+  static const _applePeer = MethodChannel('dev.dawnmesh.intercom/apple_peer');
+  final _appleProxies = <WebSocket, String>{};
   Uint8List? _state;
   int _revision = 0;
   int _uploadedRevision = 0;
@@ -181,9 +184,20 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     }
   }
 
-  Future<bool> connectLocal(String host, {int port = defaultPort}) async {
+  Future<bool> connectLocal(
+    String host, {
+    int port = defaultPort,
+    String? applePeerService,
+  }) async {
     final previous = _localTarget;
-    final target = 'ws://$host:$port/fusion/$roomId';
+    final target = applePeerService == null
+        ? Uri(
+            scheme: 'ws',
+            host: host,
+            port: port,
+            path: '/fusion/$roomId',
+          ).toString()
+        : 'apple:$applePeerService';
     _localTarget = target;
     final connected = await _dialLocal(target);
     if (!connected && _localTarget == target) _localTarget = previous;
@@ -207,9 +221,30 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     }
     if (_connectedTargets.containsKey(target)) return true;
     if (!_dialing.add(target)) return false;
+    String? proxyID;
+    var attached = false;
     try {
+      var endpoint = target;
+      if (target.startsWith('apple:')) {
+        final proxy = await _applePeer
+            .invokeMapMethod<String, dynamic>('open', {
+              'service': target.substring(6),
+            })
+            .timeout(const Duration(seconds: 16));
+        final port = proxy?['port'];
+        final id = proxy?['connectionId'];
+        if (id is String) proxyID = id;
+        if (_stopped ||
+            port is! int ||
+            port < 1 ||
+            port > 65535 ||
+            id is! String) {
+          return false;
+        }
+        endpoint = 'ws://127.0.0.1:$port/fusion/$roomId';
+      }
       final socket = await WebSocket.connect(
-        target,
+        endpoint,
         headers: {'X-Fusion-Node': _nodeId},
         compression: CompressionOptions.compressionOff,
       ).timeout(const Duration(seconds: 4));
@@ -217,13 +252,24 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         await socket.close();
         return false;
       }
+      if (proxyID != null) _appleProxies[socket] = proxyID;
       _attach(socket, cloud: false, nodeId: nodeId);
+      attached = true;
       _connectedTargets[target] = socket;
       return true;
     } catch (_) {
       return false;
     } finally {
+      if (!attached && proxyID != null) await _closeAppleProxy(proxyID);
       _dialing.remove(target);
+    }
+  }
+
+  Future<void> _closeAppleProxy(String id) async {
+    try {
+      await _applePeer.invokeMethod<void>('close', {'connectionId': id});
+    } catch (error) {
+      AppLog.debug('Fusion', '关闭点对点代理：$error');
     }
   }
 
@@ -330,6 +376,8 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       },
       onError: (Object _) {},
       onDone: () {
+        final proxy = _appleProxies.remove(socket);
+        if (proxy != null) unawaited(_closeAppleProxy(proxy));
         _local.remove(socket);
         _socketNodes.remove(socket);
         _connectedTargets.removeWhere((_, value) => identical(value, socket));
@@ -340,6 +388,9 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         _updateStatus();
       },
     );
+    if (_session?.state == RoomState.connecting) {
+      _session?.retryPendingAdmission();
+    }
     _updateStatus();
   }
 
@@ -457,8 +508,13 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
         for (final room in _discovery?.currentRooms ?? <DiscoveredRoom>[]) {
           if (room.roomId == roomId &&
               room.memberCount > 0 &&
-              !_ownAddresses.contains(room.hostAddress.address)) {
-            await connectLocal(room.hostAddress.address, port: room.port);
+              (room.applePeerService != null ||
+                  !_ownAddresses.contains(room.hostAddress.address))) {
+            await connectLocal(
+              room.hostAddress.address,
+              port: room.port,
+              applePeerService: room.applePeerService,
+            );
           }
         }
       }
@@ -655,6 +711,9 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     for (final socket in [..._local, ?_cloud]) {
       unawaited(socket.close());
     }
+    final proxies = _appleProxies.values.toList();
+    _appleProxies.clear();
+    await Future.wait(proxies.map(_closeAppleProxy));
     _local.clear();
     _socketNodes.clear();
     _peerRoutes.clear();

@@ -13,7 +13,8 @@ class FusionRoomEntry {
   final direct = <WifiP2pPeer>[];
 
   String get sources => [
-    if (local.isNotEmpty) '同网连接',
+    if (local.any((r) => r.applePeerService == null)) '同网连接',
+    if (local.any((r) => r.applePeerService != null)) '苹果点对点',
     if (direct.isNotEmpty) 'Wi-Fi 直连',
     if (cloud) '公网',
   ].join(' / ');
@@ -42,7 +43,10 @@ class FusionRoomEntry {
       if (!validFusionRoomId(source.roomId) || source.memberCount < 1) continue;
       final room = entry(source.roomId, source.roomName, source.memberCount);
       if (!room.local.any(
-        (r) => r.hostAddress == source.hostAddress && r.port == source.port,
+        (r) =>
+            r.hostAddress == source.hostAddress &&
+            r.port == source.port &&
+            r.applePeerService == source.applePeerService,
       )) {
         room.local.add(source);
       }

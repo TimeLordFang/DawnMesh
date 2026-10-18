@@ -22,6 +22,7 @@ class RoomAdmission {
   Uint8List? _trafficKey;
   SecureFrameCodec? _trafficCodec;
   Spake2? _client;
+  Uint8List? _attemptToken;
   Spake2Keys? _clientKeys;
   final Map<String, _Pending> _pending = {};
   final List<DateTime> _attempts = [];
@@ -45,11 +46,19 @@ class RoomAdmission {
     await onReady(_trafficCodec!);
   }
 
-  void startClient() {
+  void startClient({bool freshAttempt = false}) {
+    // Room membership keeps its stable installation identity. A new network
+    // admission attempt needs a separate challenge ID so an abandoned PAKE on
+    // the old route cannot block or complete the new attempt.
+    _attemptToken = freshAttempt
+        ? Uint8List.fromList(
+            List.generate(16, (_) => Random.secure().nextInt(256)),
+          )
+        : token;
     _ready = false;
     _clientKeys = null;
     _client = Spake2(isA: true, passwordScalar: passwordScalar);
-    _emit(1, token, _client!.message);
+    _emit(1, _attemptToken!, _client!.message);
   }
 
   void _emit(int kind, Uint8List id, List<int> body) {
@@ -120,7 +129,10 @@ class RoomAdmission {
         _emit(4, id, [...encrypted.nonce, ...encrypted.ciphertext]);
       }
     } else {
-      if (frame.senderId != 1 || !Spake2Keys.equal(id, token)) return;
+      if (frame.senderId != 1 ||
+          !Spake2Keys.equal(id, _attemptToken ?? token)) {
+        return;
+      }
       if (kind == 2 && body.length == 97 && _client != null) {
         final client = _client!;
         _client = null;
@@ -141,7 +153,7 @@ class RoomAdmission {
           ),
           associatedData: id,
         );
-        if (_closed) return;
+        if (_closed || !Spake2Keys.equal(id, _attemptToken ?? token)) return;
         _ready = true;
         _clientKeys = null;
         // PAKE restores admission, not a new traffic-key epoch. Preserve both

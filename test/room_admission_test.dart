@@ -8,6 +8,42 @@ import 'package:dawn_mesh/core/security/session_handshake.dart';
 import 'package:dawn_mesh/core/security/spake2.dart';
 
 void main() {
+  test('fresh route admission ignores an abandoned challenge without changing member identity', () async {
+    final outgoing = <Frame>[];
+    final responses = <Frame>[];
+    var ready = 0;
+    final host = RoomAdmission(
+      passwordScalar: BigInt.one,
+      token: Uint8List(16),
+      send: responses.add,
+      onReady: (_) async {},
+    );
+    final guest = RoomAdmission(
+      passwordScalar: BigInt.one,
+      token: Uint8List(16)..[0] = 9,
+      send: outgoing.add,
+      onReady: (_) async {
+        ready++;
+      },
+    );
+    addTearDown(host.close);
+    addTearDown(guest.close);
+    await host.startHost();
+    guest.startClient();
+    await host.handle(outgoing.last);
+    final oldResponse = responses.last;
+    final oldToken = outgoing.last.payload.sublist(2, 18);
+    guest.startClient(freshAttempt: true);
+    expect(outgoing.last.payload.sublist(2, 18), isNot(oldToken));
+    await guest.handle(oldResponse);
+    expect(ready, 0);
+    await host.handle(outgoing.last);
+    await guest.handle(responses.last);
+    await host.handle(outgoing.last);
+    await guest.handle(responses.last);
+    expect(ready, 1);
+  });
+
   test(
     'traffic key is released only after confirmation, and differs across rooms',
     () async {

@@ -357,6 +357,13 @@ class RoomSession {
     _startHeartbeat();
   }
 
+  /// A newly available fusion route retries only unfinished admission. This
+  /// does not reset an admitted member, its replay windows or traffic-key epoch.
+  void retryPendingAdmission() {
+    if (_closed || _admitted || _state != RoomState.connecting) return;
+    _admission?.startClient(freshAttempt: true);
+  }
+
   Future<void> _sendJoinRequest() async {
     final joinPayload = JoinRequestPayload(
       nickname: selfNickname,

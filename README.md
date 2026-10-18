@@ -112,6 +112,8 @@ GitHub Actions 在 [`.github/workflows/release.yml`](.github/workflows/release.y
 
 请永久备份 keystore 和密码。Android 要求后续升级包继续使用同一签名；密钥丢失后，现有安装通常无法直接覆盖升级。
 
+完整文档入口见 [文档索引](docs/README.md)。
+
 ## 项目结构
 
 ```text

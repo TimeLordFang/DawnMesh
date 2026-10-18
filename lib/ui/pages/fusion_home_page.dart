@@ -8,6 +8,7 @@ import '../../core/audio/audio_io.dart';
 import '../../core/fusion/fusion_identity.dart';
 import '../../core/protocol/room_limits.dart';
 import '../../core/fusion/fusion_room_directory.dart';
+import '../../core/fusion/fusion_route_race.dart';
 import '../../core/fusion/fusion_server_api.dart';
 import '../../core/fusion/fusion_transport.dart';
 import '../../core/internet/internet_models.dart';
@@ -93,7 +94,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
       if (mounted && identical(profile, _profile)) {
         setState(() {
           _remoteRooms = rooms;
-          _cloudStatus = '已连接服务器 · 附近成员可代为同步';
+          _cloudStatus = '服务器目录已更新 · 本地不可达时可尝试公网入房';
         });
       }
     } catch (error) {
@@ -204,6 +205,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
     String? id = room?.id;
     String? name = room?.name;
     String? directHost;
+    var admissionFinished = false;
 
     Future<String> openDirect(WifiP2pPeer target) async {
       final info = await WifiDirectManager.instance.connectAndWait(
@@ -252,42 +254,39 @@ class _FusionHomePageState extends State<FusionHomePage> {
       };
       session.attachTransport(transport, reconnect: transport.reconnect);
       await transport.start(session);
-      var connected = false;
-      for (final route in room?.local ?? <DiscoveredRoom>[]) {
-        if (await transport.connectLocal(
-          route.hostAddress.address,
-          port: route.port,
-        )) {
-          connected = true;
-          break;
-        }
-      }
-      // Use an existing route first. Public entrants automatically negotiate
-      // nearby Wi-Fi after admission, without another invite dialog.
-      if (!connected && room?.cloud == true) {
-        connected = await transport.connectCloud();
-      }
-      if (!connected && directHost != null) {
-        connected = await transport.connectLocal(directHost);
-      }
-      if (!connected) {
-        for (final route in room?.direct ?? <WifiP2pPeer>[]) {
-          try {
-            directHost = await openDirect(route);
-            connected = await transport.connectLocal(directHost);
-            if (connected) break;
-          } catch (_) {
-            if (ownsGroup) await WifiDirectManager.instance.removeGroup();
-            ownsGroup = false;
-          }
-        }
-      }
+      final candidates = <Future<bool> Function()>[
+        for (final route in room?.local ?? <DiscoveredRoom>[])
+          () => transport.connectLocal(
+            route.hostAddress.address,
+            port: route.port,
+            applePeerService: route.applePeerService,
+          ),
+        if (directHost != null) () => transport.connectLocal(directHost!),
+        for (final route in room?.direct ?? <WifiP2pPeer>[])
+          () async {
+            try {
+              final host = await openDirect(route);
+              if (admissionFinished) return false;
+              return await transport.connectLocal(host);
+            } catch (_) {
+              if (ownsGroup) await WifiDirectManager.instance.removeGroup();
+              ownsGroup = false;
+              return false;
+            }
+          },
+      ];
+      final connected = await FusionRouteRace.connect(
+        local: candidates,
+        cloud: room?.cloud == true ? transport.connectCloud : null,
+        finished: () => admissionFinished || !mounted,
+      );
       if (!connected) throw const SocketException('No route');
       final joined = session.stateStream
           .firstWhere((s) => s == RoomState.inRoom)
           .timeout(const Duration(seconds: 10));
       await session.joinRoom(startAudio: false);
       await joined;
+      admissionFinished = true;
       if (!mounted) {
         await session.dispose();
         return;
@@ -295,6 +294,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
       transport.enableWifi(invite);
       Navigator.pop(context, (session, name ?? '融合房'));
     } catch (_) {
+      admissionFinished = true;
       await session?.dispose();
       if (ownsGroup) await WifiDirectManager.instance.removeGroup();
       if (mounted) {
