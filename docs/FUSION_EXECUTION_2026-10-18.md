@@ -9,7 +9,7 @@
 | A：iOS 融合房 ApplePeer、服务器入房兜底 | 已实现，Android 同步共享逻辑 | 自动验证通过；17 Pro / XR 无共同 AP 的实际发现与通话待真机 |
 | B：融合 BLE 发现及受保护控制链路 | 尚未接入正式融合房 | 等 Nearby 对照实验结果再确定适配路径 |
 | C：Android 提供网络、iOS 加入及链路迁移 | 尚未接入正式融合房 | 需实际签名能力、系统确认、接口和并发网络验收 |
-| D：Nearby 原型对照 | 独立 Android / iOS 原型已迭代到 0.1.1 | 0.1.0 单向跨平台发现和传输通过，反向发现及重复连接未通过；0.1.1 待复测 |
+| D：Nearby 原型对照 | 独立 Android / iOS 原型已迭代到 0.1.2 | 0.1.1 反向发现及稳定性仍未通过；0.1.2 待复测 |
 
 用户确认两台安卓机均有 Google Play，因而先提供 Nearby 原型。正式应用本次没有引入 Nearby SDK，也没有提前改变免费账号 iPhone 安装所需的 entitlement。未升级正式版版本号，未发布新 tag。
 
@@ -68,3 +68,12 @@
 上轮阶段 A 的 GitHub Android / iOS Actions 均已成功。0.1.1 的回归验证及真机复测流程见 [Nearby 说明](../experiments/nearby/README.md)。本次不修改正式应用版本，不发布正式 tag。
 
 0.1.1 最终本地检查：Android Debug APK 构建通过，JVM 回归 5/5、Lint 0；Swift 传输回归通过，iOS Release 真机架构未签名构建通过。正式应用源码未改，沿用上轮已通过的检查。
+
+
+## Nearby 0.1.1 复测失败与后续边界
+
+用户再次确认：iOS 仍无法发现 Android；Android 可发现 iOS，但连接不久即断开；Android ↔ Android 约 30–40 KiB/s，重复配对/传输仍有失败。`quality is not a medium identifier` 是我们添加的普通质量事件说明，不是 SDK 错误或断开原因；0.1.2 已改为中文分类信息。
+
+0.1.2 针对固定 Swift SDK 停止广播可能拆除 BLE 服务的风险，取消连接成功后的停止发布操作，保留发布/监听服务直至退房式清理；加入默认 BLE 基线/不切网模式、断开后旧端点清理、连接/空闲时间及一键复制诊断。该版本 Android 构建、5 项 JVM 回归、Lint 0、Swift 回归和 iOS Release 构建均通过。无线故障未宣称已修复，需结合两端断开日志复核。
+
+执行边界调整：Nearby 暂不满足作为正式跨平台发现/承载的验收条件，保留为独立候选；阶段 B/C 不再以 Nearby 成功为唯一前提。正式方案继续沿用自有 BLE 的发现/受保护控制通道方向，保留 Android 原生 Wi-Fi Direct、iOS ApplePeer、同网和服务器目录/中继；网络升级仍需系统确认及实际能力校验。本轮未将实验引入正式应用，也未发布正式 tag。

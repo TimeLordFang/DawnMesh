@@ -19,6 +19,7 @@ import SwiftUI
 import NearbyConnections
 import NearbyCoreAdapter
 import CoreLocation
+import UIKit
 
 @main
 struct NearbyProbeApp: App {
@@ -29,10 +30,15 @@ struct NearbyProbeApp: App {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("独立 Nearby 原型；不加入正式融合房。双方需核对配对码。")
-                        Text("原型 0.1.1")
+                        Text("原型 0.1.2")
                         Text(model.status).textSelection(.enabled)
+                        Toggle("BLE 基线模式：仅测试蓝牙，不升级 Wi-Fi", isOn: Binding(
+                            get: { model.bleBaseline },
+                            set: { model.bleBaseline = $0; if $0 { model.allowHotspot = false } }
+                        )).disabled(model.active)
                         if model.hotspotBuild {
                             Toggle("允许为高速连接切换 Wi-Fi", isOn: $model.allowHotspot)
+                                .disabled(model.active || model.bleBaseline)
                         } else {
                             Text("此构建测试蓝牙、同网 Wi-Fi 与苹果点对点；热点升级需另用匹配的签名能力构建。")
                                 .font(.footnote)
@@ -45,6 +51,7 @@ struct NearbyProbeApp: App {
                         Button("测试 32 KiB 双向完整性与往返速率", action: model.probe)
                             .disabled(model.remote == nil || model.testing)
                         Button("停止并断开", role: .destructive, action: model.stop)
+                        Button("复制诊断") { UIPasteboard.general.string = "Nearby Probe 0.1.2\n" + model.diagnostics }
                         Text(model.diagnostics).font(.footnote).textSelection(.enabled)
                     }.padding()
                 }.navigationTitle("Nearby Probe")
@@ -68,6 +75,7 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     @Published var remote: String?
     @Published var testing = false
     @Published var allowHotspot = false
+    @Published var bleBaseline = true
     @Published var diagnostics = ""
     #if DAWNMESH_NEARBY_HOTSPOT
     let hotspotBuild = true
@@ -80,13 +88,17 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     private let location = CLLocationManager()
     private var permissionAction: (() -> Void)?
     private var verification: ((Bool) -> Void)?
-    private var active = false
+    @Published private(set) var active = false
     private var pending = Set<String>()
     private var epoch: UInt64 = 0
     private var ledger = ProbeLedger()
     private var notes = [String]()
     private var teardown = DispatchGroup()
     private var resetFailure: Error?
+    private var sessionMediums: Set<Medium> = [.ble]
+    private let appStarted = ProcessInfo.processInfo.systemUptime
+    private var connectedAt: TimeInterval = 0
+    private var lastDataAt: TimeInterval = 0
     private var chunk = -1
     private var token: UInt32 = 0
     private var started = Date()
@@ -99,23 +111,25 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         manager.delegate = self; advertiser.delegate = self; discoverer.delegate = self
         location.delegate = self
     }
-    private func note(_ message: String) {
-        notes.append(String(message.prefix(220)))
-        if notes.count > 12 { notes.removeFirst() }
+    private func note(_ message: String, severity: String = "信息") {
+        let age = Int(ProcessInfo.processInfo.systemUptime - appStarted)
+        notes.append("[\(severity)] +\(age)s " + String(message.prefix(220)))
+        if notes.count > 60 { notes.removeFirst() }
         diagnostics = notes.joined(separator: "\n")
     }
     private func failure(_ operation: String, _ error: Error) {
         let value = error as NSError
         let description = "\(operation)：\(value.domain) / \(value.code)"
-        status = description; note(description)
+        status = description; note(description, severity: "错误")
     }
     private var mediums: Set<Medium> {
+        if bleBaseline { return [.ble] }
         var values: Set<Medium> = [.ble, .wifiLAN, .awdl]
         if hotspotBuild && allowHotspot { values.insert(.wifiHotspot) }
         return values
     }
     private func permitted(_ action: @escaping () -> Void) {
-        if !hotspotBuild || !allowHotspot { action(); return }
+        if bleBaseline || !hotspotBuild || !allowHotspot { action(); return }
         switch location.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse: action()
         case .notDetermined: permissionAction = action; location.requestWhenInUseAuthorization()
@@ -132,6 +146,8 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     func discover() { permitted { [weak self] in self?.restart(advertise: false) } }
     private func restart(advertise: Bool) {
         stop(); let run = epoch
+        sessionMediums = mediums
+        note("开始\(advertise ? "发布" : "发现")；BLE基线=\(bleBaseline)")
         status = "正在等待上一会话清理完成…"
         teardown.notify(queue: .main) { [weak self] in
             guard let self = self, self.epoch == run else { return }
@@ -144,15 +160,15 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
                     else { self.status = advertise ? "正在发布；等待另一台设备选择" : "正在发现；请选择设备" }
                 }
             }
-            if advertise { self.advertiser.startAdvertising(using: Data("iOS Probe".utf8), mediums: self.mediums, completionHandler: completion) }
-            else { self.discoverer.startDiscovery(mediums: self.mediums, completionHandler: completion) }
+            if advertise { self.advertiser.startAdvertising(using: Data("iOS Probe".utf8), mediums: self.sessionMediums, completionHandler: completion) }
+            else { self.discoverer.startDiscovery(mediums: self.sessionMediums, completionHandler: completion) }
         }
     }
     func connect(_ endpoint: String) {
         guard active, remote == nil, pending.isEmpty else { return }
         pending.insert(endpoint)
         let run = epoch
-        discoverer.requestConnection(to: endpoint, using: Data("iOS Probe".utf8), mediums: mediums) { [weak self] error in
+        discoverer.requestConnection(to: endpoint, using: Data("iOS Probe".utf8), mediums: sessionMediums) { [weak self] error in
             guard let self = self, self.active, self.epoch == run else { return }
             if let error = error, self.pending.remove(endpoint) != nil { self.failure("连接", error) }
         }
@@ -180,14 +196,20 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         case .connected:
             if remote == endpointID { return }
             guard active, pending.remove(endpointID) != nil else { manager.disconnect(from: endpointID); return }
-            remote = endpointID; discoverer.stopDiscovery(); advertiser.stopAdvertising()
-            status = "已配对；实际介质由 SDK 选择。"; note("Connected; scan/advertise stopped")
+            remote = endpointID; connectedAt = ProcessInfo.processInfo.systemUptime; lastDataAt = connectedAt
+            discoverer.stopDiscovery()
+            // stopAdvertising also removes the SDK's BLE listening service.
+            // Keep that service alive until full session teardown instead.
+            status = "已配对；可测试稳定性。"; note("已连接；停止发现，保留发布服务")
         case .disconnected, .rejected:
             let wasPending = pending.remove(endpointID) != nil
             if challenge?.id == endpointID { verify(false) }
             if remote == endpointID || wasPending {
-                if remote == endpointID { remote = nil }
-                cancelProbe(); if active { status = "连接已断开或被拒绝" }
+                let now = ProcessInfo.processInfo.systemUptime
+                let age = remote == endpointID ? Int((now - connectedAt) * 1000) : 0
+                let idle = remote == endpointID ? Int((now - lastDataAt) * 1000) : 0
+                note("SDK连接断开或拒绝；连接\(age)ms；数据空闲\(idle)ms；未提供具体原因", severity: "事件")
+                stop(); status = "SDK 报告连接断开或拒绝，未提供具体原因；请重新发布或发现"
             }
         case .connecting: if active && pending.contains(endpointID) { status = "正在连接，等待双方确认" }
         }
@@ -223,6 +245,7 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         guard active, endpointID == remote, data.count == 1035 else { return }
         var bytes = [UInt8](data)
         guard Array(bytes[0..<4]) == [68, 77, 80, 49] else { return }
+        lastDataAt = ProcessInfo.processInfo.systemUptime
         let index = Int(bytes[5]) * 256 + Int(bytes[6])
         guard (0..<32).contains(index) else { return }
         if bytes[4] == 1 {
@@ -264,12 +287,13 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         case .success: ledger.settled(payloadID)
         case .failure, .canceled:
             let relevant = testing && ledger.failed(payloadID, run: token, sequence: chunk)
-            note("Payload failed/canceled; active request=\(relevant)")
+            note("Payload failed/canceled; active request=\(relevant); seq=\(chunk)", severity: relevant ? "错误" : "信息")
             if relevant { cancelProbe(); status = "本轮请求传输失败；可重试或停止后重新连接" }
         case .progress: break
         }
     }
     func stop() {
+        if active { note("本机清理会话与缓存端点") }
         epoch &+= 1; active = false; permissionAction = nil; verify(false); cancelProbe()
         pending.removeAll()
         remote = nil; found.removeAll(); status = "已停止"

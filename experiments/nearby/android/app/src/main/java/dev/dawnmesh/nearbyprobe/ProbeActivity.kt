@@ -3,6 +3,8 @@ package dev.dawnmesh.nearbyprobe
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -44,6 +46,12 @@ class ProbeActivity : Activity() {
     private var sentAt = 0L
     private var maximumRtt = 0L
     private var watchdog: Runnable? = null
+    private val appStarted = SystemClock.elapsedRealtime()
+    private var connectedAt = 0L
+    private var lastDataAt = 0L
+    private var lastQuality: Int? = null
+    private var sessionLowPower = true
+    private var sessionConnectionType = ConnectionType.NON_DISRUPTIVE
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -52,8 +60,13 @@ class ProbeActivity : Activity() {
         diagnostics = TextView(this).apply { setTextIsSelectable(true); textSize = 12f }
         disruptive = CheckBox(this).apply { text = getString(R.string.disruptive) }
         bleAdvertising = CheckBox(this).apply { text = getString(R.string.ble_advertising); isChecked = true }
+        disruptive.isEnabled = false
+        bleAdvertising.setOnCheckedChangeListener { _, checked ->
+            if (checked) disruptive.isChecked = false
+            disruptive.isEnabled = !active && !checked
+        }
         endpoints = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        layout.addView(TextView(this).apply { text = getString(R.string.app_title, "0.1.1"); textSize = 22f })
+        layout.addView(TextView(this).apply { text = getString(R.string.app_title, "0.1.2"); textSize = 22f })
         layout.addView(status); layout.addView(disruptive); layout.addView(bleAdvertising)
         button(getString(R.string.advertise)) { permitted { restart(true) } }
         button(getString(R.string.discover)) { permitted { restart(false) } }
@@ -64,6 +77,9 @@ class ProbeActivity : Activity() {
             next(currentEpoch)
         }
         button(getString(R.string.stop)) { stop(); status.text = getString(R.string.stopped) }
+        button(getString(R.string.copy_diagnostics)) {
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Nearby Probe", "Nearby Probe 0.1.2\n" + notes.joinToString("\n")))
+        }
         layout.addView(endpoints); layout.addView(diagnostics)
         setContentView(ScrollView(this).apply { addView(layout) })
         note("${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}")
@@ -71,32 +87,36 @@ class ProbeActivity : Activity() {
     private var currentEpoch = 0L
     private fun live(epoch: Long) = active && epochs.accepts(epoch)
     private fun button(label: String, action: () -> Unit) { layout.addView(Button(this).apply { text = label; setOnClickListener { action() } }) }
-    private fun note(message: String) {
-        if (notes.size >= 12) notes.removeFirst()
-        notes.addLast(message.take(220)); diagnostics.text = notes.joinToString("\n")
+    private fun note(message: String, severity: String = "信息") {
+        if (notes.size >= 60) notes.removeFirst()
+        notes.addLast("[$severity] +${(SystemClock.elapsedRealtime() - appStarted) / 1000}s ${message.take(220)}")
+        diagnostics.text = notes.joinToString("\n")
     }
     private fun failure(operation: String, error: Exception) {
         val detail = if (error is ApiException) "${error.statusCode} ${ConnectionsStatusCodes.getStatusCodeString(error.statusCode)}" else error.javaClass.simpleName
         status.text = getString(R.string.operation_error, operation, detail)
-        note("$operation: $detail") // No pairing codes, credentials or endpoint IDs.
+        note("$operation: $detail", "错误") // No pairing codes, credentials or endpoint IDs.
     }
-    private fun connectionType() = if (disruptive.isChecked) ConnectionType.DISRUPTIVE else ConnectionType.BALANCED
+    private fun connectionType() = if (!bleAdvertising.isChecked && disruptive.isChecked) ConnectionType.DISRUPTIVE else ConnectionType.NON_DISRUPTIVE
     private fun restart(advertise: Boolean) {
         stop()
         currentEpoch = epochs.advance(); val epoch = currentEpoch
+        sessionLowPower = bleAdvertising.isChecked; sessionConnectionType = connectionType()
+        bleAdvertising.isEnabled = false; disruptive.isEnabled = false
         active = true; status.text = getString(R.string.resetting)
+        note("开始${if (advertise) "发布" else "发现"}；lowPower=$sessionLowPower；connectionType=$sessionConnectionType")
         // The public Android stop APIs are asynchronous void calls. Serialize
         // starts, allow teardown to settle, and reject all prior callbacks.
         main.postDelayed({
             if (!live(epoch)) return@postDelayed
             if (advertise) {
                 val options = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_POINT_TO_POINT)
-                    .setLowPower(bleAdvertising.isChecked).setConnectionType(connectionType()).build()
+                    .setLowPower(sessionLowPower).setConnectionType(sessionConnectionType).build()
                 client.startAdvertising("Android Probe", SERVICE, lifecycle(epoch), options)
-                    .addOnSuccessListener { if (live(epoch)) { status.text = getString(R.string.advertising); note("Advertising; BLE-only=${bleAdvertising.isChecked}") } }
+                    .addOnSuccessListener { if (live(epoch)) { status.text = getString(R.string.advertising); note("发布已启动") } }
                     .addOnFailureListener { if (live(epoch)) failure("发布", it) }
             } else {
-                client.startDiscovery(SERVICE, discovery(epoch), DiscoveryOptions.Builder().setStrategy(Strategy.P2P_POINT_TO_POINT).build())
+                client.startDiscovery(SERVICE, discovery(epoch), DiscoveryOptions.Builder().setStrategy(Strategy.P2P_POINT_TO_POINT).setLowPower(sessionLowPower).build())
                     .addOnSuccessListener { if (live(epoch)) status.text = getString(R.string.discovering) }
                     .addOnFailureListener { if (live(epoch)) failure("发现", it) }
             }
@@ -127,7 +147,7 @@ class ProbeActivity : Activity() {
                     if (!live(epoch) || remote != null || pending.isNotEmpty()) return@setOnClickListener
                     pending.add(id)
                     client.requestConnection("Android Probe", id, lifecycle(epoch),
-                        ConnectionOptions.Builder().setLowPower(false).setConnectionType(connectionType()).build())
+                        ConnectionOptions.Builder().setLowPower(sessionLowPower).setConnectionType(sessionConnectionType).build())
                         .addOnFailureListener { if (live(epoch) && pending.remove(id)) failure("请求连接", it) }
                 }
             })
@@ -158,20 +178,27 @@ class ProbeActivity : Activity() {
             if (!pending.remove(id)) { if (resolution.status.isSuccess && remote != id) client.disconnectFromEndpoint(id); return }
             clearPairDialog(id)
             if (resolution.status.isSuccess) {
-                remote = id; client.stopDiscovery(); client.stopAdvertising()
-                status.text = getString(R.string.connected); note("Connected; scan/advertise stopped")
+                remote = id; connectedAt = SystemClock.elapsedRealtime(); lastDataAt = connectedAt; lastQuality = null
+                client.stopDiscovery()
+                // Keep the publisher/listening service alive until explicit
+                // teardown. The Swift SDK removes BLE services when stopped.
+                status.text = getString(R.string.connected); note("已连接；停止发现，保留发布服务")
             } else {
                 status.text = getString(R.string.connection_status, resolution.status.statusCode)
                 note("Connection: ${resolution.status.statusCode} ${ConnectionsStatusCodes.getStatusCodeString(resolution.status.statusCode)}")
             }
         }
         override fun onBandwidthChanged(id: String, info: BandwidthInfo) {
-            if (live(epoch) && remote == id) note("SDK bandwidth quality=${info.quality}; quality is not a medium identifier")
+            if (live(epoch) && remote == id) { lastQuality = info.quality; note("SDK 带宽质量等级=${info.quality}（不是错误，也不表示 Wi-Fi）") }
         }
         override fun onDisconnected(id: String) {
             if (!live(epoch)) return
             pending.remove(id); clearPairDialog(id)
-            if (remote == id) { remote = null; cancelProbe(); status.text = getString(R.string.disconnected); note("Disconnected") }
+            if (remote == id) {
+                val now = SystemClock.elapsedRealtime()
+                note("SDK连接断开；连接${now - connectedAt}ms；数据空闲${now - lastDataAt}ms；quality=$lastQuality；原因未由SDK提供", "事件")
+                stop(); status.text = getString(R.string.disconnected)
+            }
         }
     }
     private fun payloads(epoch: Long) = object : PayloadCallback() {
@@ -179,6 +206,7 @@ class ProbeActivity : Activity() {
             if (!live(epoch) || id != remote) return
             val bytes = payload.asBytes()?.copyOf() ?: run { client.cancelPayload(payload.id); payload.close(); return }
             if (bytes.size != 1035 || !bytes.copyOfRange(0, 4).contentEquals(byteArrayOf(68, 77, 80, 49))) return
+            lastDataAt = SystemClock.elapsedRealtime()
             val index = ((bytes[5].toInt() and 255) shl 8) or (bytes[6].toInt() and 255)
             if (index !in 0..31) return
             if (bytes[4] == 1.toByte()) {
@@ -204,7 +232,7 @@ class ProbeActivity : Activity() {
                 PayloadTransferUpdate.Status.SUCCESS -> ledger.settled(update.payloadId)
                 PayloadTransferUpdate.Status.FAILURE, PayloadTransferUpdate.Status.CANCELED -> {
                     val relevant = chunk >= 0 && ledger.failed(update.payloadId, runToken, chunk)
-                    note("Payload status=${update.status}; active request=$relevant")
+                    note("Payload status=${update.status}; active request=$relevant; seq=$chunk", if (relevant) "错误" else "信息")
                     if (relevant) { cancelProbe(); status.text = getString(R.string.transfer_error) }
                 }
             }
@@ -234,7 +262,9 @@ class ProbeActivity : Activity() {
         if (pairEndpoint == id) { pairDialog?.dismiss(); pairDialog = null; pairEndpoint = null }
     }
     private fun stop() {
+        if (active) note("本机清理会话与缓存端点")
         active = false; currentEpoch = epochs.advance(); permissionAction = null
+        bleAdvertising.isEnabled = true; disruptive.isEnabled = !bleAdvertising.isChecked
         pairDialog?.dismiss(); pairDialog = null; pairEndpoint = null
         cancelProbe(); pending.clear(); remote = null; found.clear(); endpoints.removeAllViews()
         client.stopDiscovery(); client.stopAdvertising(); client.stopAllEndpoints()

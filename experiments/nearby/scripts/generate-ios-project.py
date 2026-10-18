@@ -17,7 +17,7 @@ info = {
     "CFBundleIdentifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
     "CFBundleExecutable": "$(EXECUTABLE_NAME)",
     "CFBundleName": "DawnMesh Nearby Probe", "CFBundlePackageType": "APPL",
-    "CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "2",
+    "CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
     "UILaunchScreen": {}, "LSRequiresIPhoneOS": True,
     "NSBluetoothAlwaysUsageDescription": "验证与附近安卓和 iPhone 的连接。",
     "NSLocalNetworkUsageDescription": "验证附近连接的 Wi-Fi 数据路径。",

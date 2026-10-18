@@ -1,7 +1,8 @@
 <resources>
     <string name="intro">独立 Nearby 原型；不加入正式融合房。双方需核对配对码。</string>
     <string name="disruptive">允许为高速连接切换 Wi-Fi（可能离开原网络）</string>
-    <string name="ble_advertising">仅用 BLE 发布以测试 iPhone 发现（修改后重新发布）</string>
+    <string name="ble_advertising">低功耗基线：BLE 发现、优先 BLE 连接，不切换 Wi-Fi</string>
+    <string name="copy_diagnostics">复制诊断</string>
     <string name="resetting">正在清理上一会话并重新启动…</string>
     <string name="operation_error">%1$s失败：%2$s；可停止后重新发布或发现</string>
     <string name="app_name">DawnMesh Nearby Probe</string>
@@ -19,7 +20,7 @@
     <string name="accept">一致，连接</string>
     <string name="reject">拒绝</string>
     <string name="connected">已配对；可测试数据。实际介质由 SDK 选择。</string>
-    <string name="disconnected">对端已断开</string>
+    <string name="disconnected">SDK 报告连接断开，未提供具体原因；请重新发布或发现</string>
     <string name="integrity_error">数据完整性校验失败</string>
     <string name="transfer_error">传输失败，请重试</string>
     <string name="timeout">等待回包超时</string>
