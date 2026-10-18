@@ -9,7 +9,7 @@
 | A：iOS 融合房 ApplePeer、服务器入房兜底 | 已实现，Android 同步共享逻辑 | 自动验证通过；17 Pro / XR 无共同 AP 的实际发现与通话待真机 |
 | B：融合 BLE 发现及受保护控制链路 | 尚未接入正式融合房 | 等 Nearby 对照实验结果再确定适配路径 |
 | C：Android 提供网络、iOS 加入及链路迁移 | 尚未接入正式融合房 | 需实际签名能力、系统确认、接口和并发网络验收 |
-| D：Nearby 原型对照 | 独立 Android / iOS 应用均已实现并构建 | 无共同 AP 的实际发现、配对和数据传输待真机 |
+| D：Nearby 原型对照 | 独立 Android / iOS 原型已迭代到 0.1.1 | 0.1.0 单向跨平台发现和传输通过，反向发现及重复连接未通过；0.1.1 待复测 |
 
 用户确认两台安卓机均有 Google Play，因而先提供 Nearby 原型。正式应用本次没有引入 Nearby SDK，也没有提前改变免费账号 iPhone 安装所需的 entitlement。未升级正式版版本号，未发布新 tag。
 
@@ -48,3 +48,23 @@
 3. [安装 Nearby 原型并执行设备矩阵](../experiments/nearby/README.md)。免费 Apple 账号先用默认 Debug；有匹配热点能力的 profile 后再测 HotspotDebug。
 
 这些结果决定阶段 B/C 是优先采用 Nearby 适配器，还是继续自有 BLE 引导与 Android 供网。无论选哪种方案，都需要保留已有身份、认证、媒体和服务器兼容，不能用原型配对替代正式房间准入。
+
+
+## Nearby 0.1.0 真机反馈与 0.1.1 迭代
+
+用户实测 iPhone 17 Pro（默认 Debug）、小米 15、一加 15T，断开共同 Wi-Fi，蜂窝保持开启：
+
+- iOS 发布 → Android 发现、配对和双向完整性通过：32 KiB 往返 7502 ms，最大 RTT 405 ms，往返有效率 8.5 KiB/s。
+- Android 发布 → iOS 未发现；尚未定位是广播介质、SDK 行为或扫描兼容问题。
+- Android ↔ Android 能发现和首次传输，约 120+ KiB/s；再次测试报告传输失败，重发/发现后出现缺少数值状态码的 ApiException，杀进程后恢复。
+- 正式 Android 的原有 Wi-Fi Direct 仍可使用。后续继续保留，不以 Nearby 作为 Android 互联的必要条件。
+
+默认 iOS 原型没有启用 WebRTC 或业务服务器中继，其允许介质仅为 BLE、LAN、AWDL（热点配置才另加 Wi-Fi Hotspot）。蜂窝开启不会为其增加公网承载适配器；仅凭有效率不能推断介质，当前尚未证明跨平台 Wi-Fi 升级。逐块回显的结果也不能直接作为单向链路带宽或多人语音容量。
+
+0.1.1 根据源码发现的缺口实施：失败回调按本轮 payload / 随机测试标识 / 序号隔离；连接生命周期隔离；配对后停止扫描和广播；iOS 等待完整 SDK 端点状态清理后重启；Android 停止后错开重启并显示具体 API 状态码。增加 BLE-only 发布对照开关，验证 Android → iOS 的发现问题，**不把该开关标记为已解决真机反向发现**。
+
+阶段 B/C 接入原则：统一逻辑房主身份与无线发布角色；可让 iOS 作为无线发布端而 Android 发起连接；保留 Android 原生 P2P、ApplePeer、同网及服务器路径。Nearby 只作为候选适配器。需要先通过重复传输、重复配对、反向发现和真实语音时延验收，再接入正式融合房。Wi-Fi 升级在不支持热点签名能力时保留手工入网路径。
+
+上轮阶段 A 的 GitHub Android / iOS Actions 均已成功。0.1.1 的回归验证及真机复测流程见 [Nearby 说明](../experiments/nearby/README.md)。本次不修改正式应用版本，不发布正式 tag。
+
+0.1.1 最终本地检查：Android Debug APK 构建通过，JVM 回归 5/5、Lint 0；Swift 传输回归通过，iOS Release 真机架构未签名构建通过。正式应用源码未改，沿用上轮已通过的检查。

@@ -9,6 +9,12 @@ elif [[ -n "${1:-}" ]]; then
   exit 2
 fi
 python3 "$dawnmesh_root/experiments/nearby/scripts/generate-ios-project.py"
+mkdir -p "$dawnmesh_root/artifacts/nearby"
+swiftc -DPROBE_REGRESSION -module-cache-path "$dawnmesh_root/artifacts/nearby/swift-regression-cache" \
+  "$dawnmesh_root/experiments/nearby/ios/NearbyProbeApp.swift" \
+  "$dawnmesh_root/experiments/nearby/tests/swift/main.swift" \
+  -o "$dawnmesh_root/artifacts/nearby/swift-regression"
+"$dawnmesh_root/artifacts/nearby/swift-regression"
 xcodebuild -project "$dawnmesh_root/experiments/nearby/ios/NearbyProbe.xcodeproj" \
   -scheme NearbyProbe -configuration "$dawnmesh_config" -destination 'generic/platform=iOS' \
   -derivedDataPath "$dawnmesh_root/artifacts/nearby/ios-derived" \

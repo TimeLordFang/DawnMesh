@@ -1,5 +1,23 @@
+import Foundation
+
+struct ProbeLedger {
+    private struct Request: Equatable { let run: UInt32; let sequence: Int }
+    private var requests = [Int64: Request]()
+    mutating func sent(_ id: Int64, run: UInt32, sequence: Int) { requests[id] = Request(run: run, sequence: sequence) }
+    mutating func settled(_ id: Int64) { requests.removeValue(forKey: id) }
+    mutating func acknowledged(run: UInt32, sequence: Int) {
+        requests = requests.filter { $0.value != Request(run: run, sequence: sequence) }
+    }
+    mutating func failed(_ id: Int64, run: UInt32, sequence: Int) -> Bool {
+        requests.removeValue(forKey: id) == Request(run: run, sequence: sequence)
+    }
+    mutating func clear() { requests.removeAll() }
+}
+
+#if !PROBE_REGRESSION
 import SwiftUI
 import NearbyConnections
+import NearbyCoreAdapter
 import CoreLocation
 
 @main
@@ -11,6 +29,7 @@ struct NearbyProbeApp: App {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("独立 Nearby 原型；不加入正式融合房。双方需核对配对码。")
+                        Text("原型 0.1.1")
                         Text(model.status).textSelection(.enabled)
                         if model.hotspotBuild {
                             Toggle("允许为高速连接切换 Wi-Fi", isOn: $model.allowHotspot)
@@ -26,6 +45,7 @@ struct NearbyProbeApp: App {
                         Button("测试 32 KiB 双向完整性与往返速率", action: model.probe)
                             .disabled(model.remote == nil || model.testing)
                         Button("停止并断开", role: .destructive, action: model.stop)
+                        Text(model.diagnostics).font(.footnote).textSelection(.enabled)
                     }.padding()
                 }.navigationTitle("Nearby Probe")
             }
@@ -48,6 +68,7 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     @Published var remote: String?
     @Published var testing = false
     @Published var allowHotspot = false
+    @Published var diagnostics = ""
     #if DAWNMESH_NEARBY_HOTSPOT
     let hotspotBuild = true
     #else
@@ -61,6 +82,11 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     private var verification: ((Bool) -> Void)?
     private var active = false
     private var pending = Set<String>()
+    private var epoch: UInt64 = 0
+    private var ledger = ProbeLedger()
+    private var notes = [String]()
+    private var teardown = DispatchGroup()
+    private var resetFailure: Error?
     private var chunk = -1
     private var token: UInt32 = 0
     private var started = Date()
@@ -72,6 +98,16 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         super.init()
         manager.delegate = self; advertiser.delegate = self; discoverer.delegate = self
         location.delegate = self
+    }
+    private func note(_ message: String) {
+        notes.append(String(message.prefix(220)))
+        if notes.count > 12 { notes.removeFirst() }
+        diagnostics = notes.joined(separator: "\n")
+    }
+    private func failure(_ operation: String, _ error: Error) {
+        let value = error as NSError
+        let description = "\(operation)：\(value.domain) / \(value.code)"
+        status = description; note(description)
     }
     private var mediums: Set<Medium> {
         var values: Set<Medium> = [.ble, .wifiLAN, .awdl]
@@ -92,26 +128,33 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways { action() }
         else { status = "位置授权未授予；热点升级未启动。" }
     }
-    func advertise() { permitted { [weak self] in
-        guard let self = self else { return }; self.stop(); self.active = true
-        self.advertiser.startAdvertising(using: Data("iOS Probe".utf8), mediums: self.mediums) { [weak self] error in
-            guard let self = self, self.active else { return }
-            self.status = error == nil ? "正在发布；等待另一台设备选择" : "发布失败：\(error!)"
+    func advertise() { permitted { [weak self] in self?.restart(advertise: true) } }
+    func discover() { permitted { [weak self] in self?.restart(advertise: false) } }
+    private func restart(advertise: Bool) {
+        stop(); let run = epoch
+        status = "正在等待上一会话清理完成…"
+        teardown.notify(queue: .main) { [weak self] in
+            guard let self = self, self.epoch == run else { return }
+            if let error = self.resetFailure { self.failure("清理上一会话", error); return }
+            self.active = true
+            let completion: (Error?) -> Void = { [weak self] error in
+                DispatchQueue.main.async {
+                    guard let self = self, self.active, self.epoch == run else { return }
+                    if let error = error { self.failure(advertise ? "发布" : "发现", error) }
+                    else { self.status = advertise ? "正在发布；等待另一台设备选择" : "正在发现；请选择设备" }
+                }
+            }
+            if advertise { self.advertiser.startAdvertising(using: Data("iOS Probe".utf8), mediums: self.mediums, completionHandler: completion) }
+            else { self.discoverer.startDiscovery(mediums: self.mediums, completionHandler: completion) }
         }
-    } }
-    func discover() { permitted { [weak self] in
-        guard let self = self else { return }; self.stop(); self.active = true
-        self.discoverer.startDiscovery(mediums: self.mediums) { [weak self] error in
-            guard let self = self, self.active else { return }
-            self.status = error == nil ? "正在发现；请选择设备" : "发现失败：\(error!)"
-        }
-    } }
+    }
     func connect(_ endpoint: String) {
         guard active, remote == nil, pending.isEmpty else { return }
         pending.insert(endpoint)
+        let run = epoch
         discoverer.requestConnection(to: endpoint, using: Data("iOS Probe".utf8), mediums: mediums) { [weak self] error in
-            guard let self = self, self.active else { return }
-            if let error = error, self.pending.remove(endpoint) != nil { self.status = "连接失败：\(error)" }
+            guard let self = self, self.active, self.epoch == run else { return }
+            if let error = error, self.pending.remove(endpoint) != nil { self.failure("连接", error) }
         }
     }
     func advertiser(_ advertiser: Advertiser, didReceiveConnectionRequestFrom endpointID: EndpointID,
@@ -124,7 +167,7 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         guard active, found.count < 32, context.count <= 131 else { return }
         found[endpointID] = String((String(data: context, encoding: .utf8) ?? "附近设备").prefix(48))
     }
-    func discoverer(_ discoverer: Discoverer, didLose endpointID: EndpointID) { found.removeValue(forKey: endpointID) }
+    func discoverer(_ discoverer: Discoverer, didLose endpointID: EndpointID) { if active { found.removeValue(forKey: endpointID) } }
     func connectionManager(_ connectionManager: ConnectionManager, didReceive verificationCode: String,
                            from endpointID: EndpointID, verificationHandler: @escaping (Bool) -> Void) {
         guard active, pending.contains(endpointID), verification == nil && remote == nil else { verificationHandler(false); return }
@@ -132,10 +175,13 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     }
     func verify(_ accepted: Bool) { let action = verification; verification = nil; challenge = nil; action?(accepted) }
     func connectionManager(_ connectionManager: ConnectionManager, didChangeTo state: ConnectionState, for endpointID: EndpointID) {
+        guard active else { return }
         switch state {
         case .connected:
+            if remote == endpointID { return }
             guard active, pending.remove(endpointID) != nil else { manager.disconnect(from: endpointID); return }
-            remote = endpointID; discoverer.stopDiscovery(); status = "已配对；实际介质由 SDK 选择。"
+            remote = endpointID; discoverer.stopDiscovery(); advertiser.stopAdvertising()
+            status = "已配对；实际介质由 SDK 选择。"; note("Connected; scan/advertise stopped")
         case .disconnected, .rejected:
             let wasPending = pending.remove(endpointID) != nil
             if challenge?.id == endpointID { verify(false) }
@@ -148,6 +194,7 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     }
     func probe() {
         guard remote != nil, !testing else { return }
+        ledger.clear()
         token = UInt32.random(in: 0...UInt32.max); chunk = 0
         testing = true; started = Date(); maxRTT = 0; next()
     }
@@ -157,37 +204,51 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
         bytes += [UInt8((token >> 24) & 255), UInt8((token >> 16) & 255), UInt8((token >> 8) & 255), UInt8(token & 255)]
         bytes += (0..<1024).map { UInt8(($0 + chunk) % 251) }
         sentAt = Date()
-        let expected = token; let sequence = chunk
+        let expected = token; let sequence = chunk; let run = epoch
         let timer = DispatchWorkItem { [weak self] in
-            guard let self = self, self.token == expected, self.chunk == sequence else { return }
+            guard let self = self, self.active, self.epoch == run, self.token == expected, self.chunk == sequence else { return }
             self.cancelProbe(); self.status = "等待回包超时"
         }
         watchdog = timer; DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timer)
-        _ = manager.send(Data(bytes), to: [endpoint]) { [weak self] error in
-            if error != nil { self?.cancelProbe(); self?.status = "发送失败" }
+        let payloadID = Int64.random(in: Int64.min...Int64.max)
+        ledger.sent(payloadID, run: expected, sequence: sequence)
+        _ = manager.send(Data(bytes), to: [endpoint], id: payloadID) { [weak self] error in
+            guard let self = self, self.active, self.epoch == run else { return }
+            if let error = error, self.testing, self.ledger.failed(payloadID, run: self.token, sequence: self.chunk) {
+                self.cancelProbe(); self.failure("发送", error)
+            }
         }
     }
     func connectionManager(_ connectionManager: ConnectionManager, didReceive data: Data, withID payloadID: PayloadID, from endpointID: EndpointID) {
-        guard endpointID == remote, data.count == 1035 else { return }
+        guard active, endpointID == remote, data.count == 1035 else { return }
         var bytes = [UInt8](data)
         guard Array(bytes[0..<4]) == [68, 77, 80, 49] else { return }
         let index = Int(bytes[5]) * 256 + Int(bytes[6])
         guard (0..<32).contains(index) else { return }
-        if bytes[4] == 1 { bytes[4] = 2; _ = manager.send(Data(bytes), to: [endpointID]); return }
+        if bytes[4] == 1 {
+            bytes[4] = 2; let run = epoch
+            _ = manager.send(Data(bytes), to: [endpointID]) { [weak self] error in
+                guard let self = self, self.active, self.epoch == run, let error = error else { return }
+                let value = error as NSError; self.note("Echo send: \(value.domain) / \(value.code)")
+            }
+            return
+        }
         let receivedToken = bytes[7..<11].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         guard testing, bytes[4] == 2, index == chunk, receivedToken == token else { return }
         guard (11..<bytes.count).allSatisfy({ bytes[$0] == UInt8(($0 - 11 + chunk) % 251) }) else {
             cancelProbe(); status = "数据完整性校验失败"; return
         }
+        ledger.acknowledged(run: token, sequence: chunk)
         maxRTT = max(maxRTT, Date().timeIntervalSince(sentAt) * 1000)
         watchdog?.cancel(); watchdog = nil; chunk += 1
         if chunk == 32 {
             let elapsed = max(0.001, Date().timeIntervalSince(started))
             status = String(format: "32 KiB 双向完整性通过；%.0f ms；最大 RTT %.0f ms；往返有效速率 %.1f KiB/s。此数值不证明使用了 Wi-Fi。", elapsed * 1000, maxRTT, 64 / elapsed)
+            note(String(format: "Probe passed: %.0f ms; max RTT %.0f ms", elapsed * 1000, maxRTT))
             cancelProbe()
         } else { next() }
     }
-    private func cancelProbe() { watchdog?.cancel(); watchdog = nil; chunk = -1; testing = false }
+    private func cancelProbe() { watchdog?.cancel(); watchdog = nil; chunk = -1; testing = false; ledger.clear() }
     func connectionManager(_ connectionManager: ConnectionManager, didReceive stream: InputStream,
                            withID payloadID: PayloadID, from endpointID: EndpointID, cancellationToken token: CancellationToken) {
         token.cancel(); stream.close()
@@ -198,15 +259,35 @@ final class ProbeModel: NSObject, ObservableObject, ConnectionManagerDelegate, A
     }
     func connectionManager(_ connectionManager: ConnectionManager, didReceiveTransferUpdate update: TransferUpdate,
                            from endpointID: EndpointID, forPayload payloadID: PayloadID) {
-        if case .failure = update, endpointID == remote { cancelProbe(); status = "传输失败，请重试" }
+        guard active, endpointID == remote else { return }
+        switch update {
+        case .success: ledger.settled(payloadID)
+        case .failure, .canceled:
+            let relevant = testing && ledger.failed(payloadID, run: token, sequence: chunk)
+            note("Payload failed/canceled; active request=\(relevant)")
+            if relevant { cancelProbe(); status = "本轮请求传输失败；可重试或停止后重新连接" }
+        case .progress: break
+        }
     }
     func stop() {
-        active = false; permissionAction = nil; verify(false); cancelProbe()
-        advertiser.stopAdvertising(); discoverer.stopDiscovery()
-        var connections = pending
-        if let endpoint = remote { connections.insert(endpoint) }
+        epoch &+= 1; active = false; permissionAction = nil; verify(false); cancelProbe()
         pending.removeAll()
-        for endpoint in connections { manager.disconnect(from: endpoint) }
         remote = nil; found.removeAll(); status = "已停止"
+        // Wait for both stop callbacks and clear SDK endpoint/strategy state.
+        // Serialize repeated stops so an older stop cannot kill a new session.
+        let previous = teardown; let barrier = DispatchGroup()
+        barrier.enter(); teardown = barrier
+        previous.notify(queue: .main) { [weak self] in
+            guard let self = self else { barrier.leave(); return }
+            let stops = DispatchGroup()
+            stops.enter(); self.advertiser.stopAdvertising { _ in stops.leave() }
+            stops.enter(); self.discoverer.stopDiscovery { _ in stops.leave() }
+            stops.notify(queue: .main) {
+                GNCCoreAdapter.shared.stopAllEndpoints { [weak self] error in
+                    DispatchQueue.main.async { self?.resetFailure = error; barrier.leave() }
+                }
+            }
+        }
     }
 }
+#endif
