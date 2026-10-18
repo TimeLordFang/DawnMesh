@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+.gradle/
+.kotlin/
+build/
+local.properties
+__pycache__/

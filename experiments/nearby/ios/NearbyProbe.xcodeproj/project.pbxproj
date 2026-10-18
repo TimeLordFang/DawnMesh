@@ -1,0 +1,25 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+A00000000000000000000001 = {isa = PBXProject; attributes = {LastUpgradeCheck = 2700; }; buildConfigurationList = A0000000000000000000000D; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = A00000000000000000000002; productRefGroup = A00000000000000000000003; projectDirPath = ""; packageReferences = (A0000000000000000000000A); targets = (A00000000000000000000004); };
+A00000000000000000000002 = {isa = PBXGroup; children = (A00000000000000000000007, A00000000000000000000003); sourceTree = "<group>"; };
+A00000000000000000000003 = {isa = PBXGroup; name = Products; children = (A00000000000000000000009); sourceTree = "<group>"; };
+A00000000000000000000004 = {isa = PBXNativeTarget; name = NearbyProbe; productName = NearbyProbe; productType = "com.apple.product-type.application"; buildConfigurationList = A0000000000000000000000E; buildPhases = (A00000000000000000000005, A00000000000000000000006); buildRules = (); dependencies = (); packageProductDependencies = (A0000000000000000000000B); productReference = A00000000000000000000009; };
+A00000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyProbeApp.swift; sourceTree = "<group>"; };
+A00000000000000000000009 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = NearbyProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+A00000000000000000000008 = {isa = PBXBuildFile; fileRef = A00000000000000000000007; };
+A0000000000000000000000C = {isa = PBXBuildFile; productRef = A0000000000000000000000B; };
+A00000000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000008); runOnlyForDeploymentPostprocessing = 0; };
+A00000000000000000000006 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A0000000000000000000000C); runOnlyForDeploymentPostprocessing = 0; };
+A0000000000000000000000A = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/google/nearby.git"; requirement = {kind = revision; revision = 1c1bcbe8e7c5d40597014789414a6a48c40294a2; }; };
+A0000000000000000000000B = {isa = XCSwiftPackageProductDependency; package = A0000000000000000000000A; productName = NearbyConnections; };
+A0000000000000000000000D = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000F, A00000000000000000000010, A00000000000000000000013, A00000000000000000000014); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+A0000000000000000000000F = {isa = XCBuildConfiguration; name = Debug; buildSettings = {CLANG_ENABLE_MODULES = YES;}; };
+A00000000000000000000010 = {isa = XCBuildConfiguration; name = Release; buildSettings = {CLANG_ENABLE_MODULES = YES;}; };
+A00000000000000000000013 = {isa = XCBuildConfiguration; name = HotspotDebug; buildSettings = {CLANG_ENABLE_MODULES = YES;}; };
+A00000000000000000000014 = {isa = XCBuildConfiguration; name = HotspotRelease; buildSettings = {CLANG_ENABLE_MODULES = YES;}; };
+A0000000000000000000000E = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000011, A00000000000000000000012, A00000000000000000000015, A00000000000000000000016); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+A00000000000000000000011 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Info.plist; PRODUCT_BUNDLE_IDENTIFIER = dev.dawnmesh.nearbyprobe; PRODUCT_NAME = NearbyProbe; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = "1,2";}; };
+A00000000000000000000012 = {isa = XCBuildConfiguration; name = Release; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Info.plist; PRODUCT_BUNDLE_IDENTIFIER = dev.dawnmesh.nearbyprobe; PRODUCT_NAME = NearbyProbe; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = "1,2";}; };
+A00000000000000000000015 = {isa = XCBuildConfiguration; name = HotspotDebug; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Info.plist; PRODUCT_BUNDLE_IDENTIFIER = dev.dawnmesh.nearbyprobe; PRODUCT_NAME = NearbyProbe; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_ENTITLEMENTS = Hotspot.entitlements; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DAWNMESH_NEARBY_HOTSPOT;}; };
+A00000000000000000000016 = {isa = XCBuildConfiguration; name = HotspotRelease; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Info.plist; PRODUCT_BUNDLE_IDENTIFIER = dev.dawnmesh.nearbyprobe; PRODUCT_NAME = NearbyProbe; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_ENTITLEMENTS = Hotspot.entitlements; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DAWNMESH_NEARBY_HOTSPOT;}; };
+}; rootObject = A00000000000000000000001; }

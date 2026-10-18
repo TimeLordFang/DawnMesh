@@ -154,15 +154,23 @@ class RoomAdmission {
           associatedData: id,
         );
         if (_closed || !Spake2Keys.equal(id, _attemptToken ?? token)) return;
+        final changedKey =
+            _trafficKey == null || !Spake2Keys.equal(_trafficKey!, key);
+        final nextCodec = changedKey
+            ? SecureFrameCodec(await SessionCipher.fromKey(key))
+            : _trafficCodec!;
+        // Key construction can yield too: a route retry must not let this old
+        // response replace the current attempt's codec or finish admission.
+        if (_closed || !Spake2Keys.equal(id, _attemptToken ?? token)) return;
         _ready = true;
         _clientKeys = null;
         // PAKE restores admission, not a new traffic-key epoch. Preserve both
         // replay windows and our nonce counter when the host returns the same
         // key. The session may temporarily clear its codec while reconnecting.
-        if (_trafficKey == null || !Spake2Keys.equal(_trafficKey!, key)) {
+        if (changedKey) {
           _trafficKey?.fillRange(0, _trafficKey!.length, 0);
           _trafficKey = Uint8List.fromList(key);
-          _trafficCodec = SecureFrameCodec(await SessionCipher.fromKey(key));
+          _trafficCodec = nextCodec;
         }
         if (!_closed) await onReady(_trafficCodec!);
       }

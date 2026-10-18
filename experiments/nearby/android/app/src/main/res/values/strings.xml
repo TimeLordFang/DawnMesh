@@ -1,0 +1,29 @@
+<resources>
+    <string name="intro">独立 Nearby 原型；不加入正式融合房。双方需核对配对码。</string>
+    <string name="disruptive">允许为高速连接切换 Wi-Fi（可能离开原网络）</string>
+    <string name="app_name">DawnMesh Nearby Probe</string>
+    <string name="advertise">发布此设备</string>
+    <string name="discover">发现附近设备</string>
+    <string name="advertising">正在发布；等待另一台设备选择</string>
+    <string name="discovering">正在发现；请选择设备</string>
+    <string name="probe">测试 32 KiB 双向完整性与往返速率</string>
+    <string name="stop">停止并断开</string>
+    <string name="stopped">已停止</string>
+    <string name="no_gms">Google Play services 不可用</string>
+    <string name="denied">权限未授予；可在系统设置允许后重试</string>
+    <string name="pair_title">核对双方配对码</string>
+    <string name="accept">一致，连接</string>
+    <string name="reject">拒绝</string>
+    <string name="connected">已配对；可测试数据。实际介质由 SDK 选择。</string>
+    <string name="disconnected">对端已断开</string>
+    <string name="integrity_error">数据完整性校验失败</string>
+    <string name="transfer_error">传输失败，请重试</string>
+    <string name="timeout">等待回包超时</string>
+    <string name="send_error">发送失败</string>
+    <string name="advertise_error">发布失败：%1$s</string>
+    <string name="discovery_error">发现失败：%1$s</string>
+    <string name="connection_error">连接失败：%1$s</string>
+    <string name="connection_status">连接未完成（%1$d）</string>
+    <string name="pair_message">%1$s\n\n%2$s\n\n仅当另一台设备显示相同代码时确认。</string>
+    <string name="probe_result">32 KiB 双向完整性通过；%1$d ms；最大 RTT %2$d ms；往返有效速率 %3$.1f KiB/s。此数值不证明使用了 Wi-Fi。</string>
+</resources>

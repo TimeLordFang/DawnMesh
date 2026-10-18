@@ -326,7 +326,7 @@ void main() {
 
   final integrationURL = Platform.environment['DAWNMESH_FUSION_TEST_URL'];
   test(
-    'real Go relay: offline host, online gateways, remote admission and uplink loss',
+    'real Go relay: stalled local admission, offline host, online gateways and uplink loss',
     () async {
       final server = ServerProfile(
         id: 'test',
@@ -355,8 +355,28 @@ void main() {
       expect(a.link.cloudConnected, true, reason: a.link.lastConnectionError);
       expect(b.link.cloudConnected, true, reason: b.link.lastConnectionError);
       final remote = await _node(room, invite, 4, server: server);
-      expect(await remote.link.connectCloud(), true);
+      // A reachable local socket is insufficient: its silent host must not
+      // prevent the actual Go relay from completing a fresh PAKE attempt.
+      final silent = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final silentSockets = <WebSocket>[];
+      silent.listen((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        silentSockets.add(socket);
+        socket.listen((_) {});
+      });
+      addTearDown(() async {
+        for (final socket in silentSockets) {
+          unawaited(socket.close());
+        }
+        await silent.close(force: true);
+      });
+      expect(
+        await remote.link.connectLocal('127.0.0.1', port: silent.port),
+        true,
+      );
       await remote.session.joinRoom(startAudio: false);
+      expect(remote.session.state, RoomState.connecting);
+      expect(await remote.link.connectCloud(), true);
       await _until(() => remote.session.state == RoomState.inRoom);
       await host.link.synchronize();
       await _until(() => remote.link.identity != null);

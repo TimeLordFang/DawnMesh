@@ -53,6 +53,29 @@ void main() {
     expect(offline.single.cloud, isFalse);
   });
   test(
+    'Apple endpoints keep separate routes despite the same loopback address',
+    () {
+      DiscoveredRoom apple(String endpoint) => DiscoveredRoom(
+        roomId: id,
+        roomName: '苹果融合房',
+        hostNickname: '房主',
+        hostAddress: InternetAddress.loopbackIPv4,
+        port: 8991,
+        memberCount: 2,
+        lastSeen: DateTime.now(),
+        applePeerService: endpoint,
+      );
+      final rooms = FusionRoomEntry.merge(
+        local: [apple('one'), apple('two'), apple('one')],
+        direct: [],
+        remote: [],
+      );
+      expect(rooms, hasLength(1));
+      expect(rooms.single.local.map((r) => r.applePeerService), ['one', 'two']);
+      expect(rooms.single.sources, '苹果点对点');
+    },
+  );
+  test(
     'identical names and unidentified legacy devices are never merged by guess',
     () {
       final rooms = FusionRoomEntry.merge(
