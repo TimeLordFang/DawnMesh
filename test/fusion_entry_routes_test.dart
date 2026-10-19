@@ -110,6 +110,72 @@ void main() {
     expect(closed, ['late-proxy']);
   });
 
+  test(
+    'a silent local handshake automatically advances to another local entry',
+    () async {
+      final identity = await FusionIdentity.create('离线备用入口');
+      final (host, server) = await node(identity, host: true);
+      final (guest, client) = await node(identity);
+      final blackhole = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final sockets = <WebSocket>[];
+      blackhole.listen((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        sockets.add(socket);
+        socket.listen((_) {});
+      });
+      addTearDown(() async {
+        for (final socket in sockets) {
+          unawaited(socket.close());
+        }
+        await blackhole.close(force: true);
+      });
+      var finished = false;
+      var fallbackCalls = 0;
+      expect(
+        await FusionRouteRace.connect(
+          local: [
+            () => client.connectLocal('127.0.0.1', port: blackhole.port),
+            () {
+              fallbackCalls++;
+              return client.connectLocal('127.0.0.1', port: server.boundPort);
+            },
+          ],
+          finished: () => finished,
+          localFallbackDelay: const Duration(milliseconds: 80),
+        ),
+        isTrue,
+      );
+      await guest.joinRoom(startAudio: false);
+      await until(() => guest.state == RoomState.inRoom);
+      finished = true;
+      expect(fallbackCalls, 1);
+      await guest.sendChat('一次选择后从备用入口入房');
+      await until(() => host.chatMessages.any((m) => m.text == '一次选择后从备用入口入房'));
+    },
+  );
+
+  test('successful admission cancels unnecessary local fallback', () async {
+    var finished = false;
+    var extraCalls = 0;
+    expect(
+      await FusionRouteRace.connect(
+        local: [
+          () async => true,
+          () async {
+            extraCalls++;
+            return true;
+          },
+        ],
+        finished: () => finished,
+        localFallbackDelay: const Duration(milliseconds: 20),
+      ),
+      isTrue,
+    );
+    finished = true;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(extraCalls, 0);
+  });
+
   test('cloud candidate rescues an indefinitely stalled local dial', () async {
     final local = Completer<bool>();
     var cloudCalls = 0;

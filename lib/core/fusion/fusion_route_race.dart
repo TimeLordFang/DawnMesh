@@ -8,6 +8,7 @@ abstract final class FusionRouteRace {
     Future<bool> Function()? cloud,
     bool Function()? finished,
     Duration cloudDelay = const Duration(milliseconds: 600),
+    Duration localFallbackDelay = const Duration(milliseconds: 1500),
   }) async {
     final result = Completer<bool>();
     var remaining = cloud == null ? 1 : 2;
@@ -25,15 +26,25 @@ abstract final class FusionRouteRace {
 
     unawaited(
       run(() async {
-        for (final candidate in local) {
-          if (done()) return false;
+        var connected = false;
+        for (var index = 0; index < local.length; index++) {
+          if (done()) return connected;
           try {
-            if (await candidate()) return true;
+            if (await local[index]()) {
+              connected = true;
+              if (!result.isCompleted) result.complete(true);
+              // A socket opening is not room admission. Keep the first route
+              // while another local endpoint can rescue a silent handshake.
+              if (finished == null) return true;
+              if (index + 1 < local.length) {
+                await Future<void>.delayed(localFallbackDelay);
+              }
+            }
           } catch (_) {
             /* Next. */
           }
         }
-        return false;
+        return connected;
       }),
     );
     if (cloud != null) {

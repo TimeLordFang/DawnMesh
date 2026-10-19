@@ -134,8 +134,21 @@ class _FusionHomePageState extends State<FusionHomePage> {
     await _loadProfiles();
   }
 
+  Future<RoomInvite?> _requestInvite({bool creating = false}) async {
+    if (_busy || !mounted) return null;
+    // Reserve the selected action before opening a modal. Discovery refreshes
+    // and repeated taps must not start another flow behind the invite dialog.
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final invite = await requestRoomInvite(context, creating: creating);
+    if (invite == null && mounted) setState(() => _busy = false);
+    return invite;
+  }
+
   Future<void> _create() async {
-    final invite = await requestRoomInvite(context, creating: true);
+    final invite = await _requestInvite(creating: true);
     if (invite == null || !mounted) return;
     setState(() {
       _busy = true;
@@ -194,7 +207,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
 
   Future<void> _join({FusionRoomEntry? room, WifiP2pPeer? peer}) async {
     if (_busy) return;
-    final invite = await requestRoomInvite(context);
+    final invite = await _requestInvite();
     if (invite == null || !mounted) return;
     setState(() {
       _busy = true;
@@ -344,7 +357,7 @@ class _FusionHomePageState extends State<FusionHomePage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '没有移动网络也能建房和加入。连接同一 Wi-Fi、热点或 Wi-Fi 直连后，凭四位码通话。任一成员连上服务器，就能为整组同步成员并连接远程队友。',
+            '同一 Wi-Fi 或热点下，安卓与 iOS 可互通；无路由器时，安卓之间使用 Wi-Fi Direct，iPhone 之间使用苹果点对点。跨系统且不在同一网络时，请使用双方可达的同一服务器。',
           ),
           const SizedBox(height: 16),
           FilledButton.icon(

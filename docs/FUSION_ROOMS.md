@@ -2,6 +2,14 @@
 
 本文对应 Android 1.1.0 / Server 0.3.0 正式版。请同步更新所有成员的客户端及服务端；本地物理帧仍保持 512 字节，长控制消息使用加密分片，旧客户端无法组装超过单帧的名单。
 
+## 当前连接范围
+
+Android 1.1.9 / iOS 1.0.8 保留同一 Wi-Fi、热点和服务器目录互通。无路由器时，Android 使用原生 Wi-Fi Direct，iOS 使用带 `includePeerToPeer` 的 Bonjour / Network.framework 苹果点对点；两种原生无线协议不能直接互联。跨系统且没有共同网络时，使用双方可达的同一服务器；完全离线且没有共同网络的跨系统自动直连暂缓。
+
+点击房间即进入邀请码输入，确认后自动执行连接及认证。已连通但认证无响应的本地入口不阻止下一入口或服务器兜底。iOS 继续支持手动输入同网房主地址。首次系统权限确认可能仍出现；无需额外 Nearby 配对。Nearby 原型、验证版适配器及其 SDK 依赖已移除。
+
+苹果点对点与 Android Wi-Fi Direct 的区别见 [Apple DTS 说明](https://developer.apple.com/forums/thread/12885)。Wi-Fi Aware 属于另一套需要双端实现及能力检查的协议；[Apple 支持设备](https://developer.apple.com/documentation/wifiaware)不包括 iPhone XR，[Android](https://developer.android.com/develop/connectivity/wifi/wifi-aware)还需检测硬件支持和当前可用性。不同设备的发现、射频与后台行为仍需真机验收。
+
 ## 使用方式
 
 首页有 Wi-Fi、蓝牙、公网对讲、融合房四种选择。公网房继续使用 LiveKit；融合房独立使用近场 Opus 加密帧与公网 WebSocket 中继。普通公网房忽略旧服务端的融合开关，配套新服务端也不再允许普通公网房启用旧融合。
