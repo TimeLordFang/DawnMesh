@@ -111,6 +111,9 @@ class FusionTransport extends RoomTransport
   Uint8List? _state;
   int _revision = 0;
   int _uploadedRevision = 0;
+  String? _publishedRoutes;
+  DateTime? _routesPublishedAt;
+  static const _announcementRefresh = Duration(seconds: 30);
   Future<void>? _stopTask;
   Future<void> Function()? onStop;
   String? _cloudError;
@@ -123,7 +126,8 @@ class FusionTransport extends RoomTransport
   final _socketNodes = <WebSocket, String>{};
   final _peerRoutes = <int, _FusionPeerRoute>{};
   Future<void>? _peerConnectTask;
-  final _dialing = <String>{};
+  final _dialing = <String, Future<bool>>{};
+  final _connectingClients = <HttpClient>{};
   bool _advertisingDirect = false;
   Future<bool>? _advertisingTask;
 
@@ -247,7 +251,19 @@ class FusionTransport extends RoomTransport
     return _dialLocal(target);
   }
 
-  Future<bool> _dialLocal(String target, {String? nodeId}) async {
+  Future<bool> _dialLocal(String target, {String? nodeId}) {
+    if (_stopped || _stopTask != null) return Future.value(false);
+    final pending = _dialing[target];
+    if (pending != null) return pending;
+    late final Future<bool> task;
+    task = _openLocal(target, nodeId: nodeId).whenComplete(() {
+      if (identical(_dialing[target], task)) _dialing.remove(target);
+    });
+    _dialing[target] = task;
+    return task;
+  }
+
+  Future<bool> _openLocal(String target, {String? nodeId}) async {
     if (_stopped) return false;
     if (nodeId != null &&
         _socketNodes.entries.any(
@@ -256,8 +272,7 @@ class FusionTransport extends RoomTransport
         )) {
       return true;
     }
-    if (_connectedTargets.containsKey(target)) return true;
-    if (!_dialing.add(target)) return false;
+    if (_connectedTargets[target]?.readyState == WebSocket.open) return true;
     String? proxyID;
     var attached = false;
     try {
@@ -280,11 +295,11 @@ class FusionTransport extends RoomTransport
         }
         endpoint = 'ws://127.0.0.1:$port/fusion/$roomId';
       }
-      final socket = await WebSocket.connect(
+      final socket = await _openSocket(
         endpoint,
         headers: {'X-Fusion-Node': _nodeId},
-        compression: CompressionOptions.compressionOff,
-      ).timeout(const Duration(seconds: 4));
+        timeout: const Duration(seconds: 8),
+      );
       if (_stopped) {
         await socket.close();
         return false;
@@ -294,11 +309,43 @@ class FusionTransport extends RoomTransport
       attached = true;
       _connectedTargets[target] = socket;
       return true;
-    } catch (_) {
+    } catch (error) {
+      lastConnectionError = '$error';
+      AppLog.warn('Fusion', 'Local connection unavailable: $error');
       return false;
     } finally {
       if (!attached && proxyID != null) await _closeAppleProxy(proxyID);
-      _dialing.remove(target);
+    }
+  }
+
+  Future<WebSocket> _openSocket(
+    String endpoint, {
+    required Map<String, String> headers,
+    required Duration timeout,
+  }) async {
+    if (_stopped) throw StateError('Fusion transport stopped');
+    final client = HttpClient()..connectionTimeout = timeout;
+    _connectingClients.add(client);
+    try {
+      final connecting = WebSocket.connect(
+        endpoint,
+        headers: headers,
+        compression: CompressionOptions.compressionOff,
+        customClient: client,
+      );
+      return await connecting.timeout(
+        timeout,
+        onTimeout: () {
+          // An upgrade can detach its socket just as the timer fires. Closing
+          // the HTTP client cancels pending work; this covers that final race.
+          connecting.then((lateSocket) => lateSocket.close()).ignore();
+          throw TimeoutException('Fusion WebSocket handshake', timeout);
+        },
+      );
+    } finally {
+      _connectingClients.remove(client);
+      // Successful upgrades have detached their socket from this client.
+      client.close(force: true);
     }
   }
 
@@ -353,14 +400,14 @@ class FusionTransport extends RoomTransport
     try {
       if (identity != null && _state != null && _stateIsFresh) await _upload();
       final uri = endpoint(server, '/rooms/$roomId/relay');
-      final socket = await WebSocket.connect(
+      final socket = await _openSocket(
         uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws').toString(),
         headers: {
           'Authorization': 'Bearer ${server.accessToken}',
           if (identity != null) 'X-Fusion-Key': identity!.relayToken,
         },
-        compression: CompressionOptions.compressionOff,
-      ).timeout(const Duration(seconds: 5));
+        timeout: const Duration(seconds: 5),
+      );
       if (_stopped) {
         await socket.close();
         return false;
@@ -380,6 +427,7 @@ class FusionTransport extends RoomTransport
   }
 
   void _attach(WebSocket socket, {required bool cloud, String? nodeId}) {
+    _publishedRoutes = null;
     if (!cloud) _local.add(socket);
     if (!cloud && nodeId != null) _socketNodes[socket] = nodeId;
     socket.pingInterval = const Duration(seconds: 5);
@@ -522,6 +570,15 @@ class FusionTransport extends RoomTransport
     _updateStatus();
   }
 
+  String _rosterFingerprint(RoomSession session) => jsonEncode([
+    for (final member in session.members)
+      [
+        member.memberId,
+        member.nickname,
+        base64Encode(member.sessionToken ?? []),
+      ],
+  ]);
+
   Future<void> _publishState({bool ended = false}) async {
     final session = _session;
     final signer = identity;
@@ -542,14 +599,14 @@ class FusionTransport extends RoomTransport
     await session.sendFusionControl(Uint8List.fromList([2, ..._state!]));
   }
 
-  Future<void> _tick() async {
+  Future<void> _tick({bool force = false}) async {
     if (_stopped || _ticking || _ending) return;
     _ticking = true;
     try {
       await _aware?.checkRole();
       if (_session?.state == RoomState.inRoom) await _publishState();
       if (_session?.hasFusionIdentity == true) {
-        await _announcePeerRoutes();
+        await _announcePeerRoutes(force: force);
         unawaited(_connectPeerRoutes());
       }
       // Only the creator advertises a joinable P2P group. Other members still
@@ -606,7 +663,7 @@ class FusionTransport extends RoomTransport
   }
 
   /// Publish a newly created room immediately, then keep it fresh periodically.
-  Future<void> synchronize() => _tick();
+  Future<void> synchronize() => _tick(force: true);
 
   bool get _stateIsFresh =>
       _state != null &&
@@ -614,7 +671,7 @@ class FusionTransport extends RoomTransport
               ByteData.sublistView(_state!).getUint64(0) <
           85000;
 
-  Future<void> _announcePeerRoutes() async {
+  Future<void> _announcePeerRoutes({bool force = false}) async {
     try {
       final networks = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -634,6 +691,23 @@ class FusionTransport extends RoomTransport
           .take(4)
           .toList();
       if (addresses.isEmpty || _stopped) return;
+      addresses.sort();
+      final routes = jsonEncode([
+        _rosterFingerprint(_session!),
+        boundPort,
+        addresses,
+      ]);
+      final previous = _routesPublishedAt;
+      final age = previous == null ? null : DateTime.now().difference(previous);
+      if (!force &&
+          routes == _publishedRoutes &&
+          age != null &&
+          !age.isNegative &&
+          age < _announcementRefresh) {
+        return;
+      }
+      _publishedRoutes = routes;
+      _routesPublishedAt = DateTime.now();
       await _session!.sendFusionControl(
         Uint8List.fromList([
           4,
@@ -773,6 +847,9 @@ class FusionTransport extends RoomTransport
       } catch (_) {}
     }
     _stopped = true;
+    for (final client in _connectingClients.toList()) {
+      client.close(force: true);
+    }
     await _aware?.close();
     await _advertisingTask;
     if (_advertisingDirect) {
@@ -794,6 +871,7 @@ class FusionTransport extends RoomTransport
     _ingress.clear();
     _local.clear();
     _socketNodes.clear();
+    _connectedTargets.clear();
     _peerRoutes.clear();
     _cloud = null;
     await _wifi?.close();

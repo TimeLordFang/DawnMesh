@@ -349,6 +349,8 @@ class RoomSession {
   int _pendingIncoming = 0;
   int _pendingOutgoing = 0;
   int _pendingAudioOutgoing = 0;
+  int _incomingBatchCount = 0;
+  int _outgoingBatchCount = 0;
   int _membershipTicks = 0;
   void Function(Frame frame, {bool realtime})? _transportSend;
 
@@ -717,6 +719,12 @@ class RoomSession {
     _pendingIncoming++;
     final next = _incomingQueue
         .then((_) async {
+          // Crypto futures may complete entirely in microtasks. Give sockets
+          // and timers a turn between bounded batches, preserving wire order.
+          if (++_incomingBatchCount >= 8) {
+            _incomingBatchCount = 0;
+            await Future<void>.delayed(Duration.zero);
+          }
           if (!_closed) {
             PipelineProbe.record(
               frame.type == FrameType.sealed
@@ -1746,6 +1754,10 @@ class RoomSession {
     if (realtime) _pendingAudioOutgoing++;
     final next = _outgoingQueue
         .then((_) async {
+          if (++_outgoingBatchCount >= 8) {
+            _outgoingBatchCount = 0;
+            await Future<void>.delayed(Duration.zero);
+          }
           if (!_closed) {
             if (diagnosticStartedAtMicros != null) {
               PipelineProbe.record(
