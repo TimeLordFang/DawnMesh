@@ -12,6 +12,7 @@ import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'avatar_frame.dart';
 import 'chat_image_bubble.dart';
+import 'voice_note_bubble.dart';
 
 /// Modal bottom sheet for in-memory room text chat.
 class RoomChatSheet extends StatefulWidget {
@@ -626,7 +627,16 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                                                             width: 0.6,
                                                           ),
                                                   ),
-                                                  child: msg.hasImage
+                                                  child: msg.hasVoiceNote
+                                                      ? VoiceNoteBubble(
+                                                          key: ValueKey(
+                                                            'voice-note-${msg.messageId}',
+                                                          ),
+                                                          message: msg,
+                                                          session:
+                                                              widget.session,
+                                                        )
+                                                      : msg.hasImage
                                                       ? ChatImageBubble(
                                                           bytes:
                                                               msg.imageBytes!,
@@ -648,6 +658,31 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                                                         ),
                                                 ),
                                               ),
+                                              if (isLocal &&
+                                                  !msg.hasImage &&
+                                                  widget.session.chatDelivery(
+                                                        msg.messageId,
+                                                      ) !=
+                                                      null)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 3,
+                                                      ),
+                                                  child: Text(
+                                                    s.chatDeliveryLabel(
+                                                      widget.session
+                                                          .chatDelivery(
+                                                            msg.messageId,
+                                                          )!
+                                                          .name,
+                                                    ),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: textSecondary,
+                                                    ),
+                                                  ),
+                                                ),
                                             ],
                                           ),
                                         ),
@@ -685,14 +720,15 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                           ),
                           child: Row(
                             children: [
-                              IconButton(
-                                tooltip: '发送图片',
-                                onPressed: _isSending ? null : _handleImage,
-                                icon: Icon(
-                                  Icons.image_outlined,
-                                  color: accentColor,
+                              if (!widget.session.textOnly)
+                                IconButton(
+                                  tooltip: '发送图片',
+                                  onPressed: _isSending ? null : _handleImage,
+                                  icon: Icon(
+                                    Icons.image_outlined,
+                                    color: accentColor,
+                                  ),
                                 ),
-                              ),
                               Expanded(
                                 child: Semantics(
                                   label: s.chatInputPlaceholder,

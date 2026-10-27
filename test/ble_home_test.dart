@@ -1,3 +1,5 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:dawn_mesh/core/security/member_identity.dart';
 import 'package:dawn_mesh/core/security/room_invite.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:flutter/material.dart';
@@ -21,9 +23,13 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
     invite = RoomInvite.generate();
     host = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Host');
-    await host.protectWithInvite(invite);
+    await host.protectWithInvite(
+      invite,
+      identity: await MemberIdentity.create(),
+    );
     await host.createRoom(startAudio: false);
     host.onSendFrame = (frame) {
       messenger.handlePlatformMessage(

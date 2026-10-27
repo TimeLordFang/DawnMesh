@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ void main() {
   );
 
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     // 单测里没有平台侧实现，把音频通道打桩掉，否则 MissingPluginException
     // 会盖住真正要看的布局问题。
     final messenger =

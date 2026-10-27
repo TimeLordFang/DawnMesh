@@ -257,7 +257,7 @@ class _RoomContentState extends State<RoomContent> {
               ),
             ],
 
-            if (!keyboardOpen && !ended)
+            if (!keyboardOpen && !ended && !widget.session.textOnly)
               Padding(
                 padding: EdgeInsets.fromLTRB(24, 0, 24, compactHeight ? 5 : 8),
                 child: VoiceModeSwitch(
@@ -267,8 +267,16 @@ class _RoomContentState extends State<RoomContent> {
                   onChanged: widget.session.setVoiceMode,
                 ),
               ),
+            if (!keyboardOpen && !ended && widget.session.textOnly)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  AppStrings.of(context).textOnlyHint,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             // Each device selects its own transmit mode; receiving stays enabled.
-            if (!keyboardOpen && !ended)
+            if (!keyboardOpen && !ended && !widget.session.textOnly)
               StageEnterItem(
                 stage: stage,
                 index: 1,
@@ -302,32 +310,38 @@ class _RoomContentState extends State<RoomContent> {
                 stage: stage,
                 index: 2,
                 rise: 36,
-                child: AudioControlsBar(
-                  isNight: isNight,
-                  isMuted: widget.session.isMuted,
-                  isSpeakerOn: _isSpeakerOn,
-                  useBuiltinMic: widget.session.useBuiltinMic,
-                  onToggleMute: () {
-                    setState(() {
-                      widget.session.toggleMute();
-                    });
-                  },
-                  onToggleSpeaker: () {
-                    setState(() {
-                      _isSpeakerOn = !_isSpeakerOn;
-                      widget.session.setSpeakerphone(_isSpeakerOn);
-                    });
-                  },
-                  onToggleMicSource: () {
-                    setState(() {
-                      widget.session.setUseBuiltinMic(
-                        !widget.session.useBuiltinMic,
-                      );
-                    });
-                  },
-                  onLeave: () => unawaited(_confirmLeave()),
-                  compact: true,
-                ),
+                child: widget.session.textOnly
+                    ? OutlinedButton.icon(
+                        onPressed: () => unawaited(_confirmLeave()),
+                        icon: const Icon(Icons.logout_rounded),
+                        label: const Text('退出房间'),
+                      )
+                    : AudioControlsBar(
+                        isNight: isNight,
+                        isMuted: widget.session.isMuted,
+                        isSpeakerOn: _isSpeakerOn,
+                        useBuiltinMic: widget.session.useBuiltinMic,
+                        onToggleMute: () {
+                          setState(() {
+                            widget.session.toggleMute();
+                          });
+                        },
+                        onToggleSpeaker: () {
+                          setState(() {
+                            _isSpeakerOn = !_isSpeakerOn;
+                            widget.session.setSpeakerphone(_isSpeakerOn);
+                          });
+                        },
+                        onToggleMicSource: () {
+                          setState(() {
+                            widget.session.setUseBuiltinMic(
+                              !widget.session.useBuiltinMic,
+                            );
+                          });
+                        },
+                        onLeave: () => unawaited(_confirmLeave()),
+                        compact: true,
+                      ),
               ),
           ],
         ),

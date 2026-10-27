@@ -1,3 +1,5 @@
+import 'package:dawn_mesh/core/security/member_identity.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -108,7 +110,10 @@ void main() {
       );
       final guest = RoomSession(audioIo: MockAudioIo(), selfNickname: 'Guest');
       addTearDown(guest.dispose);
-      await guest.protectWithInvite(invite);
+      await guest.protectWithInvite(
+        invite,
+        identity: await MemberIdentity.create(),
+      );
       await guest.joinRoom(startAudio: false);
       // Isolate post-PAKE membership confirmation from the PAKE tests.
       guest.secureCodec = SecureFrameCodec(
@@ -177,7 +182,10 @@ void main() {
       sessions.add(session);
       final transport = LanTransport(controlOnly: true);
       session.transport = transport;
-      await session.protectWithInvite(key);
+      await session.protectWithInvite(
+        key,
+        identity: await MemberIdentity.create(),
+      );
       session.onSendFrame = (frame) {
         wire.add(frame);
         transport.send(frame);

@@ -1,3 +1,5 @@
+import 'package:dawn_mesh/core/security/member_identity.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -100,7 +102,10 @@ void main() {
         nodes.add(session);
         links.add(link);
         session.attachTransport(link, reconnect: link.reconnectClient);
-        await session.protectWithInvite(invite);
+        await session.protectWithInvite(
+          invite,
+          identity: await MemberIdentity.create(),
+        );
         expect(
           host
               ? await link.startHost()

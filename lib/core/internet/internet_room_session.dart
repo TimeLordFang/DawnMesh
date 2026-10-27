@@ -14,7 +14,7 @@ import 'package:livekit_client/livekit_client.dart';
 import '../audio/noise_reduction.dart';
 import '../diagnostics/app_log.dart';
 import '../platform/background_call_controls.dart';
-import '../protocol/payloads/chat_image.dart';
+import '../protocol/payloads/chat_attachment.dart';
 import '../security/room_invite.dart';
 import '../security/session_crypto.dart';
 import '../security/spake2.dart';
@@ -1196,13 +1196,17 @@ class InternetRoomSession extends ChangeNotifier {
     required String name,
   }) async {
     if (_closed || _roomEnded) return;
-    if (bytes.isEmpty || bytes.length > ChatImageChunkPayload.maxImageBytes) {
+    if (bytes.isEmpty ||
+        bytes.length > ChatAttachmentChunkPayload.maxImageBytes) {
       throw ArgumentError('图片不能超过 192 KB。');
     }
-    final format = ChatImageFormat.fromMimeType(mimeType);
+    final format = ChatAttachmentFormat.fromMimeType(mimeType);
     final cipher = _chatCipher;
     final participant = _livekitRoom?.localParticipant;
-    if (format == null || cipher == null || participant == null) {
+    if (format == null ||
+        !format.isImage ||
+        cipher == null ||
+        participant == null) {
       throw StateError('图片发送通道尚未就绪。');
     }
     final now = DateTime.now();
@@ -1812,11 +1816,12 @@ class InternetRoomSession extends ChangeNotifier {
   }
 }
 
-String _safeInternetImageName(String raw, ChatImageFormat format) {
+String _safeInternetImageName(String raw, ChatAttachmentFormat format) {
   final extension = switch (format) {
-    ChatImageFormat.jpeg => 'jpg',
-    ChatImageFormat.png => 'png',
-    ChatImageFormat.webp => 'webp',
+    ChatAttachmentFormat.jpeg => 'jpg',
+    ChatAttachmentFormat.png => 'png',
+    ChatAttachmentFormat.webp => 'webp',
+    ChatAttachmentFormat.opus => throw ArgumentError('Not an image'),
   };
   final cleaned = raw
       .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')
@@ -1846,7 +1851,7 @@ class _InternetImageChunk {
   final int timestampMs;
   final int chunkIndex;
   final int chunkCount;
-  final ChatImageFormat format;
+  final ChatAttachmentFormat format;
   final String name;
   final Uint8List data;
 
@@ -1881,9 +1886,10 @@ class _InternetImageChunk {
     final view = ByteData.sublistView(bytes);
     final index = view.getUint16(13, Endian.big);
     final count = view.getUint16(15, Endian.big);
-    final format = ChatImageFormat.fromValue(bytes[17]);
+    final format = ChatAttachmentFormat.fromValue(bytes[17]);
     final nameLength = bytes[18];
     if (format == null ||
+        !format.isImage ||
         nameLength == 0 ||
         nameLength > maxNameBytes ||
         count == 0 ||
@@ -1925,7 +1931,7 @@ class _IncomingInternetImage {
   final int transferId;
   final int timestampMs;
   final int chunkCount;
-  final ChatImageFormat format;
+  final ChatAttachmentFormat format;
   final String name;
   final List<Uint8List?> chunks;
   DateTime lastUpdated;
@@ -1948,7 +1954,7 @@ class _IncomingInternetImage {
   bool get isComplete => chunks.every((chunk) => chunk != null);
 
   Uint8List? assemble() {
-    if (!isComplete || totalBytes > ChatImageChunkPayload.maxImageBytes) {
+    if (!isComplete || totalBytes > ChatAttachmentChunkPayload.maxImageBytes) {
       return null;
     }
     final result = Uint8List(totalBytes);

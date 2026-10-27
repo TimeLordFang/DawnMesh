@@ -17,6 +17,7 @@ class Member {
   /// 空串表示还不知道，这样的成员不能作为继任者。
   String endpoint;
 
+  bool textOnly;
   bool isHost;
   bool isMuted;
   bool isSpeaking;
@@ -30,11 +31,12 @@ class Member {
     this.joinOrder = 0,
     this.endpoint = '',
     this.isHost = false,
+    this.textOnly = false,
     this.isMuted = false,
     this.isSpeaking = false,
     DateTime? lastActiveAt,
-  })  : joinedAt = joinedAt ?? DateTime.now(),
-        lastActiveAt = lastActiveAt ?? DateTime.now();
+  }) : joinedAt = joinedAt ?? DateTime.now(),
+       lastActiveAt = lastActiveAt ?? DateTime.now();
 
   Member copyWith({
     int? memberId,
@@ -43,6 +45,7 @@ class Member {
     int? joinOrder,
     String? endpoint,
     bool? isHost,
+    bool? textOnly,
     bool? isMuted,
     bool? isSpeaking,
   }) {
@@ -54,6 +57,7 @@ class Member {
       joinOrder: joinOrder ?? this.joinOrder,
       endpoint: endpoint ?? this.endpoint,
       isHost: isHost ?? this.isHost,
+      textOnly: textOnly ?? this.textOnly,
       isMuted: isMuted ?? this.isMuted,
       isSpeaking: isSpeaking ?? this.isSpeaking,
       lastActiveAt: lastActiveAt,

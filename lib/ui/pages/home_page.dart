@@ -1,3 +1,5 @@
+import '../../core/transport/room_transport.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -343,7 +345,7 @@ class _HomeContentState extends State<HomeContent> {
       selfNickname: _identityNickname,
       mode: RoomMode.bluetoothPtt,
     );
-    await session.protectWithInvite(invite);
+    if (!await _protectSession(session, invite, transport: transport)) return;
     session.attachTransport(transport, reconnect: transport.reconnect);
     final joined = session.stateStream
         .firstWhere((state) => state == RoomState.inRoom)
@@ -1071,6 +1073,25 @@ class _HomeContentState extends State<HomeContent> {
   /// 房名仍然用不带码的昵称，免得标题变得很长。
   String get _identityNickname => DeviceCode.attach(_nickname);
 
+  Future<bool> _protectSession(
+    RoomSession session,
+    RoomInvite invite, {
+    RoomTransport? transport,
+  }) async {
+    try {
+      await session.protectWithInvite(invite);
+      return true;
+    } catch (error) {
+      await session.dispose();
+      await transport?.dispose();
+      if (mounted) {
+        setState(() => _busy = false);
+        _showConnectionError('无法读取安全存储中的成员身份，请解锁设备后重试。');
+      }
+      return false;
+    }
+  }
+
   void _onCreateRoom() async {
     if (_busy || _hasAnyActiveRoom) return;
     setState(() => _busy = true);
@@ -1095,7 +1116,7 @@ class _HomeContentState extends State<HomeContent> {
       mode: _selectedMode,
     );
 
-    await session.protectWithInvite(invite);
+    if (!await _protectSession(session, invite)) return;
     if (!mounted) {
       await session.dispose();
       return;
@@ -1186,7 +1207,7 @@ class _HomeContentState extends State<HomeContent> {
       _showConnectionError('连接 Wi-Fi 房失败，请重新扫描后重试。');
       return;
     }
-    await session.protectWithInvite(invite);
+    if (!await _protectSession(session, invite, transport: transport)) return;
     session.attachTransport(transport, reconnect: transport.reconnectClient);
 
     // 同 _onCreateRoom：开麦推迟到转场跑完。
@@ -1270,7 +1291,7 @@ class _HomeContentState extends State<HomeContent> {
       _showConnectionError('已连接 Wi-Fi Direct，但房间服务不可用。');
       return;
     }
-    await session.protectWithInvite(invite);
+    if (!await _protectSession(session, invite, transport: transport)) return;
     session.attachTransport(
       transport,
       reconnect: () async {

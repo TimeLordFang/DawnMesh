@@ -1,23 +1,25 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-enum ChatImageFormat {
+enum ChatAttachmentFormat {
   jpeg(1, 'image/jpeg'),
   png(2, 'image/png'),
-  webp(3, 'image/webp');
+  webp(3, 'image/webp'),
+  opus(4, 'audio/opus');
 
-  const ChatImageFormat(this.value, this.mimeType);
+  const ChatAttachmentFormat(this.value, this.mimeType);
   final int value;
   final String mimeType;
+  bool get isImage => this != opus;
 
-  static ChatImageFormat? fromValue(int value) {
+  static ChatAttachmentFormat? fromValue(int value) {
     for (final format in values) {
       if (format.value == value) return format;
     }
     return null;
   }
 
-  static ChatImageFormat? fromMimeType(String mimeType) {
+  static ChatAttachmentFormat? fromMimeType(String mimeType) {
     for (final format in values) {
       if (format.mimeType == mimeType) return format;
     }
@@ -25,12 +27,12 @@ enum ChatImageFormat {
   }
 }
 
-/// One encrypted transport-sized chunk of a room image.
+/// A bounded room attachment chunk; images and explicit Opus notes share framing.
 ///
 /// The fixed header is 23 bytes, followed by a UTF-8 file name and up to 384
 /// image bytes. This stays below the secure frame plaintext ceiling.
-class ChatImageChunkPayload {
-  const ChatImageChunkPayload({
+class ChatAttachmentChunkPayload {
+  const ChatAttachmentChunkPayload({
     required this.transferId,
     required this.timestampMs,
     required this.senderCode,
@@ -46,14 +48,14 @@ class ChatImageChunkPayload {
   static const int maxNameBytes = 32;
   static const int maxChunkBytes = 384;
   static const int maxImageBytes = 192 * 1024;
-  static const int maxChunkCount = maxImageBytes ~/ maxChunkBytes;
+  static const int maxChunkCount = (maxImageBytes + 255) ~/ 256;
 
   final int transferId;
   final int timestampMs;
   final String senderCode;
   final int chunkIndex;
   final int chunkCount;
-  final ChatImageFormat format;
+  final ChatAttachmentFormat format;
   final String name;
   final Uint8List data;
 
@@ -90,12 +92,12 @@ class ChatImageChunkPayload {
     return result;
   }
 
-  static ChatImageChunkPayload? decode(Uint8List bytes) {
+  static ChatAttachmentChunkPayload? decode(Uint8List bytes) {
     if (bytes.length <= fixedHeaderBytes || bytes[0] != version) return null;
     final view = ByteData.sublistView(bytes);
     final chunkIndex = view.getUint16(17, Endian.big);
     final chunkCount = view.getUint16(19, Endian.big);
-    final format = ChatImageFormat.fromValue(bytes[21]);
+    final format = ChatAttachmentFormat.fromValue(bytes[21]);
     final nameLength = bytes[22];
     if (format == null ||
         nameLength == 0 ||
@@ -115,7 +117,7 @@ class ChatImageChunkPayload {
       final data = Uint8List.fromList(
         bytes.sublist(fixedHeaderBytes + nameLength),
       );
-      return ChatImageChunkPayload(
+      return ChatAttachmentChunkPayload(
         transferId: view.getUint32(1, Endian.big),
         timestampMs: view.getUint64(5, Endian.big),
         senderCode: ascii.decode(bytes.sublist(13, 17)).trim(),

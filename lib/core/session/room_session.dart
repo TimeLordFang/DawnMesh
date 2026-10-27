@@ -1,3 +1,6 @@
+import '../courier/courier_link.dart';
+import '../courier/courier_store.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -8,6 +11,7 @@ import '../audio/voice_activity_gate.dart';
 import '../fusion/fusion_audio_settings.dart';
 import '../platform/background_call_controls.dart';
 import '../platform/platform_audio_channel.dart';
+import '../platform/voice_note_playback.dart';
 import '../diagnostics/app_log.dart';
 import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
@@ -15,7 +19,7 @@ import '../protocol/control_fragments.dart';
 import '../protocol/room_limits.dart';
 import '../protocol/frame_type.dart';
 import '../protocol/payloads/chat_delete.dart';
-import '../protocol/payloads/chat_image.dart';
+import '../protocol/payloads/chat_attachment.dart';
 import '../protocol/payloads/chat_message.dart';
 import '../protocol/payloads/chat_sync.dart';
 import '../protocol/payloads/join_request.dart';
@@ -25,8 +29,12 @@ import '../protocol/payloads/roster.dart';
 import '../security/session_handshake.dart';
 import '../security/room_invite.dart';
 import '../security/room_admission.dart';
+import '../security/member_identity.dart';
 import '../transport/room_transport.dart';
 import 'chat_message.dart';
+import 'voice_note.dart';
+import 'reliable_chat.dart';
+export 'reliable_chat.dart' show ChatDelivery;
 import 'device_code.dart';
 import 'host_transfer.dart';
 import 'member.dart';
@@ -78,7 +86,218 @@ class RoomSession {
       : VoiceMode.pushToTalk;
   VoiceMode get voiceMode => _voiceMode;
   bool get isBluetooth => mode == RoomMode.bluetoothPtt;
+  bool get textOnly =>
+      transport is PayloadAwareTransport &&
+      (transport as PayloadAwareTransport).textOnly;
   final _voiceGate = VoiceActivityGate();
+  bool retainVoiceNotes = false;
+  VoiceNoteCapture? _voiceCapture;
+  final _voicePlayback = VoiceNotePlayback();
+  String? playingVoiceMessageId;
+  bool get recordingVoiceNote => _voiceCapture != null;
+
+  void setRetainVoiceNotes(bool enabled) {
+    retainVoiceNotes = enabled;
+    if (!enabled) cancelVoiceNote();
+    _notifyControls();
+  }
+
+  void cancelVoiceNote() {
+    final capture = _voiceCapture;
+    _voiceCapture = null;
+    if (capture != null) unawaited(recallMessage(capture.messageId));
+    _notifyControls();
+  }
+
+  Future<void> playVoiceNote(String id) async {
+    final message = _chatMessages.where((m) => m.messageId == id).firstOrNull;
+    final note = message?.voiceNote;
+    if (note == null) return;
+    if (isPttPressed || (isFullDuplex && !isMuted)) {
+      throw StateError('请先松开对讲或静音，再播放留言。');
+    }
+    await stopVoiceNote();
+    playingVoiceMessageId = id;
+    _notifyControls();
+    try {
+      await _voicePlayback.play(note);
+    } finally {
+      if (playingVoiceMessageId == id) {
+        playingVoiceMessageId = null;
+        _notifyControls();
+      }
+    }
+  }
+
+  Future<void> stopVoiceNote() async {
+    if (playingVoiceMessageId == null) return;
+    playingVoiceMessageId = null;
+    await _voicePlayback.stop();
+    _notifyControls();
+  }
+
+  String _messageNamespace(int senderId) {
+    final auth = secureCodec?.authentication;
+    if (auth == null) return '';
+    final identity = senderId == _selfMemberId
+        ? auth.self.public
+        : auth.members[senderId]?.identity;
+    return '${identity?.messageNamespace ?? "unverified"}_';
+  }
+
+  String _messagePrefix(int senderId, String code) =>
+      '${code}_${_messageNamespace(senderId)}';
+
+  bool _messageBelongsTo(String messageId, int senderId) {
+    final namespace = _messageNamespace(senderId);
+    final separator = messageId.indexOf('_');
+    return namespace.isNotEmpty &&
+        separator > 0 &&
+        messageId.substring(separator + 1).startsWith(namespace);
+  }
+
+  String _voiceMessageId(ChatAttachmentChunkPayload payload, int senderId) =>
+      '${_messagePrefix(senderId, DeviceCode.toNumeric(payload.senderCode))}${payload.timestampMs}_voice_${payload.transferId}';
+
+  void _putVoiceMessage({
+    required String id,
+    required int senderId,
+    required String code,
+    required int timestampMs,
+    VoiceNote? note,
+    bool local = false,
+  }) {
+    if (_chatTombstones.contains(id)) return;
+    final old = _chatMessages.indexWhere((m) => m.messageId == id);
+    if (old >= 0) {
+      if (note != null) {
+        _chatMessages[old] = _chatMessages[old].copyWith(
+          voiceNote: note,
+          voicePending: false,
+        );
+        if (!_chatListController.isClosed) {
+          _chatListController.add(List.unmodifiable(_chatMessages));
+        }
+      }
+      return;
+    }
+    final member = _members[senderId];
+    _appendChatMessage(
+      ChatMessage(
+        messageId: id,
+        senderId: senderId,
+        senderCode: code,
+        senderNickname: DeviceCode.split(member?.nickname ?? selfNickname).$1,
+        seq: 0,
+        text: '',
+        timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
+        isLocal: local,
+        isHost: member?.isHost ?? false,
+        voiceNote: note,
+        voicePending: note == null,
+      ),
+      isIncoming: !local,
+    );
+  }
+
+  void _beginVoiceCapture() {
+    if (!retainVoiceNotes || textOnly || _voiceCapture != null) return;
+    final capture = VoiceNoteCapture(
+      Random.secure().nextInt(0x100000000),
+      _now().millisecondsSinceEpoch,
+      DeviceCode.toNumeric(
+        DeviceCode.split(selfNickname).$2 ?? DeviceCode.current,
+      ),
+      namespace: _messageNamespace(_selfMemberId),
+    );
+    _voiceCapture = capture;
+    _putVoiceMessage(
+      id: capture.messageId,
+      senderId: _selfMemberId,
+      code: capture.senderCode,
+      timestampMs: capture.timestampMs,
+      local: true,
+    );
+    final payload = Uint8List(17);
+    final view = ByteData.sublistView(payload)
+      ..setUint8(0, 1)
+      ..setUint32(1, capture.transferId)
+      ..setUint64(5, capture.timestampMs);
+    payload.setRange(13, 17, ascii.encode(capture.senderCode.padRight(4)));
+    unawaited(
+      sendFrame(
+        Frame(
+          type: FrameType.voiceNoteStart,
+          senderId: _selfMemberId,
+          seq: _nextSeq(),
+          payload: view.buffer.asUint8List(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _completeVoiceCapture() async {
+    final capture = _voiceCapture;
+    _voiceCapture = null;
+    _notifyControls();
+    if (capture == null) return;
+    if (capture.packets.isEmpty) {
+      await recallMessage(capture.messageId);
+      return;
+    }
+    final note = capture.finish();
+    _putVoiceMessage(
+      id: capture.messageId,
+      senderId: _selfMemberId,
+      code: capture.senderCode,
+      timestampMs: capture.timestampMs,
+      note: note,
+      local: true,
+    );
+    try {
+      await _sendAttachment(
+        bytes: note.encode(),
+        format: ChatAttachmentFormat.opus,
+        name: 'voice.dmn',
+        transferId: capture.transferId,
+        timestampMs: capture.timestampMs,
+        code: capture.senderCode,
+        messageId: capture.messageId,
+        reliable: true,
+      );
+    } catch (error) {
+      // All fragments were cached before sending; heartbeat repair can finish
+      // this note after a transient link failure. Keep the local recording.
+      AppLog.warn('语音留言', '发送暂时中断，等待链路恢复后补送：$error');
+    }
+  }
+
+  void _handleVoiceStart(Frame frame) {
+    if (textOnly) return;
+    if (_state != RoomState.inRoom ||
+        frame.senderId == _selfMemberId ||
+        !_members.containsKey(frame.senderId) ||
+        frame.payload.length != 17 ||
+        frame.payload[0] != 1) {
+      return;
+    }
+    final view = ByteData.sublistView(frame.payload);
+    final code = ascii
+        .decode(frame.payload.sublist(13), allowInvalid: true)
+        .trim();
+    if (!RegExp(r'^\d{3}$').hasMatch(code)) return;
+    final timestamp = view.getUint64(5);
+    if (timestamp > 8640000000000000) return;
+    final id =
+        '${_messagePrefix(frame.senderId, code)}${timestamp}_voice_${view.getUint32(1)}';
+    _putVoiceMessage(
+      id: id,
+      senderId: frame.senderId,
+      code: code,
+      timestampMs: timestamp,
+    );
+  }
+
   final _controlsController = StreamController<void>.broadcast();
   Stream<void> get controlsStream => _controlsController.stream;
   BackgroundCallControls? _backgroundControls;
@@ -92,6 +311,7 @@ class RoomSession {
       : (isBluetooth ? _bluetoothBitrate : _wifiBitrate);
 
   void setVoiceMode(VoiceMode value) {
+    if (textOnly) return;
     if (_closed || _roomEnded || _voiceMode == value) return;
     setPtt(false);
     _voiceMode = value;
@@ -129,19 +349,37 @@ class RoomSession {
   int _pendingIncoming = 0;
   int _pendingOutgoing = 0;
   int _pendingAudioOutgoing = 0;
+  int _membershipTicks = 0;
   void Function(Frame frame, {bool realtime})? _transportSend;
 
-  Future<void> protectWithInvite(RoomInvite invite) async {
+  Future<void> protectWithInvite(
+    RoomInvite invite, {
+    MemberIdentity? identity,
+  }) async {
     roomInvite = invite;
+    final installationIdentity = identity ?? await MemberIdentity.load();
+    // Reuse the already loaded identity. Do not start another global identity
+    // load whose completion could outlive a room or widget-test event loop.
+    if (identity == null) {
+      unawaited(
+        CourierStore.open(identity: installationIdentity).then<void>(
+          (_) {},
+          onError: (Object error, StackTrace _) {
+            AppLog.warn('离线转交', '安全存储暂不可用：$error');
+          },
+        ),
+      );
+    }
     _admission = RoomAdmission(
       passwordScalar: await invite.passwordScalar(),
       token: sessionToken,
       maxPending: maxMembers - 1,
+      identity: installationIdentity,
       send: (frame) => _emitFrame(frame),
       onReady: (codec) async {
         if (_closed) return;
         secureCodec = codec;
-        if (!_isHost) await _sendJoinRequest();
+        if (!_isHost && !_admitted) await _sendJoinRequest();
       },
     );
   }
@@ -204,6 +442,49 @@ class RoomSession {
 
   // 纯内存聊天状态
   final List<ChatMessage> _chatMessages = [];
+  final _chatTombstones = <String>{};
+  late final _reliableChat = ReliableChat(
+    selfId: () => _selfMemberId,
+    members: () => _members.keys.toSet(),
+    nextSeq: _nextSeq,
+    acceptsMedia: () => !textOnly,
+    memberAcceptsMedia: (id) => _members[id]?.textOnly == false,
+    now: _now,
+    emit: (frame) {
+      if (_state == RoomState.inRoom && !_closed) unawaited(sendFrame(frame));
+    },
+    changed: () {
+      if (!_chatListController.isClosed) {
+        _chatListController.add(List.unmodifiable(_chatMessages));
+      }
+    },
+  );
+  CourierLink? _courierLink;
+  CourierLink? get courierLink {
+    final store = CourierStore.current;
+    final auth = secureCodec?.authentication;
+    if (store == null ||
+        !store.enabled ||
+        auth?.self.public.id != store.identity.public.id) {
+      return null;
+    }
+    return _courierLink ??= CourierLink(
+      store: store,
+      selfId: () => _selfMemberId,
+      members: () => _members.keys.toSet(),
+      send: _sendControlPayload,
+      now: _now,
+    );
+  }
+
+  ChatDelivery? chatDelivery(String id) => _reliableChat.status(id);
+  void _rememberTombstone(String id) {
+    _chatTombstones.add(id);
+    while (_chatTombstones.length > maxChatHistory * 4) {
+      _chatTombstones.remove(_chatTombstones.first);
+    }
+  }
+
   final _chatStreamController = StreamController<ChatMessage>.broadcast(
     sync: true,
   );
@@ -214,7 +495,8 @@ class RoomSession {
   int _unreadChatCount = 0;
   final Set<String> _seenChatKeys = <String>{};
   final List<String> _seenChatKeyOrder = <String>[];
-  final Map<String, _IncomingImageTransfer> _incomingImageTransfers = {};
+  final Map<String, _IncomingAttachmentTransfer> _incomingAttachmentTransfers =
+      {};
 
   // 跨进退房同人身份与曾用名追踪 (基于设备短码)
   final Map<String, String> _currentNicknameByCode = {};
@@ -368,6 +650,7 @@ class RoomSession {
     final joinPayload = JoinRequestPayload(
       nickname: selfNickname,
       sessionToken: sessionToken,
+      textOnly: textOnly,
     );
     final joinFrame = Frame(
       type: FrameType.joinReq,
@@ -386,6 +669,7 @@ class RoomSession {
   /// 所以进房时先只建房、跑完动画再开麦。
   Future<void> startAudio() async {
     if (_audioStarted ||
+        textOnly ||
         _closed ||
         (roomInvite != null && _state != RoomState.inRoom)) {
       return;
@@ -478,14 +762,23 @@ class RoomSession {
           return;
         }
         final relay = transport;
-        if (_isHost &&
-            relay is AuthenticatedRelayTransport &&
-            !_isHostControl(opened)) {
-          (relay as AuthenticatedRelayTransport).relayAuthenticated(
-            frame,
-            realtime: opened.type == FrameType.audio,
-          );
+        if (relay is AuthenticatedRelayTransport &&
+            (relay is FusionControlTransport ||
+                (_isHost && !_isHostControl(opened)))) {
+          if (relay is PayloadAwareTransport) {
+            (relay as PayloadAwareTransport).sendPayload(
+              frame,
+              originalType: opened.type,
+              relay: true,
+            );
+          } else {
+            (relay as AuthenticatedRelayTransport).relayAuthenticated(
+              frame,
+              realtime: opened.type == FrameType.audio,
+            );
+          }
         }
+        _admission?.acknowledgeEpoch(opened.senderId);
         await _dispatchIncomingFrame(opened);
       } catch (e) {
         AppLog.error('RoomSession', '解封加密帧失败，可能为伪造或重放帧', e);
@@ -508,7 +801,9 @@ class RoomSession {
     if (roomInvite != null &&
         !_isHost &&
         !_admitted &&
-        frame.type != FrameType.admission) {
+        frame.type != FrameType.admission &&
+        frame.type != FrameType.memberKeys &&
+        ControlFragments.originalType(frame) != FrameType.memberKeys) {
       return;
     }
     _markAuthenticatedHostActivity(frame);
@@ -542,13 +837,25 @@ class RoomSession {
         _handleHeartbeat(frame);
         break;
       case FrameType.leave:
-        _handleLeave(frame);
+        await _handleLeave(frame);
         break;
       case FrameType.hostHandover:
         await _handleHostHandover(frame);
         break;
       case FrameType.hostAnnounce:
         _handleHostAnnounce(frame);
+        break;
+      case FrameType.memberKeys:
+        if (frame.senderId == 1 && !_isHost) {
+          secureCodec?.authentication?.acceptMembers(frame.payload);
+        }
+        break;
+      case FrameType.courierControl:
+      case FrameType.courierBundle:
+        await courierLink?.handle(frame);
+        break;
+      case FrameType.chatControl:
+        _reliableChat.handle(frame);
         break;
       case FrameType.chat:
         _handleChatFrame(frame);
@@ -559,8 +866,12 @@ class RoomSession {
       case FrameType.chatDelete:
         _handleChatDeleteFrame(frame);
         break;
+      case FrameType.voiceNoteStart:
+        _handleVoiceStart(frame);
+        break;
+      case FrameType.voiceNote:
       case FrameType.chatImage:
-        _handleChatImageFrame(frame);
+        _handleAttachmentFrame(frame);
         break;
       case FrameType.nicknameUpdate:
         _handleNicknameUpdate(frame);
@@ -613,6 +924,7 @@ class RoomSession {
   }
 
   void _handleAudioFrame(Frame frame) {
+    if (textOnly) return;
     if (frame.senderId == _selfMemberId) return;
 
     // 只收在册成员的音频：否则任何陌生或伪造的 senderId 都能在原生侧
@@ -622,6 +934,7 @@ class RoomSession {
 
     // 整帧原样交给原生播放管线：那边从帧头解析发送方与序号，
     // 分流进各自的抖动缓冲，再解码混音。
+    if (playingVoiceMessageId != null) unawaited(stopVoiceNote());
     final submitStarted = PipelineProbe.nowMicros();
     unawaited(
       audioIo.submitRemoteFrame(frame.encode()).whenComplete(() {
@@ -695,6 +1008,8 @@ class RoomSession {
       }
     }
 
+    allocatedId =
+        secureCodec?.authentication?.existingMemberId(joinToken) ?? allocatedId;
     if (allocatedId == 0) {
       int newId = 2;
       while (_members.containsKey(newId) && newId <= maxMembers) {
@@ -704,11 +1019,17 @@ class RoomSession {
       allocatedId = newId;
     }
 
+    final authentication = secureCodec?.authentication;
+    if (authentication != null &&
+        !authentication.bind(allocatedId, joinToken)) {
+      return;
+    }
     final existing = _members[allocatedId];
     _members[allocatedId] = Member(
       memberId: allocatedId,
       nickname: payload.nickname,
       sessionToken: payload.sessionToken,
+      textOnly: payload.textOnly,
       // 重连回来的老成员保留原有资历，不能因为断线重连就变成最年轻的。
       joinOrder: existing?.joinOrder ?? _nextJoinOrder++,
       endpoint: existing?.endpoint ?? '',
@@ -741,6 +1062,7 @@ class RoomSession {
         memberId: rm.memberId,
         nickname: rm.nickname,
         isHost: rm.isHost,
+        textOnly: rm.textOnly,
         isMuted: rm.isMuted,
         isSpeaking: rm.isSpeaking,
       );
@@ -754,6 +1076,11 @@ class RoomSession {
     if (hasFusionIdentity) {
       _fusionPeerActivity.removeWhere((id, _) => !_members.containsKey(id));
       if (frame.senderId == 1) _fusionPeerActivity[1] = _now();
+    }
+    if (textOnly && _audioStarted) {
+      _audioStarted = false;
+      isPttPressed = false;
+      unawaited(audioIo.stopCapture());
     }
     final recovered = _state == RoomState.reconnecting;
     if (_state != RoomState.inRoom) {
@@ -795,19 +1122,20 @@ class RoomSession {
     }
   }
 
-  void _handleLeave(Frame frame) {
+  Future<void> _handleLeave(Frame frame) async {
     final reason = LeavePayload.decode(frame.payload)?.reason;
     if (!_isHost && _members[frame.senderId]?.isHost == true && reason == 3) {
       unawaited(_finishEndedRoom());
       return;
     }
-    _members.remove(frame.senderId);
+    final removed = _members.remove(frame.senderId);
     _fusionPeerActivity.remove(frame.senderId);
     _lastAudioAt.remove(frame.senderId);
     audioIo.removeRemoteMember(frame.senderId);
     _notifyMembers();
 
-    if (_isHost) {
+    if (_isHost && removed != null) {
+      await _admission?.revoke({frame.senderId});
       _broadcastRoster();
     }
   }
@@ -914,6 +1242,12 @@ class RoomSession {
       AppLog.error('RoomSession', '当前房型不支持房主转移');
       return;
     }
+    final seed = HostTransferSeed.from(plan);
+    secureCodec?.authentication?.transfer({
+      for (final member in seed.members) member.previousId: member.newId + 1,
+    });
+    _reliableChat
+        .clear(); // Old sender numbers no longer identify these frames.
     if (plan.successorId == _selfMemberId) {
       await _becomeHost(plan, t);
     } else {
@@ -940,6 +1274,7 @@ class RoomSession {
       _members[id] = Member(
         memberId: id,
         nickname: m.nickname,
+        sessionToken: secureCodec?.authentication?.members[id]?.token,
         joinOrder: m.joinOrder,
         endpoint: m.endpoint,
         isHost: id == 1,
@@ -949,6 +1284,7 @@ class RoomSession {
     _selfMemberId = 1;
     _nextJoinOrder = seed.nextJoinOrder;
     _isHost = true;
+    await _admission?.promote();
     t.updateSelfMemberId(_selfMemberId);
 
     _updateState(RoomState.inRoom);
@@ -1047,6 +1383,7 @@ class RoomSession {
       if (m.isHost) flags |= 0x01;
       if (m.isMuted) flags |= 0x02;
       if (m.isSpeaking) flags |= 0x04;
+      if (m.textOnly) flags |= 0x08;
       return RosterMember(
         memberId: m.memberId,
         flags: flags,
@@ -1054,6 +1391,15 @@ class RoomSession {
       );
     }).toList();
 
+    final authentication = secureCodec?.authentication;
+    if (authentication != null) {
+      unawaited(
+        _sendControlPayload(
+          FrameType.memberKeys,
+          authentication.encodeMembers(),
+        ),
+      );
+    }
     final payload = RosterPayload(
       hostId: _selfMemberId,
       members: rosterMembers,
@@ -1076,7 +1422,11 @@ class RoomSession {
     if (!_audioStarted || _closed) return;
 
     await audioIo.startCapture((opusPacket, level) {
-      if (_closed || !_audioStarted || _state != RoomState.inRoom || isMuted) {
+      if (_closed ||
+          textOnly ||
+          !_audioStarted ||
+          _state != RoomState.inRoom ||
+          isMuted) {
         _voiceGate.reset();
         return;
       }
@@ -1089,6 +1439,10 @@ class RoomSession {
         _waveController.add(packets.isEmpty ? 0 : level);
       }
       for (final packet in packets) {
+        final capture = _voiceCapture;
+        if (capture != null && !capture.add(packet)) {
+          unawaited(_completeVoiceCapture());
+        }
         final audioStarted = PipelineProbe.nowMicros();
         sendFrame(
           Frame(
@@ -1123,6 +1477,11 @@ class RoomSession {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_state == RoomState.inRoom) {
+        _reliableChat.tick();
+        unawaited(courierLink?.tick());
+        _admission?.retryKeyGrants();
+      }
       final frame = Frame(
         type: FrameType.heartbeat,
         senderId: _selfMemberId,
@@ -1135,6 +1494,10 @@ class RoomSession {
       // 快照广播这步之前被漏掉了，导致房主掉线后没有任何人接管。
       if (_isHost) {
         pruneStaleMembers();
+        if (++_membershipTicks % 3 == 0 &&
+            secureCodec?.authentication != null) {
+          _broadcastRoster();
+        }
         _broadcastSnapshot();
       } else {
         checkHostFailover();
@@ -1165,16 +1528,36 @@ class RoomSession {
       audioIo.removeRemoteMember(id);
     }
     _notifyMembers();
-    _broadcastRoster();
+    if (secureCodec?.authentication == null) {
+      _broadcastRoster();
+    } else {
+      unawaited(_revokeStale(stale.toSet()));
+    }
+  }
+
+  Future<void> _revokeStale(Set<int> stale) async {
+    await _admission?.revoke(stale);
+    if (!_closed) _broadcastRoster();
   }
 
   /// PTT 按住/松开切换。
   void setPtt(bool isPressed) {
     if (isPressed &&
-        (isFullDuplex || isMuted || _closed || _state != RoomState.inRoom)) {
+        (textOnly ||
+            isFullDuplex ||
+            isMuted ||
+            _closed ||
+            _state != RoomState.inRoom)) {
       return;
     }
+    final wasPressed = isPttPressed;
     isPttPressed = isPressed;
+    if (isPressed && !wasPressed) {
+      unawaited(stopVoiceNote());
+      _beginVoiceCapture();
+    } else if (!isPressed && wasPressed) {
+      unawaited(_completeVoiceCapture());
+    }
     _notifyControls();
     final self = _members[_selfMemberId];
     if (self != null) {
@@ -1284,13 +1667,15 @@ class RoomSession {
 
   void _beginReconnect(String reason) {
     if (_closed || _roomEnded || _isHost || _state == RoomState.idle) return;
+    cancelVoiceNote();
+    unawaited(stopVoiceNote());
+    isPttPressed = false;
     if (_reconnectTransport == null) {
       AppLog.error('重连', '$reason；当前传输层没有恢复入口');
       _updateState(RoomState.disconnected);
       return;
     }
     if (_reconnectController.isReconnecting) return;
-    isPttPressed = false;
     _voiceGate.reset();
     _notifyControls();
     unawaited(audioIo.clearRemoteMembers());
@@ -1338,9 +1723,7 @@ class RoomSession {
       senderId: _selfMemberId,
       messageId: _controlMessageId++ & 0xffffffff,
       payload: payload,
-      maxPayload: secureCodec == null
-          ? Frame.maxPayloadSize
-          : SecureFrameCodec.maxPlaintextPayload,
+      maxPayload: secureCodec?.payloadLimit ?? Frame.maxPayloadSize,
       nextSeq: _nextSeq,
     );
     // Enqueue the whole message before yielding so later snapshots cannot
@@ -1401,7 +1784,11 @@ class RoomSession {
         return;
       }
     }
-    _emitFrame(outFrame, realtime: frame.type == FrameType.audio);
+    _emitFrame(
+      outFrame,
+      realtime: frame.type == FrameType.audio,
+      originalType: frame.type,
+    );
     if (diagnosticStartedAtMicros != null) {
       PipelineProbe.record(
         'audioDartToTransport',
@@ -1410,7 +1797,19 @@ class RoomSession {
     }
   }
 
-  void _emitFrame(Frame frame, {bool realtime = false}) {
+  void _emitFrame(
+    Frame frame, {
+    bool realtime = false,
+    FrameType? originalType,
+  }) {
+    final link = transport;
+    if (link is PayloadAwareTransport) {
+      (link as PayloadAwareTransport).sendPayload(
+        frame,
+        originalType: originalType ?? frame.type,
+      );
+      return;
+    }
     final transportSend = _transportSend;
     if (transportSend != null) {
       transportSend(frame, realtime: realtime);
@@ -1523,7 +1922,8 @@ class RoomSession {
     final now = DateTime.now();
     final timestampMs = now.millisecondsSinceEpoch;
     final seq = _nextSeq();
-    final messageId = '${code}_${timestampMs}_$seq';
+    final messageId =
+        '${_messagePrefix(_selfMemberId, code)}${timestampMs}_$seq';
 
     // ChatMessagePayload 会校验 480 字节 UTF-8 上限，超长直接抛出 ArgumentError
     final payload = ChatMessagePayload(
@@ -1543,6 +1943,7 @@ class RoomSession {
     // 记录本机发送键值，防止因广播回送导致重复追加
     _markChatKeySeen(_selfMemberId, seq);
 
+    _reliableChat.remember(frame, messageId: messageId);
     // 经由标准 sendFrame 发送（若配置了 secureCodec 将自动加密为 sealed 帧）
     await sendFrame(frame);
 
@@ -1576,58 +1977,39 @@ class RoomSession {
     if (_state != RoomState.inRoom) {
       throw StateError('Cannot send chat image when not in room.');
     }
-    if (bytes.isEmpty || bytes.length > ChatImageChunkPayload.maxImageBytes) {
+    if (textOnly) throw StateError('文字备用通道暂不支持图片。');
+    if (bytes.isEmpty ||
+        bytes.length > ChatAttachmentChunkPayload.maxImageBytes) {
       throw ArgumentError('图片不能超过 192 KB。');
     }
-    final format = ChatImageFormat.fromMimeType(mimeType);
-    if (format == null) throw ArgumentError('Unsupported image format.');
+    final format = ChatAttachmentFormat.fromMimeType(mimeType);
+    if (format == null || !format.isImage) {
+      throw ArgumentError('Unsupported image format.');
+    }
     final safeName = _safeImageName(name, format);
     final fullNickname = _members[_selfMemberId]?.nickname ?? selfNickname;
     final rawCode = DeviceCode.split(fullNickname).$2 ?? DeviceCode.current;
     final code = DeviceCode.toNumeric(rawCode);
     final now = DateTime.now();
     final transferId = now.microsecondsSinceEpoch & 0xffffffff;
-    final chunkCount =
-        (bytes.length + ChatImageChunkPayload.maxChunkBytes - 1) ~/
-        ChatImageChunkPayload.maxChunkBytes;
-
-    for (var index = 0; index < chunkCount; index++) {
-      final start = index * ChatImageChunkPayload.maxChunkBytes;
-      final end = min(
-        start + ChatImageChunkPayload.maxChunkBytes,
-        bytes.length,
-      );
-      final payload = ChatImageChunkPayload(
-        transferId: transferId,
-        timestampMs: now.millisecondsSinceEpoch,
-        senderCode: code,
-        chunkIndex: index,
-        chunkCount: chunkCount,
-        format: format,
-        name: safeName,
-        data: Uint8List.sublistView(bytes, start, end),
-      );
-      await sendFrame(
-        Frame(
-          type: FrameType.chatImage,
-          senderId: _selfMemberId,
-          seq: _nextSeq(),
-          payload: payload.encode(),
-        ),
-      );
-      // BLE's native writer is deliberately bounded. Drain in small batches so
-      // a photo cannot fill the control queue and tear down an otherwise
-      // healthy room connection.
-      if (isBluetooth && (index + 1) % 24 == 0) {
-        await transport?.flush();
-      }
+    if (!await _sendAttachment(
+      bytes: bytes,
+      format: format,
+      name: safeName,
+      transferId: transferId,
+      timestampMs: now.millisecondsSinceEpoch,
+      code: code,
+      messageId:
+          '${_messagePrefix(_selfMemberId, code)}${now.millisecondsSinceEpoch}_image_$transferId',
+    )) {
+      return;
     }
-    if (isBluetooth) await transport?.flush();
 
     _recordMemberIdentity(_selfMemberId, fullNickname);
     _appendChatMessage(
       ChatMessage(
-        messageId: '${code}_${now.millisecondsSinceEpoch}_image_$transferId',
+        messageId:
+            '${_messagePrefix(_selfMemberId, code)}${now.millisecondsSinceEpoch}_image_$transferId',
         senderId: _selfMemberId,
         senderCode: code,
         senderNickname:
@@ -1646,39 +2028,147 @@ class RoomSession {
     );
   }
 
-  void _handleChatImageFrame(Frame frame) {
+  Future<bool> _sendAttachment({
+    required Uint8List bytes,
+    required ChatAttachmentFormat format,
+    required String name,
+    required int transferId,
+    required int timestampMs,
+    required String code,
+    required String messageId,
+    bool reliable = false,
+  }) async {
+    final chunkBytes = min(
+      ChatAttachmentChunkPayload.maxChunkBytes,
+      (secureCodec?.payloadLimit ?? Frame.maxPayloadSize) -
+          ChatAttachmentChunkPayload.fixedHeaderBytes -
+          utf8.encode(name).length,
+    );
+    final chunkCount = (bytes.length + chunkBytes - 1) ~/ chunkBytes;
+
+    final frames = <Frame>[];
+    for (var index = 0; index < chunkCount; index++) {
+      final start = index * chunkBytes;
+      final end = min(start + chunkBytes, bytes.length);
+      final payload = ChatAttachmentChunkPayload(
+        transferId: transferId,
+        timestampMs: timestampMs,
+        senderCode: code,
+        chunkIndex: index,
+        chunkCount: chunkCount,
+        format: format,
+        name: name,
+        data: Uint8List.sublistView(bytes, start, end),
+      );
+      if (_closed ||
+          _state != RoomState.inRoom ||
+          _chatTombstones.contains(messageId)) {
+        return false;
+      }
+      final frame = Frame(
+        type: format.isImage ? FrameType.chatImage : FrameType.voiceNote,
+        senderId: _selfMemberId,
+        seq: _nextSeq(),
+        payload: payload.encode(),
+      );
+      if (reliable) _reliableChat.remember(frame, messageId: messageId);
+      frames.add(frame);
+    }
+    for (var index = 0; index < frames.length; index++) {
+      if (_closed ||
+          _state != RoomState.inRoom ||
+          _chatTombstones.contains(messageId)) {
+        return false;
+      }
+      await sendFrame(frames[index]);
+      // BLE's native writer is deliberately bounded. Drain in small batches so
+      // a photo cannot fill the control queue and tear down an otherwise
+      // healthy room connection.
+      if ((index + 1) % 8 == 0) {
+        await transport?.flush();
+      }
+    }
+    await transport?.flush();
+    return true;
+  }
+
+  void _handleAttachmentFrame(Frame frame) {
+    if (textOnly) return;
     if (_state != RoomState.inRoom || frame.senderId == _selfMemberId) return;
     final sender = _members[frame.senderId];
     if (sender == null) return;
-    final payload = ChatImageChunkPayload.decode(frame.payload);
-    if (payload == null) return;
-
-    final now = DateTime.now();
-    _incomingImageTransfers.removeWhere(
-      (_, transfer) =>
-          now.difference(transfer.lastUpdated) > const Duration(minutes: 1),
-    );
-    if (_incomingImageTransfers.length >= 8) {
-      final oldest = _incomingImageTransfers.entries.reduce(
-        (a, b) => a.value.lastUpdated.isBefore(b.value.lastUpdated) ? a : b,
-      );
-      _incomingImageTransfers.remove(oldest.key);
+    final payload = ChatAttachmentChunkPayload.decode(frame.payload);
+    if (payload == null ||
+        payload.timestampMs > 8640000000000000 ||
+        (payload.format.isImage != (frame.type == FrameType.chatImage))) {
+      return;
+    }
+    final voiceId = payload.format.isImage
+        ? null
+        : _voiceMessageId(payload, frame.senderId);
+    if (voiceId != null &&
+        (_chatTombstones.contains(voiceId) ||
+            _chatMessages.any(
+              (m) => m.messageId == voiceId && m.voiceNote != null,
+            ))) {
+      _reliableChat.received(frame);
+      return;
     }
 
-    final key = '${frame.senderId}:${payload.transferId}';
-    final transfer = _incomingImageTransfers.putIfAbsent(
+    final now = DateTime.now();
+    _incomingAttachmentTransfers.removeWhere(
+      (_, transfer) =>
+          now.difference(transfer.lastUpdated) >
+          (transfer.format.isImage
+              ? const Duration(minutes: 1)
+              : ReliableChat.lifetime),
+    );
+    final key =
+        '${frame.type.value}:${frame.senderId}:${payload.timestampMs}:${payload.transferId}';
+    if (!_incomingAttachmentTransfers.containsKey(key) &&
+        _incomingAttachmentTransfers.length >= 8) {
+      final oldest = _incomingAttachmentTransfers.entries.reduce(
+        (a, b) => a.value.lastUpdated.isBefore(b.value.lastUpdated) ? a : b,
+      );
+      _incomingAttachmentTransfers.remove(oldest.key);
+    }
+
+    final transfer = _incomingAttachmentTransfers.putIfAbsent(
       key,
-      () => _IncomingImageTransfer(payload),
+      () => _IncomingAttachmentTransfer(payload),
     );
     if (!transfer.accepts(payload)) {
-      _incomingImageTransfers.remove(key);
+      _incomingAttachmentTransfers.remove(key);
       return;
     }
     transfer.add(payload);
+    if (voiceId != null) transfer.ackFrames[payload.chunkIndex] = frame;
+    if (transfer.totalBytes >
+        (payload.format.isImage
+            ? ChatAttachmentChunkPayload.maxImageBytes
+            : VoiceNote.maxBytes)) {
+      _incomingAttachmentTransfers.remove(key);
+      return;
+    }
     if (!transfer.isComplete) return;
-    _incomingImageTransfers.remove(key);
+    _incomingAttachmentTransfers.remove(key);
     final bytes = transfer.assemble();
     if (bytes == null) return;
+    if (voiceId != null) {
+      final note = VoiceNote.decode(bytes);
+      if (note == null) return;
+      for (final received in transfer.ackFrames.values) {
+        _reliableChat.received(received);
+      }
+      _putVoiceMessage(
+        id: voiceId,
+        senderId: frame.senderId,
+        code: DeviceCode.toNumeric(payload.senderCode),
+        timestampMs: payload.timestampMs,
+        note: note,
+      );
+      return;
+    }
 
     _recordMemberIdentity(frame.senderId, sender.nickname);
     final split = DeviceCode.split(sender.nickname);
@@ -1688,7 +2178,7 @@ class RoomSession {
     _appendChatMessage(
       ChatMessage(
         messageId:
-            '${senderCode}_${payload.timestampMs}_image_${payload.transferId}',
+            '${_messagePrefix(frame.senderId, senderCode)}${payload.timestampMs}_image_${payload.transferId}',
         senderId: frame.senderId,
         senderCode: senderCode,
         senderNickname: _currentNicknameByCode[senderCode] ?? split.$1,
@@ -1706,11 +2196,12 @@ class RoomSession {
     );
   }
 
-  static String _safeImageName(String raw, ChatImageFormat format) {
+  static String _safeImageName(String raw, ChatAttachmentFormat format) {
     final extension = switch (format) {
-      ChatImageFormat.jpeg => 'jpg',
-      ChatImageFormat.png => 'png',
-      ChatImageFormat.webp => 'webp',
+      ChatAttachmentFormat.jpeg => 'jpg',
+      ChatAttachmentFormat.png => 'png',
+      ChatAttachmentFormat.webp => 'webp',
+      ChatAttachmentFormat.opus => throw ArgumentError('Not an image'),
     };
     final stem = raw
         .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')
@@ -1738,18 +2229,9 @@ class RoomSession {
       return;
     }
 
-    // 3. 有界去重检查 (senderId, seq)
-    if (_isChatKeySeen(frame.senderId, frame.seq)) {
-      return;
-    }
-    _markChatKeySeen(frame.senderId, frame.seq);
-
-    // 4. 解码 Payload
     final payload = ChatMessagePayload.decode(frame.payload);
-    if (payload == null) {
-      AppLog.warn('RoomSession', '来自成员 #${frame.senderId} 的聊天帧载荷格式损坏，已忽略');
-      return;
-    }
+    if (payload == null) return;
+    _reliableChat.received(frame);
 
     // 5. 身份与曾用名关联
     _recordMemberIdentity(frame.senderId, sender.nickname);
@@ -1765,7 +2247,18 @@ class RoomSession {
         ? DateTime.fromMillisecondsSinceEpoch(payload.timestampMs)
         : DateTime.now();
     final messageId =
-        '${senderCode}_${timestamp.millisecondsSinceEpoch}_${frame.seq}';
+        '${_messagePrefix(frame.senderId, senderCode)}${timestamp.millisecondsSinceEpoch}_${frame.seq}';
+
+    if (_chatTombstones.contains(messageId) ||
+        _chatMessages.any((m) => m.messageId == messageId)) {
+      return;
+    }
+    // v2 includes a timestamp, so a wrapped uint16 sequence is a new message.
+    // Only legacy v1 messages need the old sequence-only duplicate guard.
+    if (payload.version == 1) {
+      if (_isChatKeySeen(frame.senderId, frame.seq)) return;
+      _markChatKeySeen(frame.senderId, frame.seq);
+    }
 
     // 6. 组装并追加消息
     final msg = ChatMessage(
@@ -1787,7 +2280,7 @@ class RoomSession {
   void _syncChatHistoryTo(int targetMemberId) {
     if (!_isHost) return;
     for (final msg in _chatMessages) {
-      if (msg.isRecalled || msg.hasImage) continue;
+      if (msg.isRecalled || msg.hasImage || msg.hasVoiceNote) continue;
       final syncPayload = ChatSyncPayload(
         targetMemberId: targetMemberId,
         senderId: msg.senderId,
@@ -1797,13 +2290,7 @@ class RoomSession {
         nickname: msg.senderNickname,
         text: msg.text,
       );
-      final frame = Frame(
-        type: FrameType.chatSync,
-        senderId: _selfMemberId,
-        seq: _nextSeq(),
-        payload: syncPayload.encode(),
-      );
-      sendFrame(frame);
+      unawaited(_sendControlPayload(FrameType.chatSync, syncPayload.encode()));
     }
   }
 
@@ -1827,7 +2314,8 @@ class RoomSession {
     }
 
     // 根据 messageId 去重，防止重复同步
-    if (_chatMessages.any((m) => m.messageId == payload.messageId)) {
+    if (_chatTombstones.contains(payload.messageId) ||
+        _chatMessages.any((m) => m.messageId == payload.messageId)) {
       return;
     }
 
@@ -1845,7 +2333,9 @@ class RoomSession {
       seq: 0,
       text: payload.text,
       timestamp: DateTime.fromMillisecondsSinceEpoch(payload.timestampMs),
-      isLocal: payload.senderCode == DeviceCode.current,
+      isLocal: secureCodec?.authentication != null
+          ? _messageBelongsTo(payload.messageId, _selfMemberId)
+          : payload.senderCode == DeviceCode.current,
       isHost: payload.senderId == 1,
     );
 
@@ -1872,11 +2362,18 @@ class RoomSession {
       DeviceCode.split(selfNickname).$2 ?? DeviceCode.current,
     );
     // 权限校验：只能删除自己发送的消息
-    if (!target.isLocal && DeviceCode.toNumeric(target.senderCode) != myCode) {
+    if (secureCodec?.authentication != null
+        ? !_messageBelongsTo(messageId, _selfMemberId)
+        : !target.isLocal &&
+              DeviceCode.toNumeric(target.senderCode) != myCode) {
       throw StateError('Cannot delete messages sent by other members.');
     }
 
-    // 本地移除
+    // Preserve a tombstone so delayed history cannot resurrect the message.
+    _rememberTombstone(messageId);
+    if (_voiceCapture?.messageId == messageId) _voiceCapture = null;
+    if (playingVoiceMessageId == messageId) await stopVoiceNote();
+    _reliableChat.forgetMessage(messageId);
     _chatMessages.removeAt(idx);
     if (!_chatListController.isClosed) {
       _chatListController.add(List.unmodifiable(_chatMessages));
@@ -1893,39 +2390,41 @@ class RoomSession {
       seq: _nextSeq(),
       payload: deletePayload.encode(),
     );
+    _reliableChat.remember(frame);
     await sendFrame(frame);
   }
 
   void _handleChatDeleteFrame(Frame frame) {
     final payload = ChatDeletePayload.decode(frame.payload);
-    if (payload == null) return;
-
-    final idx = _chatMessages.indexWhere(
-      (m) => m.messageId == payload.messageId,
-    );
-    if (idx == -1) return;
-
-    final target = _chatMessages[idx];
-    // 权限校验：只比对 payload 里的 senderCode 不够——设备码在聊天界面
-    // 可见且仅 3 位数字，任何成员都能冒填。改为取「帧的实际发送者」在
-    // 名单里的设备码与消息作者比对，冒用他人短码的撤回请求一律无效。
     final sender = _members[frame.senderId];
-    if (sender == null) {
-      AppLog.warn('RoomSession', '收到不在册成员 #${frame.senderId} 的撤回请求，已忽略');
+    if (payload == null || sender == null) return;
+    if (secureCodec?.authentication != null &&
+        !_messageBelongsTo(payload.messageId, frame.senderId)) {
       return;
     }
     final senderCode = DeviceCode.toNumeric(
       DeviceCode.split(sender.nickname).$2 ?? 'M${frame.senderId}',
     );
-    if (senderCode != DeviceCode.toNumeric(target.senderCode)) {
-      AppLog.warn(
-        'RoomSession',
-        '收到非法撤回请求：发起方 #${frame.senderId}（$senderCode）试图撤回 ${target.senderCode} 的消息',
-      );
-      return;
+    final idx = _chatMessages.indexWhere(
+      (m) => m.messageId == payload.messageId,
+    );
+    if (idx >= 0) {
+      if (secureCodec?.authentication == null &&
+          senderCode != DeviceCode.toNumeric(_chatMessages[idx].senderCode)) {
+        return;
+      }
+    } else {
+      // A recall can precede its message; only its author may create this tombstone.
+      if (secureCodec?.authentication == null &&
+          (senderCode != DeviceCode.toNumeric(payload.senderCode) ||
+              !payload.messageId.startsWith('${payload.senderCode}_'))) {
+        return;
+      }
     }
-
-    _chatMessages.removeAt(idx);
+    _rememberTombstone(payload.messageId);
+    if (playingVoiceMessageId == payload.messageId) unawaited(stopVoiceNote());
+    _reliableChat.received(frame);
+    if (idx >= 0) _chatMessages.removeAt(idx);
     if (!_chatListController.isClosed) {
       _chatListController.add(List.unmodifiable(_chatMessages));
     }
@@ -2034,6 +2533,9 @@ class RoomSession {
   Future<void> _cleanupEndedRoom() async {
     if (_roomEnded || _closed) return;
     _roomEnded = true;
+    _voiceCapture = null;
+    _chatMessages.removeWhere((m) => m.voicePending);
+    await stopVoiceNote();
     _controlFragments.clear();
     _fusionAudio?.dispose();
     _fusionAudio = null;
@@ -2061,6 +2563,8 @@ class RoomSession {
 
   Future<void> leave() async {
     await _roomEndTask;
+    _voiceCapture = null;
+    await stopVoiceNote();
     _fusionAudio?.dispose();
     _fusionAudio = null;
     final link = transport;
@@ -2125,7 +2629,7 @@ class RoomSession {
     _unreadChatCount = 0;
     _seenChatKeys.clear();
     _seenChatKeyOrder.clear();
-    _incomingImageTransfers.clear();
+    _incomingAttachmentTransfers.clear();
     if (!_chatListController.isClosed) {
       _chatListController.add(const []);
     }
@@ -2165,12 +2669,16 @@ class RoomSession {
   Future<void> dispose() => _disposeFuture ??= _dispose();
 
   Future<void> _dispose() async {
+    await stopVoiceNote();
+    _voiceCapture = null;
     await leave();
     await transport?.dispose();
     await _controlsController.close();
     transport = null;
     _transportSend = null;
     _chatMessages.clear();
+    _chatTombstones.clear();
+    _reliableChat.clear();
     _seenChatKeys.clear();
     _seenChatKeyOrder.clear();
     await _chatStreamController.close();
@@ -2182,8 +2690,8 @@ class RoomSession {
   }
 }
 
-class _IncomingImageTransfer {
-  _IncomingImageTransfer(ChatImageChunkPayload first)
+class _IncomingAttachmentTransfer {
+  _IncomingAttachmentTransfer(ChatAttachmentChunkPayload first)
     : transferId = first.transferId,
       timestampMs = first.timestampMs,
       senderCode = first.senderCode,
@@ -2197,13 +2705,14 @@ class _IncomingImageTransfer {
   final int timestampMs;
   final String senderCode;
   final int chunkCount;
-  final ChatImageFormat format;
+  final ChatAttachmentFormat format;
   final String name;
   final List<Uint8List?> chunks;
   DateTime lastUpdated;
   int totalBytes = 0;
+  final ackFrames = <int, Frame>{};
 
-  bool accepts(ChatImageChunkPayload chunk) =>
+  bool accepts(ChatAttachmentChunkPayload chunk) =>
       chunk.transferId == transferId &&
       chunk.timestampMs == timestampMs &&
       chunk.senderCode == senderCode &&
@@ -2211,7 +2720,7 @@ class _IncomingImageTransfer {
       chunk.format == format &&
       chunk.name == name;
 
-  void add(ChatImageChunkPayload chunk) {
+  void add(ChatAttachmentChunkPayload chunk) {
     if (chunks[chunk.chunkIndex] != null) return;
     chunks[chunk.chunkIndex] = Uint8List.fromList(chunk.data);
     totalBytes += chunk.data.length;
@@ -2221,7 +2730,7 @@ class _IncomingImageTransfer {
   bool get isComplete => chunks.every((chunk) => chunk != null);
 
   Uint8List? assemble() {
-    if (!isComplete || totalBytes > ChatImageChunkPayload.maxImageBytes) {
+    if (!isComplete || totalBytes > ChatAttachmentChunkPayload.maxImageBytes) {
       return null;
     }
     final result = Uint8List(totalBytes);

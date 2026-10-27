@@ -16,9 +16,12 @@ import '../transport/wifi_direct_credentials.dart';
 import '../protocol/frame.dart';
 import '../protocol/room_limits.dart';
 import '../protocol/frame_type.dart';
+import '../protocol/relay_budget.dart';
 import '../session/room_session.dart';
 import '../transport/lan_discovery.dart';
 import '../transport/room_transport.dart';
+import '../transport/bounded_packet_writer.dart';
+import '../transport/wifi_aware_link.dart';
 import 'fusion_identity.dart';
 import 'fusion_peer_topology.dart';
 import 'fusion_server_api.dart';
@@ -33,14 +36,15 @@ class FusionPacketCache {
             _seen.length >= 16384)) {
       _seen.remove(_seen.keys.first);
     }
-    final key = sha256.convert(packet).toString();
+    final key = sha256.convert(RelayBudget.cacheKeyBytes(packet)).toString();
     if (_seen.containsKey(key)) return false;
     _seen[key] = now;
     return true;
   }
 }
 
-class FusionTransport extends RoomTransport implements FusionControlTransport {
+class FusionTransport extends RoomTransport
+    implements FusionControlTransport, AuthenticatedRelayTransport {
   FusionTransport({
     required this.roomId,
     required this.roomName,
@@ -69,6 +73,31 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   WebSocket? _cloud;
   final _incoming = StreamController<Frame>.broadcast();
   final _cache = FusionPacketCache();
+  final _writers = <WebSocket, BoundedPacketWriter>{};
+  final _ingress = <Frame, WebSocket>{};
+  int _retiredDroppedAudio = 0;
+  int _retiredSentBytes = 0;
+  int _retiredHighWatermark = 0;
+  int get queuedPackets => _writers.values.fold(0, (n, w) => n + w.pending);
+  int get droppedAudioPackets =>
+      _writers.values.fold(_retiredDroppedAudio, (n, w) => n + w.droppedAudio);
+  int get sentBytes =>
+      _writers.values.fold(_retiredSentBytes, (n, w) => n + w.writtenBytes);
+  int get queueHighWatermark => _writers.values.fold(
+    _retiredHighWatermark,
+    (n, w) => max(n, w.highWatermark),
+  );
+  int get activeLinks => _writers.length;
+
+  void _retireWriter(WebSocket socket) {
+    final writer = _writers.remove(socket);
+    if (writer == null) return;
+    _retiredDroppedAudio += writer.droppedAudio;
+    _retiredSentBytes += writer.writtenBytes;
+    _retiredHighWatermark = max(_retiredHighWatermark, writer.highWatermark);
+    writer.close();
+  }
+
   final _http = HttpClient()..connectionTimeout = const Duration(seconds: 4);
   LanRoomDiscovery? _discovery;
   Timer? _timer;
@@ -108,6 +137,14 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
 
   static Uri endpoint(ServerProfile profile, String suffix) =>
       FusionServerApi.endpoint(profile, suffix);
+
+  WifiAwareLink? _aware;
+  WifiAwareLink get wifiAware => _aware ??= WifiAwareLink(
+    localPort: boundPort,
+    roomId: roomId,
+    isHost: () => _session?.isHost == true,
+    connect: (port) => _dialLocal('ws://127.0.0.1:$port/fusion/$roomId'),
+  );
 
   Future<void> start(RoomSession session) async {
     _session = session;
@@ -346,6 +383,13 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     if (!cloud) _local.add(socket);
     if (!cloud && nodeId != null) _socketNodes[socket] = nodeId;
     socket.pingInterval = const Duration(seconds: 5);
+    _writers[socket] = BoundedPacketWriter(
+      write: (bytes) => socket.addStream(Stream<List<int>>.value(bytes)),
+      writeText: (text) => socket.addStream(Stream<String>.value(text)),
+      onFailure: (_) {
+        unawaited(socket.close());
+      },
+    );
     var window = DateTime.now();
     var count = 0;
     socket.listen(
@@ -369,13 +413,22 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
           return;
         }
         if (!_cache.accept(bytes, now)) return;
-        // One encrypted packet fans out over both routes and is delivered once.
-        // Offline phones can be gateways too; only the destination decodes Opus.
-        _fanout(bytes, exclude: socket);
+        // Admitted relays classify only after AEAD verification. Admission
+        // traffic still crosses unadmitted gateways as reliable opaque packets.
+        if (frame.type == FrameType.sealed &&
+            _session?.hasFusionIdentity == true) {
+          if (_ingress.length >= 256) _ingress.remove(_ingress.keys.first);
+          _ingress[frame] = socket;
+        } else {
+          final nextHop = RelayBudget.forward(frame);
+          if (nextHop != null) _fanout(nextHop.encode(), exclude: socket);
+        }
         _incoming.add(frame);
       },
       onError: (Object _) {},
       onDone: () {
+        _retireWriter(socket);
+        _ingress.removeWhere((_, source) => identical(source, socket));
         final proxy = _appleProxies.remove(socket);
         if (proxy != null) unawaited(_closeAppleProxy(proxy));
         _local.remove(socket);
@@ -394,15 +447,15 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     _updateStatus();
   }
 
-  bool _allowed(Frame frame) =>
-      frame.type == FrameType.sealed ||
-      frame.type == FrameType.handshakeHello ||
-      frame.type == FrameType.handshakeConfirm;
+  bool _allowed(Frame frame) {
+    final budget = RelayBudget.remaining(frame);
+    return budget != null && budget <= RelayBudget.maximum;
+  }
 
-  void _fanout(Uint8List bytes, {WebSocket? exclude}) {
+  void _fanout(Uint8List bytes, {WebSocket? exclude, bool realtime = false}) {
     for (final socket in [..._local, ?_cloud]) {
       if (!identical(socket, exclude) && socket.readyState == WebSocket.open) {
-        socket.add(bytes);
+        _writers[socket]?.send(bytes, realtime: realtime);
       }
     }
   }
@@ -411,7 +464,20 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   void send(Frame frame, {bool realtime = false}) {
     if (_stopped || !_allowed(frame)) return;
     final bytes = frame.encode();
-    if (_cache.accept(bytes, DateTime.now())) _fanout(bytes);
+    if (_cache.accept(bytes, DateTime.now())) {
+      _fanout(bytes, realtime: realtime);
+    }
+  }
+
+  @override
+  void relayAuthenticated(Frame sealed, {required bool realtime}) {
+    final source = _ingress.remove(sealed);
+    if (source != null && !_stopped) {
+      final nextHop = RelayBudget.forward(sealed);
+      if (nextHop != null) {
+        _fanout(nextHop.encode(), exclude: source, realtime: realtime);
+      }
+    }
   }
 
   @override
@@ -421,8 +487,11 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     if (frame.payload[0] == 1 && identity == null) {
       identity = await FusionIdentity.openBootstrap(data, roomId);
       if (identity != null && _cloud != null && !_cloudAuthenticated) {
-        _cloud!.add(jsonEncode({'key': identity!.relayToken}));
-        _cloudAuthenticated = true;
+        _cloudAuthenticated =
+            _writers[_cloud]?.sendText(
+              jsonEncode({'key': identity!.relayToken}),
+            ) ==
+            true;
       }
     } else if (frame.payload[0] == 4 &&
         _session?.hasFusionIdentity == true &&
@@ -477,6 +546,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     if (_stopped || _ticking || _ending) return;
     _ticking = true;
     try {
+      await _aware?.checkRole();
       if (_session?.state == RoomState.inRoom) await _publishState();
       if (_session?.hasFusionIdentity == true) {
         await _announcePeerRoutes();
@@ -686,7 +756,10 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
   @override
   Future<bool> reconnectToHost(String endpoint) async => false;
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    await Future.wait(_writers.values.map((writer) => writer.flush()));
+  }
+
   @override
   Future<void> stop() => _stopTask ??= _stop();
 
@@ -700,6 +773,7 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
       } catch (_) {}
     }
     _stopped = true;
+    await _aware?.close();
     await _advertisingTask;
     if (_advertisingDirect) {
       await WifiDirectManager.instance.stopAdvertisingFusionRoom();
@@ -714,6 +788,10 @@ class FusionTransport extends RoomTransport implements FusionControlTransport {
     final proxies = _appleProxies.values.toList();
     _appleProxies.clear();
     await Future.wait(proxies.map(_closeAppleProxy));
+    for (final socket in _writers.keys.toList()) {
+      _retireWriter(socket);
+    }
+    _ingress.clear();
     _local.clear();
     _socketNodes.clear();
     _peerRoutes.clear();

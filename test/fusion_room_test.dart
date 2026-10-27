@@ -1,3 +1,5 @@
+import 'package:dawn_mesh/core/security/member_identity.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -12,11 +14,14 @@ import 'package:dawn_mesh/core/session/member.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> _until(bool Function() done) async {
+Future<void> _until(
+  bool Function() done, {
+  String detail = 'fusion state',
+}) async {
   final deadline = DateTime.now().add(const Duration(seconds: 8));
   while (!done()) {
     if (DateTime.now().isAfter(deadline)) {
-      throw TimeoutException('fusion state');
+      throw TimeoutException(detail);
     }
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
@@ -55,7 +60,10 @@ Future<_Node> _node(
     localPort: 0,
     advertise: false,
   );
-  await session.protectWithInvite(invite);
+  await session.protectWithInvite(
+    invite,
+    identity: await MemberIdentity.create(),
+  );
   session.attachTransport(link, reconnect: link.reconnect);
   addTearDown(session.dispose);
   await link.start(session);
@@ -349,6 +357,7 @@ void main() {
       await host.link.synchronize();
       await _until(
         () => a.link.signedState != null && b.link.signedState != null,
+        detail: 'local gateways received host state',
       );
       await a.link.synchronize();
       await b.link.synchronize();
@@ -377,27 +386,54 @@ void main() {
       await remote.session.joinRoom(startAudio: false);
       expect(remote.session.state, RoomState.connecting);
       expect(await remote.link.connectCloud(), true);
-      await _until(() => remote.session.state == RoomState.inRoom);
+      await _until(
+        () => remote.session.state == RoomState.inRoom,
+        detail: 'remote PAKE admission',
+      );
       await host.link.synchronize();
-      await _until(() => remote.link.identity != null);
+      await _until(
+        () => remote.link.identity != null,
+        detail: 'remote bootstrap identity',
+      );
       expect(host.session.members.length, 4);
       await remote.session.startAudio();
       remote.session.setPtt(true);
       remote.audio.emitEncodedFrame(Uint8List.fromList([2, 8, 9]));
-      await _until(() => host.audio.submittedFrames.isNotEmpty);
+      await _until(
+        () => host.audio.submittedFrames.isNotEmpty,
+        detail: 'uplink audio delivery',
+      );
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(
         host.audio.submittedFrames.length,
         1,
       ); // Two online gateways, one playback.
+      final previousEpoch = host.session.secureCodec!.epoch;
       await a.session
           .dispose(); // B becomes the remaining uplink without election.
+      // A graceful member departure rotates the traffic epoch. Wait for both
+      // surviving gateways/remote to receive their individual key grants before
+      // asserting delivery in the new epoch; old-epoch audio must be rejected.
+      await _until(
+        () =>
+            host.session.secureCodec!.epoch > previousEpoch &&
+            b.session.secureCodec!.epoch == host.session.secureCodec!.epoch &&
+            remote.session.secureCodec!.epoch ==
+                host.session.secureCodec!.epoch,
+        detail: 'remaining members receive rotated epoch',
+      );
       remote.audio.emitEncodedFrame(Uint8List.fromList([3, 7, 9]));
-      await _until(() => host.audio.submittedFrames.length == 2);
+      await _until(
+        () => host.audio.submittedFrames.length == 2,
+        detail: 'remaining gateway audio delivery',
+      );
       await host.session.sendChat('房主不联网，也能和远程成员通话');
-      await _until(() => remote.session.chatMessages.length == 1);
+      await _until(
+        () => remote.session.chatMessages.length == 1,
+        detail: 'downlink chat',
+      );
       await host.session.endRoom();
-      await _until(() => remote.session.roomEnded);
+      await _until(() => remote.session.roomEnded, detail: 'room dissolution');
     },
     skip: integrationURL == null
         ? 'Set DAWNMESH_FUSION_TEST_URL to run against the Go relay'

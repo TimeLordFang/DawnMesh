@@ -16,6 +16,9 @@ class ControlFragments {
       type == FrameType.roster ||
       type == FrameType.hostHandover ||
       type == FrameType.hostAnnounce ||
+      type == FrameType.memberKeys ||
+      type == FrameType.chatSync ||
+      type == FrameType.courierBundle ||
       type == FrameType.fusionState;
 
   static FrameType? originalType(Frame frame) =>

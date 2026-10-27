@@ -30,6 +30,8 @@ class MainActivity : FlutterActivity() {
     private var audioPlugin: PlatformAudioPlugin? = null
     private var blePlugin: BleL2capPlugin? = null
     private var wifiDirectPlugin: WifiDirectPlugin? = null
+    private var wifiAwarePlugin: WifiAwarePlugin? = null
+    private var wifiAwareFallbackChannel: MethodChannel? = null
     private var bonjourPlugin: BonjourDiscoveryPlugin? = null
     private var multicastLock: WifiManager.MulticastLock? = null
 
@@ -48,12 +50,15 @@ class MainActivity : FlutterActivity() {
         permissionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
             "dev.dawnmesh.intercom/permissions").apply {
             setMethodCallHandler { call, result ->
-                if (call.method != "ensureBluetooth") { result.notImplemented(); return@setMethodCallHandler }
+                if (call.method != "ensureBluetooth" && call.method != "ensureWifiAware") { result.notImplemented(); return@setMethodCallHandler }
                 if (permissionsInFlight) {
                     result.error("PERMISSIONS_BUSY", "请先完成系统权限弹窗，再重试", null)
                     return@setMethodCallHandler
                 }
-                val wanted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) listOf(
+                val wanted = if (call.method == "ensureWifiAware") {
+                    if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+                    else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) listOf(
                     Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN,
                     Manifest.permission.BLUETOOTH_ADVERTISE,
                 ) else listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -109,6 +114,19 @@ class MainActivity : FlutterActivity() {
             applicationContext,
             flutterEngine.dartExecutor.binaryMessenger,
         )
+        if (Build.VERSION.SDK_INT >= 37) {
+            wifiAwarePlugin = WifiAwarePlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        } else {
+            wifiAwareFallbackChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
+                "dev.dawnmesh.intercom/wifi_aware").apply {
+                setMethodCallHandler { call, result ->
+                    if (call.method == "capabilities") result.success(mapOf("supported" to false,
+                        "reason" to "此系统未提供标准配对数据通道，继续使用原连接"))
+                    else if (call.method == "stop") result.success(null)
+                    else result.success(mapOf("started" to false))
+                }
+            }
+        }
         bonjourPlugin = BonjourDiscoveryPlugin(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
     }
 
@@ -153,6 +171,10 @@ class MainActivity : FlutterActivity() {
         wifiDirectPlugin = null
         bonjourPlugin?.dispose()
         bonjourPlugin = null
+        if (Build.VERSION.SDK_INT >= 37) wifiAwarePlugin?.dispose()
+        wifiAwarePlugin = null
+        wifiAwareFallbackChannel?.setMethodCallHandler(null)
+        wifiAwareFallbackChannel = null
         try {
             multicastLock?.let {
                 if (it.isHeld) it.release()

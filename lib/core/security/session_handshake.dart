@@ -2,7 +2,9 @@ import 'dart:typed_data';
 
 import '../protocol/frame.dart';
 import '../protocol/frame_type.dart';
+import '../protocol/relay_budget.dart';
 import 'session_crypto.dart';
+import 'member_identity.dart';
 
 /// 安全信封编解码器：将普通 [Frame] 密封打包为 [FrameType.sealed] 帧，或反向解封。
 class SecureFrameCodec {
@@ -15,8 +17,12 @@ class SecureFrameCodec {
       Frame.maxPayloadSize - Frame.headerSize - nonceBytes - tagBytes;
 
   final SessionCipher cipher;
+  final RoomAuthentication? authentication;
+  final int epoch;
+  int get payloadLimit =>
+      maxPlaintextPayload - (authentication == null ? 0 : 102);
 
-  SecureFrameCodec(this.cipher);
+  SecureFrameCodec(this.cipher, {this.authentication, this.epoch = 0});
 
   /// 将明文帧包装密封为 SEALED 帧。
   Future<Frame> seal(Frame frame) async {
@@ -24,13 +30,25 @@ class SecureFrameCodec {
       throw ArgumentError('frame is already sealed');
     }
 
-    final encoded = frame.encode();
-    final aad = _associatedData(frame.senderId, frame.seq);
+    final auth = authentication;
+    final encoded = auth == null
+        ? frame.encode()
+        : await auth.sign(frame, epoch);
+    final prefix = auth == null
+        ? Uint8List(0)
+        : Uint8List.fromList([3, ...RoomAuthentication.epochBytes(epoch)]);
+    final aad = Uint8List.fromList([
+      ..._associatedData(frame.senderId, frame.seq),
+      ...prefix,
+    ]);
     final packet = await cipher.encrypt(encoded, associatedData: aad);
 
-    final payload = Uint8List(packet.nonce.length + packet.ciphertext.length);
-    payload.setRange(0, packet.nonce.length, packet.nonce);
-    payload.setRange(packet.nonce.length, payload.length, packet.ciphertext);
+    final payload = Uint8List.fromList([
+      ...prefix,
+      if (auth != null) RelayBudget.maximum,
+      ...packet.nonce,
+      ...packet.ciphertext,
+    ]);
 
     if (payload.length > Frame.maxPayloadSize) {
       throw StateError('sealed frame exceeds transport limit');
@@ -49,26 +67,48 @@ class SecureFrameCodec {
     if (frame.type != FrameType.sealed) {
       throw ArgumentError('sealed frame required');
     }
-    if (frame.payload.length < nonceBytes + tagBytes) {
+    final offset = authentication == null ? 0 : 6;
+    if (frame.payload.length < offset + nonceBytes + tagBytes) {
       throw ArgumentError('sealed frame is truncated');
     }
 
-    final nonce = Uint8List.sublistView(frame.payload, 0, nonceBytes);
-    final ciphertext = Uint8List.sublistView(frame.payload, nonceBytes);
-    final aad = _associatedData(frame.senderId, frame.seq);
+    if (offset > 0 &&
+        (frame.payload[0] != 3 ||
+            ByteData.sublistView(frame.payload).getUint32(1) != epoch ||
+            frame.payload[5] > RelayBudget.maximum)) {
+      throw StateError('Wrong room key epoch');
+    }
+    final nonce = Uint8List.sublistView(
+      frame.payload,
+      offset,
+      offset + nonceBytes,
+    );
+    final ciphertext = Uint8List.sublistView(
+      frame.payload,
+      offset + nonceBytes,
+    );
+    final aad = Uint8List.fromList([
+      ..._associatedData(frame.senderId, frame.seq),
+      ...frame.payload.take(offset == 0 ? 0 : 5),
+    ]);
 
     final packet = EncryptedPacket(nonce: nonce, ciphertext: ciphertext);
-    final plaintext = await cipher.decrypt(packet, associatedData: aad);
-
-    final decoded = Frame.decode(plaintext);
-    if (decoded == null) {
-      throw const FormatException('failed to decode decrypted frame');
-    }
-    if (decoded.senderId != frame.senderId || decoded.seq != frame.seq) {
-      throw StateError('sealed frame header mismatch');
-    }
-
-    return decoded;
+    Frame? decoded;
+    await cipher.decrypt(
+      packet,
+      associatedData: aad,
+      validatePlaintext: (plaintext) async {
+        decoded = authentication == null
+            ? Frame.decode(plaintext)
+            : await authentication!.verify(plaintext, epoch);
+        if (decoded == null ||
+            decoded!.senderId != frame.senderId ||
+            decoded!.seq != frame.seq) {
+          throw StateError('sealed frame header mismatch');
+        }
+      },
+    );
+    return decoded!;
   }
 
   static Uint8List _associatedData(int senderId, int sequence) {

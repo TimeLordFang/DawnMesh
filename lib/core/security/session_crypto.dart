@@ -78,6 +78,7 @@ class SessionCipher {
   Future<Uint8List> decrypt(
     EncryptedPacket packet, {
     Uint8List? associatedData,
+    Future<void> Function(Uint8List)? validatePlaintext,
   }) async {
     if (packet.nonce.length != nonceBytes) throw ArgumentError('invalid nonce');
     final prefix = base64.encode(packet.nonce.sublist(0, 8));
@@ -106,6 +107,10 @@ class SessionCipher {
         secretKey: _secretKey,
         aad: associatedData ?? Uint8List(0),
       );
+      final plaintext = Uint8List.fromList(decrypted);
+      // Group-key holders cannot poison another signer's replay window with
+      // an AEAD-valid packet whose independent member signature is invalid.
+      await validatePlaintext?.call(plaintext);
 
       // Mutate replay state only after authentication. Never evict a sender:
       // evicting it would make old captured packets acceptable again.
@@ -115,7 +120,7 @@ class SessionCipher {
       }
       final window = _replayWindows.putIfAbsent(prefix, _ReplayWindow.new);
       window.accept(counter); // Recheck after await for concurrent duplicates.
-      return Uint8List.fromList(decrypted);
+      return plaintext;
     } catch (_) {
       rethrow;
     }

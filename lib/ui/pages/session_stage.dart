@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/noise_reduction_control.dart';
+import '../widgets/member_safety_sheet.dart';
+import '../widgets/wifi_aware_control.dart';
+import '../../core/fusion/fusion_transport.dart';
 import '../widgets/room_settings_button.dart';
 import '../widgets/fusion_audio_profile_control.dart';
 import '../../core/audio/audio_io.dart';
@@ -17,6 +20,7 @@ import 'home_page.dart';
 import 'room_page.dart';
 import 'diagnostics_sheet.dart';
 import 'about_page.dart';
+import 'courier_page.dart';
 import 'debug_log_page.dart';
 import '../widgets/room_chat_sheet.dart';
 import '../widgets/room_invite_row.dart';
@@ -231,6 +235,13 @@ class _SessionStageState extends State<SessionStage>
     setState(() => _internetSession = session);
   }
 
+  void _showCourier() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => CourierPage(session: _session)),
+    );
+  }
+
   void _showDiagnostics() {
     final session = _session;
     if (session == null) return;
@@ -240,6 +251,7 @@ class _SessionStageState extends State<SessionStage>
       builder: (context) => DiagnosticsSheet(
         isNight: widget.isNight,
         memberCount: session.members.length,
+        session: session,
       ),
     );
   }
@@ -478,6 +490,14 @@ class _SessionStageState extends State<SessionStage>
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
+                tooltip: s.isEn ? 'Offline forwarding' : '离线转交',
+                icon: const Icon(
+                  Icons.mark_email_unread_outlined,
+                  color: Colors.white,
+                ),
+                onPressed: _showCourier,
+              ),
+              IconButton(
                 tooltip: s.tooltipDebugLogs,
                 iconSize: 28,
                 padding: const EdgeInsets.all(10),
@@ -630,6 +650,40 @@ class _SessionStageState extends State<SessionStage>
               (state) => state == RoomState.ended,
             ),
             items: (sheetContext) => [
+              ListTile(
+                leading: const Icon(Icons.mark_email_unread_outlined),
+                title: Text(s.isEn ? 'Offline forwarding' : '离线转交'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showCourier();
+                },
+              ),
+              if (session.secureCodec?.authentication != null)
+                ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: Text(s.memberSafetyNumbers),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => MemberSafetySheet(session: session),
+                    );
+                  },
+                ),
+              if (!session.roomEnded && !session.textOnly)
+                StreamBuilder<void>(
+                  stream: session.controlsStream,
+                  builder: (context, _) => SwitchListTile(
+                    value: session.retainVoiceNotes,
+                    onChanged: session.setRetainVoiceNotes,
+                    title: Text(s.retainVoiceNotes),
+                    subtitle: Text(s.retainVoiceNotesHint),
+                  ),
+                ),
+              if (session.transport case final FusionTransport transport
+                  when !session.roomEnded)
+                WifiAwareControl(link: transport.wifiAware),
               if (!session.roomEnded && session.mode == RoomMode.fusion)
                 FusionAudioProfileControl(settings: session.fusionAudio),
               if (!session.roomEnded)
@@ -693,6 +747,8 @@ class _SessionStageState extends State<SessionStage>
                       ? s.roomReconnecting
                       : disconnected
                       ? s.roomDisconnected
+                      : session.textOnly
+                      ? s.textOnlyStatus
                       : session.isHost
                       ? s.hostBroadcastingStatus
                       : s.memberConnectedStatus;

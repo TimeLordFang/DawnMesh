@@ -18,16 +18,26 @@ enum FrameType {
   admission(0x10),
   nicknameUpdate(0x11),
   fusionState(0x12),
-  controlFragment(0x13);
+  controlFragment(0x13),
+  chatControl(0x14),
+  memberKeys(0x15),
+  voiceNote(0x16),
+  voiceNoteStart(0x17),
+  courierControl(0x18),
+  courierBundle(0x19);
 
   final int value;
   const FrameType(this.value);
+
+  bool get isBulk =>
+      this == chatImage || this == voiceNote || this == voiceNoteStart;
 
   bool get isHostCommand =>
       this == roster ||
       this == hostHandover ||
       this == hostAnnounce ||
       this == chatSync ||
+      this == memberKeys ||
       this == admission;
 
   static FrameType? fromValue(int value) {

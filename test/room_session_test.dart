@@ -5,7 +5,7 @@ import 'package:dawn_mesh/core/audio/audio_io.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_delete.dart';
-import 'package:dawn_mesh/core/protocol/payloads/chat_image.dart';
+import 'package:dawn_mesh/core/protocol/payloads/chat_attachment.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_sync.dart';
 import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
@@ -487,11 +487,11 @@ void main() {
         ...List<int>.generate(700, (index) => index & 0xff),
       ]);
       final count =
-          (bytes.length + ChatImageChunkPayload.maxChunkBytes - 1) ~/
-          ChatImageChunkPayload.maxChunkBytes;
+          (bytes.length + ChatAttachmentChunkPayload.maxChunkBytes - 1) ~/
+          ChatAttachmentChunkPayload.maxChunkBytes;
       for (var index = 0; index < count; index++) {
-        final start = index * ChatImageChunkPayload.maxChunkBytes;
-        final end = (start + ChatImageChunkPayload.maxChunkBytes).clamp(
+        final start = index * ChatAttachmentChunkPayload.maxChunkBytes;
+        final end = (start + ChatAttachmentChunkPayload.maxChunkBytes).clamp(
           0,
           bytes.length,
         );
@@ -500,13 +500,13 @@ void main() {
             type: FrameType.chatImage,
             senderId: 2,
             seq: 20 + index,
-            payload: ChatImageChunkPayload(
+            payload: ChatAttachmentChunkPayload(
               transferId: 99,
               timestampMs: 1725450000000,
               senderCode: '0222',
               chunkIndex: index,
               chunkCount: count,
-              format: ChatImageFormat.png,
+              format: ChatAttachmentFormat.png,
               name: 'received.png',
               data: Uint8List.sublistView(bytes, start, end),
             ).encode(),

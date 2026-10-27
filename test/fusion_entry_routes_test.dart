@@ -1,3 +1,5 @@
+import 'package:dawn_mesh/core/security/member_identity.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -44,7 +46,10 @@ void main() {
       localPort: 0,
       advertise: false,
     );
-    await session.protectWithInvite(RoomInvite.parse('1234'));
+    await session.protectWithInvite(
+      RoomInvite.parse('1234'),
+      identity: await MemberIdentity.create(),
+    );
     session.attachTransport(link, reconnect: link.reconnect);
     addTearDown(session.dispose);
     await link.start(session);

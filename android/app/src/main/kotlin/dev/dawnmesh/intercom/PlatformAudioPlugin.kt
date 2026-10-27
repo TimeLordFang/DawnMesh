@@ -158,6 +158,9 @@ class PlatformAudioPlugin(
 
     init {
         IntercomForegroundService.focusObserver = { _ ->
+            if (!IntercomForegroundService.hasAudioFocus) {
+                Handler(Looper.getMainLooper()).post { voiceNotePlayback.stop() }
+            }
             if (!internetActive && captureRequested) {
                 Thread({
                     synchronized(this) {
@@ -177,7 +180,10 @@ class PlatformAudioPlugin(
         eventChannel.setStreamHandler(this)
     }
 
+    private val voiceNotePlayback = VoiceNotePlayback(Handler(Looper.getMainLooper()))
+
     fun dispose() {
+        voiceNotePlayback.stop()
         IntercomForegroundService.focusObserver = null
         captureRequested = false
         routeMonitor.stop()
@@ -226,6 +232,12 @@ class PlatformAudioPlugin(
                 voiceNoiseReduction.stopInternet()
                 result.success(true)
             }
+            "playVoiceNote" -> {
+                val data = call.argument<ByteArray>("data")
+                if (data == null) result.error("BAD_ARGS", "缺少留言内容", null)
+                else voiceNotePlayback.play(data, captureRequested, result)
+            }
+            "stopVoiceNote" -> { voiceNotePlayback.stop(); result.success(null) }
             "startCapture" -> {
                 if (!hasMicPermission()) {
                     result.error(

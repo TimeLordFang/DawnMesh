@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import '../diagnostics/app_log.dart';
 import '../diagnostics/pipeline_probe.dart';
 import '../protocol/frame.dart';
+import '../protocol/frame_type.dart';
 import 'room_transport.dart';
 
 const String _tag = '蓝牙';
@@ -44,7 +46,15 @@ class DiscoveredBleRoom {
 ///
 /// 星型拓扑由房主转发：加密帧经会话认证后回到原生发送队列，
 /// 保留语音实时标记；旧未加密控制帧仍由原生中继。
-class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
+class BleL2capTransport
+    implements
+        RoomTransport,
+        AuthenticatedRelayTransport,
+        PayloadAwareTransport {
+  /// Explicit diagnostics override. Memory only; normal selection resumes when
+  /// disabled or after process restart. Existing calls are never switched.
+  static final preferTextFallback = ValueNotifier<bool>(false);
+
   static const MethodChannel _channel = MethodChannel(
     'dev.dawnmesh.intercom/ble_l2cap',
   );
@@ -66,6 +76,9 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
   Timer? _pruneTimer;
   DiscoveredBleRoom? _lastConnectedRoom;
   bool _stopping = false;
+  @override
+  bool textOnly = false;
+  bool _connecting = false;
 
   bool _sendErrorReported = false;
   final _frameSources = Expando<String>('BLE frame source');
@@ -224,32 +237,52 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
     _sendErrorReported = false;
     await _listenIncomingData();
 
+    _connecting = true;
+    textOnly = false;
     try {
-      final ok = await _channel.invokeMethod<bool>('connectL2cap', {
-        'address': room.address,
-        'psm': room.psm,
-      });
-      if (ok != true) {
+      var connected = false;
+      try {
+        if (!preferTextFallback.value) {
+          connected =
+              await _channel.invokeMethod<bool>('connectL2cap', {
+                'address': room.address,
+                'psm': room.psm,
+              }) ==
+              true;
+        }
+      } on PlatformException catch (error) {
+        AppLog.debug(_tag, 'L2CAP 暂不可用，尝试文字备用通道：${error.code}');
+      }
+      if (!connected) {
+        connected =
+            await _channel.invokeMethod<bool>('connectGatt', {
+              'address': room.address,
+            }) ==
+            true;
+        textOnly = connected;
+      }
+      if (!connected) {
         if (!silent) AppLog.error(_tag, '连接蓝牙房主失败');
         _role = BleRole.idle;
         return false;
       }
+      _role = BleRole.clientCentral;
       _peerCount = 1;
       _lastConnectedRoom = room;
-      AppLog.info(_tag, '已连接蓝牙房「${room.roomName}」');
+      AppLog.info(
+        _tag,
+        textOnly ? '已连接蓝牙文字备用通道，实时语音不可用' : '已连接蓝牙房「${room.roomName}」',
+      );
       return true;
-    } on PlatformException catch (e) {
-      if (silent) {
-        AppLog.warn('重连', 'L2CAP 连接失败：${e.code} ${e.message ?? '未知系统错误'}');
-      } else {
-        AppLog.error(_tag, e.message ?? '连接蓝牙房主失败', e);
-      }
+    } on PlatformException catch (error) {
+      AppLog.warn(_tag, '蓝牙连接失败：${error.code}');
       _role = BleRole.idle;
       return false;
-    } on MissingPluginException catch (e) {
-      AppLog.error(_tag, '当前平台没有实现蓝牙通道', e);
+    } on MissingPluginException {
       _role = BleRole.idle;
       return false;
+    } finally {
+      _connecting = false;
     }
   }
 
@@ -304,7 +337,25 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
   // ------------------------------------------------------------ RoomTransport
 
   @override
-  void relayAuthenticated(Frame sealed, {required bool realtime}) {
+  void relayAuthenticated(Frame sealed, {required bool realtime}) =>
+      _relay(sealed, realtime: realtime);
+
+  @override
+  void sendPayload(
+    Frame wire, {
+    required FrameType originalType,
+    bool relay = false,
+  }) {
+    final realtime = originalType == FrameType.audio;
+    final bulk = originalType.isBulk;
+    if (relay) {
+      _relay(wire, realtime: realtime, bulk: bulk);
+    } else {
+      _send(wire, realtime: realtime, bulk: bulk);
+    }
+  }
+
+  void _relay(Frame sealed, {required bool realtime, bool bulk = false}) {
     final source = _frameSources[sealed];
     if (!isHost || source == null) return;
     unawaited(
@@ -313,6 +364,7 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
             'data': sealed.encode(),
             'realtime': realtime,
             'excludeAddress': source,
+            'bulk': bulk,
           })
           .catchError((Object error) {
             AppLog.warn(_tag, '转发蓝牙帧失败', error);
@@ -322,7 +374,11 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
   }
 
   @override
-  void send(Frame frame, {bool realtime = false}) {
+  void send(Frame frame, {bool realtime = false}) =>
+      _send(frame, realtime: realtime);
+
+  void _send(Frame frame, {bool realtime = false, bool bulk = false}) {
+    if (textOnly && (realtime || bulk)) return;
     if (_role == BleRole.idle) {
       AppLog.warn(_tag, '蓝牙通道未建立，${frame.type.name} 帧没有发出去');
       return;
@@ -333,6 +389,7 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
         .invokeMethod('sendL2capData', {
           'data': frame.encode(),
           'realtime': realtime,
+          'bulk': bulk,
         })
         .then((_) {
           PipelineProbe.record(
@@ -410,6 +467,7 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
   Future<void> stop() async {
     _stopping = true;
     _role = BleRole.idle;
+    textOnly = false;
     _sendErrorReported = false;
     _peerCount = 0;
 
@@ -443,6 +501,7 @@ class BleL2capTransport implements RoomTransport, AuthenticatedRelayTransport {
       }
       final eventType = event['type'] as String?;
       if (eventType == 'disconnected') {
+        if (_connecting) return;
         _peerCount = 0;
         final reason = event['reason'] as String? ?? 'unknown';
         final detail = event['detail'] as String?;

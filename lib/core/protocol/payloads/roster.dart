@@ -15,6 +15,7 @@ class RosterMember {
     required this.nickname,
   });
 
+  bool get textOnly => (flags & 0x08) != 0;
   bool get isHost => (flags & 0x01) != 0;
   bool get isMuted => (flags & 0x02) != 0;
   bool get isSpeaking => (flags & 0x04) != 0;

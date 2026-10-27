@@ -4,7 +4,7 @@
 
 ## 当前连接范围
 
-Android 1.1.9 / iOS 1.0.8 保留同一 Wi-Fi、热点和服务器目录互通。无路由器时，Android 使用原生 Wi-Fi Direct，iOS 使用带 `includePeerToPeer` 的 Bonjour / Network.framework 苹果点对点；两种原生无线协议不能直接互联。跨系统且没有共同网络时，使用双方可达的同一服务器；完全离线且没有共同网络的跨系统自动直连暂缓。
+Android / iOS 1.2.0 保留同一 Wi-Fi、热点和服务器目录互通。无路由器时的 Android Wi-Fi Direct 与 Apple peer Wi-Fi 仍为不同协议。新增可选 Wi-Fi Aware 加速：已入房后在设置中主动启用，系统标准配对和数据通道可用时添加一条本地连接；失败保留现有链路。Android 使用 API 37 标准配对数据通道，iOS 使用 iOS 26+ WiFiAware 和系统配对，均需硬件支持，iOS 还需签名权限。实际跨平台射频互通按 [五机验收](MANUAL_ACCEPTANCE.md) 分组验证。
 
 点击房间即进入邀请码输入，确认后自动执行连接及认证。已连通但认证无响应的本地入口不阻止下一入口或服务器兜底。iOS 继续支持手动输入同网房主地址。首次系统权限确认可能仍出现；无需额外 Nearby 配对。Nearby 原型、验证版适配器及其 SDK 依赖已移除。
 
@@ -16,7 +16,7 @@ Android 1.1.9 / iOS 1.0.8 保留同一 Wi-Fi、热点和服务器目录互通。
 
 融合房最多 16 人，默认按住对讲，可切换自动通话、降噪。创建和本地加入不需要服务器或移动网络，四位码仍通过 SPAKE2 验证。附近成员需要同一 Wi-Fi、热点或 Wi-Fi Direct 链路；可以选择已入房普通成员的本地入口，由其把握手转发到房主。
 
-原来的 6 人上限来自应用代码：成员号分配 1～6、LAN 最多 5 个客户端及融合名单人数校验。本版统一扩大到 16 人（含房主），名单、交接计划和签名状态超过单帧时分片发送，完整组装后才更新本地状态。分片限于名单、交接及融合控制消息，最多 4 KiB，12 秒过期，半份消息不进入业务处理。蓝牙房仍为 6 人。
+原来的 6 人上限来自应用代码：成员号分配 1～6、LAN 最多 5 个客户端及融合名单人数校验。本版统一扩大到 16 人（含房主），名单、交接计划和签名状态超过单帧时分片发送，完整组装后才更新本地状态。分片用于白名单中的名单、交接、融合、密钥名单、历史文字及密封转交控制消息，最多 4 KiB，12 秒过期，半份消息不进入业务处理。蓝牙房仍为 6 人。
 
 这不是 Wi-Fi 信道固定人数限制。Android 下层有独立的 AP/P2P GO 最大终端参数与驱动报告能力，不能由 App 的 16 人上限保证每种手机都能组成 16 人的 Wi-Fi Direct 群组。参考 [Android Wi-Fi P2P 群组](https://developer.android.com/reference/android/net/wifi/p2p/WifiP2pGroup) 与 [AOSP AP/P2P 站点容量实现](https://android.googlesource.com/platform/external/wpa_supplicant_8/+/d11f019d62a42a8fc4c4d1f2ec17cf35b0763153/wpa_supplicant/p2p_supplicant.c)。同一局域网/热点或融合房公网成员可以使用应用的 16 人容量。
 

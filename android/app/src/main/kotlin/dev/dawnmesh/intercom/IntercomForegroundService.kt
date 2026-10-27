@@ -75,7 +75,7 @@ class IntercomForegroundService : Service() {
             return Notification.Builder(context, CHANNEL_ID)
                 .setContentTitle(context.getString(R.string.call_title, context.getString(R.string.app_name)))
                 .setContentText(state)
-                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setSmallIcon(R.drawable.ic_launcher_monochrome)
                 .setContentIntent(controlIntent)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setOnlyAlertOnce(true)

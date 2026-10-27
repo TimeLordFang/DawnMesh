@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dawn_mesh/core/protocol/frame.dart';
 import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_delete.dart';
-import 'package:dawn_mesh/core/protocol/payloads/chat_image.dart';
+import 'package:dawn_mesh/core/protocol/payloads/chat_attachment.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_message.dart';
 import 'package:dawn_mesh/core/protocol/payloads/chat_sync.dart';
 import 'package:dawn_mesh/core/protocol/payloads/join_request.dart';
@@ -110,24 +110,24 @@ void main() {
       final bytes = Uint8List.fromList(
         List<int>.generate(384, (i) => i & 0xff),
       );
-      final payload = ChatImageChunkPayload(
+      final payload = ChatAttachmentChunkPayload(
         transferId: 0x12345678,
         timestampMs: 1725450000000,
         senderCode: '0123',
         chunkIndex: 1,
         chunkCount: 3,
-        format: ChatImageFormat.jpeg,
+        format: ChatAttachmentFormat.jpeg,
         name: 'DawnMesh_1.jpg',
         data: bytes,
       );
       final encoded = payload.encode();
       expect(encoded.length, lessThanOrEqualTo(478));
-      final decoded = ChatImageChunkPayload.decode(encoded);
+      final decoded = ChatAttachmentChunkPayload.decode(encoded);
       expect(decoded, isNotNull);
       expect(decoded!.transferId, payload.transferId);
       expect(decoded.chunkIndex, 1);
       expect(decoded.chunkCount, 3);
-      expect(decoded.format, ChatImageFormat.jpeg);
+      expect(decoded.format, ChatAttachmentFormat.jpeg);
       expect(decoded.name, 'DawnMesh_1.jpg');
       expect(decoded.data, bytes);
     });

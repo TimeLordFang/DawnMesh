@@ -1,24 +1,16 @@
-# DawnMesh app icons
+# DawnMesh — Dawn Voice icon
 
-The light and dark SVGs preserve the paths, colors and gradients from Android's
-`drawable/ic_launcher_{background,foreground}.xml` and `drawable-night` variants.
-The flat export uses the central 72 × 72 viewport of the 108 × 108 adaptive icon
-layers, matching the area displayed by Android launchers. Keep a full opaque
-background; each platform applies its own icon mask.
+`dawnmesh-icon.png` is the selected original artwork: a rising sun with three
+voice bars on navy. Android and iOS use the same image in every appearance.
+`google-play-icon.png` is its opaque 512px store export.
 
-Android continues to use its native adaptive vectors, including the monochrome
-themed icon. Its fallback PNGs use a rounded silhouette with transparent corners;
-the iOS icon catalog keeps a full opaque square for the system icon mask.
-Both use these SVG exports.
-The iOS dark appearance uses the same blue night palette as Android.
+Regenerate with `SHARP_MODULE=/path/to/sharp node scripts/generate-app-icons.cjs`.
+The optional first argument selects a repository root. This updates all Android
+legacy densities, the adaptive bitmap, every named iOS AppIcon catalog entry,
+all launch-image scales and the store icon. Android themed launchers use the
+matching monochrome vector in `drawable/ic_launcher_monochrome.xml`.
 
-To regenerate PNGs, install Sharp in a temporary tooling directory and run:
-
-```sh
-npm install --prefix /tmp/dawnmesh-icon-tools --no-save sharp
-SHARP_MODULE=/tmp/dawnmesh-icon-tools/node_modules/sharp node scripts/generate-app-icons.cjs
-```
-
-The generator runs from either mobile repository. Keep the two SVGs and the
-generator identical in DawnMesh and DawnMeshIOS when changing the branding.
-Sharp is an offline asset tool; it is not an application or CI dependency.
+Android adaptive layers reserve an 18dp inset in the 108dp viewport, so the
+visible 72dp launcher region matches the iOS full-bleed composition. Day/night
+and round/adaptive variants share the artwork. Keep this source and generator
+identical in both repositories; candidate files are not runtime assets.

@@ -85,7 +85,15 @@ class BleL2capPlugin(
     private val dataChannel = EventChannel(messenger, DATA_CHANNEL)
     private val scanChannel = EventChannel(messenger, SCAN_CHANNEL)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val metadataHost = BleGattRoomHost(context)
+    private val metadataHost = BleGattRoomHost(context, mainHandler, ::onGattFrame)
+    private val gattClient = BleGattClient(context, mainHandler, ::onGattFrame) {
+        dataSink?.success(mapOf("type" to "disconnected", "reason" to "gatt_closed"))
+    }
+    private fun onGattFrame(address: String, bytes: ByteArray) {
+        val source = "gatt:$address"
+        if (isHost && bytes[0].toInt() != 0x0b) sendData(bytes, source)
+        dataSink?.success(mapOf("type" to "frame", "data" to bytes, "peerAddress" to source))
+    }
 
     private var dataSink: EventChannel.EventSink? = null
     private var scanSink: EventChannel.EventSink? = null
@@ -251,6 +259,16 @@ class BleL2capPlugin(
                 connectL2cap(address, psm, result)
             }
 
+            "connectGatt" -> {
+                val address = call.argument<String>("address")
+                if (address.isNullOrBlank() || isHost) { result.success(false); return }
+                try {
+                    val device = adapter?.getRemoteDevice(address)
+                    if (device == null) result.success(false)
+                    else { stopScan(); gattClient.connect(device) { result.success(it) } }
+                } catch (_: Exception) { result.success(false) }
+            }
+
             "sendL2capData" -> {
                 val data = call.argument<ByteArray>("data")
                 val realtime = call.argument<Boolean>("realtime") ?: false
@@ -258,11 +276,11 @@ class BleL2capPlugin(
                     result.error("BAD_ARGS", "sendL2capData 缺少 data", null)
                     return
                 }
-                result.success(sendData(data, excludeAddress = call.argument<String>("excludeAddress"), realtime = realtime))
+                result.success(sendData(data, excludeAddress = call.argument<String>("excludeAddress"), realtime = realtime, bulk = call.argument<Boolean>("bulk") ?: false))
             }
 
             "flush" -> {
-                val pending = peers.values.map { it.flush() }.toTypedArray()
+                val pending = (peers.values.map { it.flush() } + metadataHost.flush() + gattClient.flush()).toTypedArray()
                 java.util.concurrent.CompletableFuture.allOf(*pending).whenComplete { _, error ->
                     mainHandler.post {
                         if (error == null) result.success(true)
@@ -691,6 +709,7 @@ class BleL2capPlugin(
             return
         }
         isHost = false
+        gattClient.stop()
         stopScan()
         Log.i(TAG, "开始连接蓝牙房：$address，psm=$psm")
 
@@ -961,9 +980,16 @@ class BleL2capPlugin(
         data: ByteArray,
         excludeAddress: String?,
         realtime: Boolean = false,
+        bulk: Boolean = false,
     ): Boolean {
-        if (peers.isEmpty()) return false
         var anySent = false
+        if (!realtime && !bulk) {
+            if (android.os.Looper.myLooper() == mainHandler.looper) {
+                anySent = if (isHost) metadataHost.send(data, excludeAddress?.removePrefix("gatt:")) else gattClient.send(data)
+            } else {
+                mainHandler.post { if (isHost) metadataHost.send(data, excludeAddress?.removePrefix("gatt:")) else gattClient.send(data) }
+            }
+        }
 
         for ((address, link) in peers) {
             if (address == excludeAddress) continue
@@ -1005,6 +1031,7 @@ class BleL2capPlugin(
     // ---------------------------------------------------------------- 收尾
 
     private fun stopEverything() {
+        gattClient.stop()
         metadataHost.stop()
         hostRadioRecoveryGeneration++
         hostRadioRecoveryPending = false

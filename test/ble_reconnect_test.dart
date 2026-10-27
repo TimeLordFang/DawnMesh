@@ -1,3 +1,7 @@
+import 'package:dawn_mesh/core/audio/audio_io.dart';
+import 'package:dawn_mesh/core/session/room_session.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
 import 'package:dawn_mesh/core/transport/ble_l2cap_transport.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +18,7 @@ void main() {
 
   setUp(() {
     calls.clear();
+    BleL2capTransport.preferTextFallback.value = false;
     messenger.setMockMethodCallHandler(methodChannel, (call) async {
       calls.add(call);
       return true;
@@ -27,6 +32,7 @@ void main() {
   });
 
   tearDown(() {
+    BleL2capTransport.preferTextFallback.value = false;
     messenger.setMockMethodCallHandler(methodChannel, null);
     for (final name in [dataEventChannel, scanEventChannel]) {
       messenger.setMockMethodCallHandler(MethodChannel(name), null);
@@ -67,6 +73,79 @@ void main() {
       expect(transport.currentRooms.single.roomName, '蓝牙房');
     },
   );
+
+  test('explicit compatibility test selects GATT only and disabling restores L2CAP', () async {
+    final room = DiscoveredBleRoom(
+      address: 'test-peer',
+      roomName: 'test',
+      psm: 129,
+      memberCount: 1,
+      rssi: -40,
+      lastSeen: DateTime.now(),
+    );
+    final transport = BleL2capTransport();
+    addTearDown(transport.dispose);
+    BleL2capTransport.preferTextFallback.value = true;
+    expect(await transport.connectToHost(room), true);
+    expect(transport.textOnly, true);
+    expect(
+      calls.where((c) => c.method.startsWith('connect')).map((c) => c.method),
+      ['connectGatt'],
+    );
+    await transport.stop();
+    calls.clear();
+    BleL2capTransport.preferTextFallback.value = false;
+    expect(await transport.connectToHost(room), true);
+    expect(transport.textOnly, false);
+    expect(
+      calls.where((c) => c.method.startsWith('connect')).map((c) => c.method),
+      ['connectL2cap'],
+    );
+  });
+
+  test('failed L2CAP falls back to text without opening the microphone or sending bulk data', () async {
+    messenger.setMockMethodCallHandler(methodChannel, (call) async {
+      calls.add(call);
+      return call.method != 'connectL2cap';
+    });
+    final transport = BleL2capTransport();
+    final room = DiscoveredBleRoom(
+      address: 'AA:BB:CC:DD:EE:01',
+      roomName: '备用通道',
+      psm: 129,
+      memberCount: 1,
+      rssi: -40,
+      lastSeen: DateTime.now(),
+    );
+    expect(await transport.connectToHost(room), true);
+    expect(transport.textOnly, true);
+    expect(
+      calls.where((c) => c.method.startsWith('connect')).map((c) => c.method),
+      ['connectL2cap', 'connectGatt'],
+    );
+    final audio = MockAudioIo();
+    final session = RoomSession(audioIo: audio, selfNickname: 'Client');
+    session.attachTransport(transport, reconnect: () async => false);
+    addTearDown(session.dispose);
+    await session.startAudio();
+    session.setPtt(true);
+    expect(audio.isRecording, false);
+    expect(session.isPttPressed, false);
+    final wire = Frame(
+      type: FrameType.sealed,
+      senderId: 2,
+      seq: 1,
+      payload: Uint8List(32),
+    );
+    calls.clear();
+    transport.sendPayload(wire, originalType: FrameType.audio);
+    transport.sendPayload(wire, originalType: FrameType.chatImage);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls.where((c) => c.method == 'sendL2capData'), isEmpty);
+    transport.sendPayload(wire, originalType: FrameType.chat);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls.where((c) => c.method == 'sendL2capData'), hasLength(1));
+  });
 
   test('reconnect rescans and uses refreshed BLE address and PSM', () async {
     final transport = BleL2capTransport();

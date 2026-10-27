@@ -8,8 +8,13 @@ import '../bounded_utf8.dart';
 class JoinRequestPayload {
   final String nickname;
   final Uint8List sessionToken;
+  final bool textOnly;
 
-  JoinRequestPayload({required this.nickname, required this.sessionToken});
+  JoinRequestPayload({
+    required this.nickname,
+    required this.sessionToken,
+    this.textOnly = false,
+  });
 
   Uint8List encode() {
     final nickSub = boundedUtf8(nickname, 64);
@@ -19,17 +24,22 @@ class JoinRequestPayload {
     final copyLen = sessionToken.length.clamp(0, 16);
     tokenBytes.setRange(0, copyLen, sessionToken);
 
-    final out = Uint8List(1 + clampedNickLen + 16);
+    final out = Uint8List(1 + clampedNickLen + 16 + (textOnly ? 1 : 0));
     out[0] = clampedNickLen;
     out.setRange(1, 1 + clampedNickLen, nickSub);
     out.setRange(1 + clampedNickLen, 1 + clampedNickLen + 16, tokenBytes);
+    if (textOnly) out[out.length - 1] = 1;
     return out;
   }
 
   static JoinRequestPayload? decode(Uint8List bytes) {
     if (bytes.length < 17) return null;
     final nickLen = bytes[0];
-    if (nickLen > 64 || bytes.length != 1 + nickLen + 16) return null;
+    if (nickLen > 64 ||
+        (bytes.length != 17 + nickLen &&
+            !(bytes.length == 18 + nickLen && bytes.last == 1))) {
+      return null;
+    }
 
     String nick;
     try {
@@ -40,6 +50,10 @@ class JoinRequestPayload {
     final token = Uint8List(16);
     token.setRange(0, 16, bytes.sublist(1 + nickLen, 1 + nickLen + 16));
 
-    return JoinRequestPayload(nickname: nick, sessionToken: token);
+    return JoinRequestPayload(
+      nickname: nick,
+      sessionToken: token,
+      textOnly: bytes.length == nickLen + 18,
+    );
   }
 }

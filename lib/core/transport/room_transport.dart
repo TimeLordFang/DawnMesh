@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../protocol/frame.dart';
+import '../protocol/frame_type.dart';
 
 /// 底层链路意外中断。主动离房或切换传输层不会产生该事件。
 class TransportDisconnection {
@@ -89,4 +90,15 @@ abstract interface class AuthenticatedRelayTransport {
 abstract interface class FusionControlTransport {
   Future<void> receiveControl(Frame frame);
   Future<void> prepareEnd();
+}
+
+/// Links with a small-message fallback need the authenticated inner type, since
+/// ciphertext length cannot safely distinguish roster fragments from photos.
+abstract interface class PayloadAwareTransport {
+  bool get textOnly;
+  void sendPayload(
+    Frame wire, {
+    required FrameType originalType,
+    bool relay = false,
+  });
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report APK ELF segment alignment and fail on under-aligned 64-bit libs."""
+"""Check native ELF segment alignment in an APK or AAB archive."""
 
 from __future__ import annotations
 
@@ -54,18 +54,18 @@ def inspect_elf(data: bytes) -> tuple[int, list[int], bool]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("apk")
+    parser.add_argument("archive")
     args = parser.parse_args()
 
     failures: list[str] = []
-    with zipfile.ZipFile(args.apk) as apk:
+    with zipfile.ZipFile(args.archive) as apk:
         libraries = sorted(
             name
             for name in apk.namelist()
-            if name.startswith("lib/") and name.endswith(".so")
+            if len(name.split("/")) >= 3 and name.split("/")[-3] == "lib" and name.endswith(".so")
         )
         if not libraries:
-            raise SystemExit("APK contains no native libraries")
+            raise SystemExit("Archive contains no native libraries")
         for name in libraries:
             elf_class, alignments, has_relro = inspect_elf(apk.read(name))
             print(f"{name}: PT_LOAD align={alignments}, GNU_RELRO={has_relro}")

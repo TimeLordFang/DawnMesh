@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'voice_note.dart';
+
 /// In-memory chat message representation inside [RoomSession].
 @immutable
 class ChatMessage {
@@ -17,6 +19,8 @@ class ChatMessage {
   final Uint8List? imageBytes;
   final String? imageMimeType;
   final String? imageName;
+  final VoiceNote? voiceNote;
+  final bool voicePending;
 
   const ChatMessage({
     required this.messageId,
@@ -33,9 +37,12 @@ class ChatMessage {
     this.imageBytes,
     this.imageMimeType,
     this.imageName,
+    this.voiceNote,
+    this.voicePending = false,
   });
 
   bool get hasImage => imageBytes != null;
+  bool get hasVoiceNote => voiceNote != null || voicePending;
 
   ChatMessage copyWith({
     String? messageId,
@@ -52,6 +59,8 @@ class ChatMessage {
     Uint8List? imageBytes,
     String? imageMimeType,
     String? imageName,
+    VoiceNote? voiceNote,
+    bool? voicePending,
   }) {
     return ChatMessage(
       messageId: messageId ?? this.messageId,
@@ -68,6 +77,8 @@ class ChatMessage {
       imageBytes: imageBytes ?? this.imageBytes,
       imageMimeType: imageMimeType ?? this.imageMimeType,
       imageName: imageName ?? this.imageName,
+      voiceNote: voiceNote ?? this.voiceNote,
+      voicePending: voicePending ?? this.voicePending,
     );
   }
 

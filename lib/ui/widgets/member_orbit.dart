@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_strings.dart';
+
 import '../../core/session/device_code.dart';
 import '../../core/session/member.dart';
 import '../theme/app_theme.dart';
@@ -89,7 +91,9 @@ class _MemberAvatarChip extends StatelessWidget {
         children: [
           AvatarFrame(
             senderCode: code ?? '${member.memberId}',
-            nickname: displayName,
+            nickname: member.textOnly
+                ? '$displayName · ${AppStrings.of(context).textOnlyLabel}'
+                : displayName,
             isHost: member.isHost,
             isSpeaking: member.isSpeaking,
             isMuted: member.isMuted,

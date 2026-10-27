@@ -148,26 +148,35 @@ jobs:
           cmake --build /tmp/dawnmesh-native-test --parallel 2
           ctest --test-dir /tmp/dawnmesh-native-test --output-on-failure
 
-      - name: Build signed release APK
-        run: flutter build apk --release
+      - name: Build signed release APK and Play bundle
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
 
-      - name: Verify and stage APK
+      - name: Verify and stage APK and AAB
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
           apk_name="DawnMesh-${{ steps.version.outputs.name }}-release.apk"
+          aab_name="DawnMesh-${{ steps.version.outputs.name }}-release.aab"
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk "dist/${apk_name}"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/${aab_name}"
+          jarsigner -verify "dist/${aab_name}"
           "${ANDROID_SDK_ROOT}/build-tools/37.0.0/apksigner" verify --verbose --print-certs "dist/${apk_name}"
           "${ANDROID_SDK_ROOT}/build-tools/37.0.0/zipalign" -c -P 16 -v 4 "dist/${apk_name}"
           python3 scripts/check_apk_elf_alignment.py "dist/${apk_name}"
+          python3 scripts/check_apk_elf_alignment.py "dist/${aab_name}"
           (
             cd dist
             sha256sum "${apk_name}" > "${apk_name}.sha256"
+            sha256sum "${aab_name}" > "${aab_name}.sha256"
           )
           echo "apk=dist/${apk_name}" >> "${GITHUB_OUTPUT}"
           echo "checksum=dist/${apk_name}.sha256" >> "${GITHUB_OUTPUT}"
+          echo "aab=dist/${aab_name}" >> "${GITHUB_OUTPUT}"
+          echo "aab_checksum=dist/${aab_name}.sha256" >> "${GITHUB_OUTPUT}"
 
       - name: Create or update GitHub Release
         shell: bash
@@ -177,8 +186,10 @@ jobs:
           set -euo pipefail
           apk="${{ steps.artifact.outputs.apk }}"
           checksum="${{ steps.artifact.outputs.checksum }}"
+          aab="${{ steps.artifact.outputs.aab }}"
+          aab_checksum="${{ steps.artifact.outputs.aab_checksum }}"
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" "${apk}" "${checksum}" --clobber
+            gh release upload "${RELEASE_TAG}" "${apk}" "${checksum}" "${aab}" "${aab_checksum}" --clobber
           else
             release_flags=(
               --verify-tag
@@ -193,7 +204,7 @@ jobs:
             if [[ "${{ steps.version.outputs.name }}" == *-* ]]; then
               release_flags+=(--prerelease)
             fi
-            gh release create "${RELEASE_TAG}" "${apk}" "${checksum}" "${release_flags[@]}"
+            gh release create "${RELEASE_TAG}" "${apk}" "${checksum}" "${aab}" "${aab_checksum}" "${release_flags[@]}"
           fi
 
       - name: Remove signing material
