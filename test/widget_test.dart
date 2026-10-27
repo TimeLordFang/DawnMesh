@@ -49,6 +49,7 @@ void main() {
     for (final night in [false, true]) {
       for (final layout in [
         (size: const Size(320, 640), scale: 1.0, top: 24.0),
+        (size: const Size(320, 640), scale: 2.0, top: 24.0),
         (size: const Size(360, 640), scale: 2.0, top: 24.0),
         (size: const Size(390, 844), scale: 1.0, top: 59.0),
       ]) {
@@ -93,6 +94,21 @@ void main() {
             find.byKey(const ValueKey('room-settings-button')),
           );
           expect(settings.top, greaterThanOrEqualTo(layout.top));
+          final settingsIcon = tester.getRect(
+            find.byIcon(Icons.settings_outlined),
+          );
+          final sunCenter = Offset(
+            bounds.left + bounds.width * canvas.celestialCenterFactorX,
+            bounds.top + bounds.height * canvas.celestialCenterFactorY,
+          );
+          final closestIconPoint = Offset(
+            sunCenter.dx.clamp(settingsIcon.left, settingsIcon.right),
+            sunCenter.dy.clamp(settingsIcon.top, settingsIcon.bottom),
+          );
+          expect(
+            (sunCenter - closestIconPoint).distance,
+            greaterThan(canvas.celestialRadius + 2),
+          );
           await tester.pumpWidget(const SizedBox());
           await tester.pump(scanSettle);
         });

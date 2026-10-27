@@ -160,62 +160,27 @@ class _CelestialPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: celestialCenter, radius: radius));
     canvas.drawCircle(celestialCenter, radius, mainPaint);
 
-    // 3. Water Surface Ripple Reflections
+    // Both appearances share the same animated horizon ripples.
     final waterY = size.height * waterLineFactor;
-    if (!isNight) {
-      // Broad horizon lines disappear into the same ivory as the page below.
-      final horizonPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..color = AppTheme.warmWhite.withValues(alpha: 0.42);
-      for (var i = 0; i < 2; i++) {
-        final path = Path();
-        for (double x = 0; x <= size.width; x += 4) {
-          final y =
-              waterY +
-              i * 15 +
-              math.sin(x / size.width * math.pi * 2 + wavePhase + i * 0.7) *
-                  (9 + waveIntensity * 6);
-          if (x == 0) {
-            path.moveTo(x, y);
-          } else {
-            path.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(path, horizonPaint);
-      }
-      return;
-    }
-    const rippleCount = 5;
-    // 波纹跟着天体一起变大，转场时整片背景才像是同一个东西在缩放。
-    final rippleScale = radius / 52.0;
-
-    final ripplePaint = Paint()..style = PaintingStyle.stroke;
-
-    for (int i = 0; i < rippleCount; i++) {
-      final y = waterY + i * 14 * rippleScale;
-      final progress = i / rippleCount;
-      final waveWidth = ((160 + i * 40) + 30 * waveIntensity) * rippleScale;
-      final alpha = (0.4 - progress * 0.28).clamp(0.0, 1.0);
-
-      ripplePaint
-        ..color = celestialColor.withValues(alpha: alpha)
-        ..strokeWidth = 2.5 - progress * 0.8;
-
+    final horizonPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..color = AppTheme.warmWhite.withValues(alpha: 0.42);
+    for (var i = 0; i < 2; i++) {
       final path = Path();
-      final startX = size.width / 2 - waveWidth / 2;
-      final endX = size.width / 2 + waveWidth / 2;
-
-      path.moveTo(startX, y);
-      for (double x = startX; x <= endX; x += 10) {
-        final relX = (x - startX) / waveWidth;
-        final waveOffset =
-            math.sin(relX * math.pi * 3 + wavePhase + i) *
-            (2.5 + waveIntensity * 6);
-        path.lineTo(x, y + waveOffset);
+      for (double x = 0; x <= size.width; x += 4) {
+        final y =
+            waterY +
+            i * 15 +
+            math.sin(x / size.width * math.pi * 2 + wavePhase + i * 0.7) *
+                (9 + waveIntensity * 6);
+        if (x == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
       }
-
-      canvas.drawPath(path, ripplePaint);
+      canvas.drawPath(path, horizonPaint);
     }
   }
 

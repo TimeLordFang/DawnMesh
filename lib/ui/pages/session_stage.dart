@@ -55,7 +55,7 @@ class SessionStage extends StatefulWidget {
 class _SessionStageState extends State<SessionStage>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // 背景在首页与房间两种形态下的几何参数，转场时在两者之间插值。
-  static const double _homeCelestialY = 0.46;
+  static const double _homeCelestialY = 0.51;
   static const double _roomCelestialY = 0.38;
   static const double _homeCelestialRadius = 52;
   static const double _roomCelestialRadius = 70;
@@ -281,7 +281,7 @@ class _SessionStageState extends State<SessionStage>
     final screenHeight = MediaQuery.of(context).size.height;
     final homeHeader =
         _homeHeaderFor(screenHeight) +
-        (MediaQuery.textScalerOf(context).scale(15) - 15).clamp(0.0, 30.0) * 8;
+        (MediaQuery.textScalerOf(context).scale(15) - 15).clamp(0.0, 30.0) * 10;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final roomHeader = keyboardOpen && _roomVisible
         ? 108.0
@@ -429,8 +429,13 @@ class _SessionStageState extends State<SessionStage>
     double roomHeader,
   ) {
     // 天体半径跟着画布一起缩，矮屏上日轮不会显得撑满整片天。
+    final homeRadius =
+        (_homeCelestialRadius * (homeHeader / 260.0).clamp(0.75, 1.0)).clamp(
+          0.0,
+          MediaQuery.sizeOf(context).width * 0.14,
+        );
     final radius = lerpDouble(
-      _homeCelestialRadius * (homeHeader / 260.0).clamp(0.75, 1.0),
+      homeRadius,
       _roomCelestialRadius * (roomHeader / 348.0),
       bg,
     );
@@ -439,7 +444,7 @@ class _SessionStageState extends State<SessionStage>
       isNight: widget.isNight,
       waveIntensity: waveIntensity,
       height: headerHeight,
-      celestialCenterFactorX: lerpDouble(0.79, 0.5, bg),
+      celestialCenterFactorX: lerpDouble(0.75, 0.5, bg),
       celestialCenterFactorY: lerpDouble(_homeCelestialY, _roomCelestialY, bg),
       celestialRadius: radius,
       waterLineFactor: lerpDouble(_homeWaterLine, _roomWaterLine, bg),
