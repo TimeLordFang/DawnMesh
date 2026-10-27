@@ -12,12 +12,14 @@ class RoomSettingsButton extends StatelessWidget {
     this.color,
     this.dismissEvents,
     this.session,
+    this.lockedServerId,
   });
   final List<Widget> Function(BuildContext) items;
   final Listenable? listenable;
   final Color? color;
   final Stream<Object?>? dismissEvents;
   final RoomSession? session;
+  final String? lockedServerId;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +44,7 @@ class RoomSettingsButton extends StatelessWidget {
                 roomItems: items,
                 listenable: listenable,
                 session: session,
+                lockedServerId: lockedServerId,
               ),
             ),
           );

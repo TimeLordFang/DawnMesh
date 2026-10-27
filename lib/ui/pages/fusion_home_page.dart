@@ -20,7 +20,7 @@ import '../../core/transport/wifi_direct_credentials.dart';
 import '../../core/transport/wifi_direct_manager.dart';
 import '../widgets/room_invite_dialog.dart';
 import '../widgets/server_profile_picker.dart';
-import 'internet_home_page.dart';
+import 'settings_page.dart';
 
 class FusionHomePage extends StatefulWidget {
   const FusionHomePage({
@@ -79,6 +79,8 @@ class _FusionHomePageState extends State<FusionHomePage> {
     if (!mounted) return;
     setState(() {
       _profiles = profiles;
+      _remoteRooms = [];
+      _cloudStatus = null;
       _profile =
           profiles.where((p) => p.id == id).firstOrNull ?? profiles.firstOrNull;
     });
@@ -123,15 +125,12 @@ class _FusionHomePageState extends State<FusionHomePage> {
     }
   }
 
-  Future<void> _addServer() async {
-    final result = await showDialog<ServerProfile>(
-      context: context,
-      builder: (_) => const ServerProfileDialog(),
+  Future<void> _openSettings() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
     );
-    if (result == null) return;
-    await _store.saveProfiles([..._profiles, result]);
-    await _store.saveSelectedId(result.id);
-    await _loadProfiles();
+    if (mounted) await _loadProfiles();
   }
 
   Future<RoomInvite?> _requestInvite({bool creating = false}) async {
@@ -390,8 +389,8 @@ class _FusionHomePageState extends State<FusionHomePage> {
                 ),
               ),
               TextButton(
-                onPressed: _busy ? null : _addServer,
-                child: const Text('添加服务器'),
+                onPressed: _busy ? null : _openSettings,
+                child: const Text('设置'),
               ),
             ],
           ),

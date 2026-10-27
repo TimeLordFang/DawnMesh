@@ -14,6 +14,7 @@ import '../theme/app_theme.dart';
 import '../widgets/room_invite_dialog.dart';
 import '../widgets/server_profile_picker.dart';
 import 'internet_room_page.dart';
+import 'settings_page.dart';
 
 class InternetHomePage extends StatefulWidget {
   const InternetHomePage({
@@ -105,6 +106,9 @@ class _InternetHomePageState extends State<InternetHomePage> {
     if (!mounted) return;
     setState(() {
       _profiles = profiles;
+      _info = null;
+      _rooms = const [];
+      _error = null;
       _selected = selected;
       _loading = false;
     });
@@ -167,62 +171,15 @@ class _InternetHomePageState extends State<InternetHomePage> {
     }
   }
 
-  Future<void> _editProfile({ServerProfile? existing}) async {
-    final result = await showDialog<ServerProfile>(
-      context: context,
-      builder: (_) => ServerProfileDialog(existing: existing),
-    );
-    if (result == null) return;
-    final profiles = existing == null
-        ? [..._profiles, result]
-        : _profiles
-              .map((item) => item.id == existing.id ? result : item)
-              .toList();
-    await _store.saveProfiles(profiles);
-    await _store.saveSelectedId(result.id);
-    if (!mounted) return;
-    setState(() {
-      _profiles = profiles;
-      _selected = result;
-      _info = null;
-      _rooms = const [];
-    });
-    await _refresh();
-  }
-
-  Future<void> _deleteSelected() async {
-    final selected = _selected;
-    if (selected == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除服务器？'),
-        content: Text('将从本机移除“${selected.name}”及其访问凭证。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
-          ),
-        ],
+  Future<void> _openSettings() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            SettingsPage(lockedServerId: _activeSession?.profile.id),
       ),
     );
-    if (confirmed != true) return;
-    final profiles = _profiles.where((item) => item.id != selected.id).toList();
-    final next = profiles.firstOrNull;
-    await _store.saveProfiles(profiles);
-    if (next != null) await _store.saveSelectedId(next.id);
-    if (!mounted) return;
-    setState(() {
-      _profiles = profiles;
-      _selected = next;
-      _info = null;
-      _rooms = const [];
-    });
-    if (next != null) await _refresh();
+    if (mounted) await _load();
   }
 
   Future<void> _selectProfile(ServerProfile? profile) async {
@@ -373,26 +330,11 @@ class _InternetHomePageState extends State<InternetHomePage> {
       appBar: AppBar(
         title: const Text('网络对讲'),
         actions: [
-          if (_selected != null) ...[
-            IconButton(
-              tooltip: '编辑服务器',
-              onPressed: _activeSession == null
-                  ? () => _editProfile(existing: _selected)
-                  : null,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            PopupMenuButton<String>(
-              enabled: _activeSession == null,
-              onSelected: (value) {
-                if (value == 'add') _editProfile();
-                if (value == 'delete') _deleteSelected();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'add', child: Text('添加服务器')),
-                PopupMenuItem(value: 'delete', child: Text('删除当前服务器')),
-              ],
-            ),
-          ],
+          IconButton(
+            tooltip: '设置',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
         ],
       ),
       floatingActionButton: _info == null
@@ -530,9 +472,9 @@ class _InternetHomePageState extends State<InternetHomePage> {
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: _editProfile,
+            onPressed: _openSettings,
             icon: const Icon(Icons.add),
-            label: const Text('添加服务器'),
+            label: const Text('前往设置添加服务器'),
           ),
         ],
       ),
@@ -606,113 +548,6 @@ class _ActiveInternetRoomCard extends StatelessWidget {
         child: Icon(Icons.arrow_forward_rounded, color: accent),
       ),
     ),
-  );
-}
-
-class ServerProfileDialog extends StatefulWidget {
-  const ServerProfileDialog({super.key, this.existing});
-  final ServerProfile? existing;
-  @override
-  State<ServerProfileDialog> createState() => _ServerProfileDialogState();
-}
-
-class _ServerProfileDialogState extends State<ServerProfileDialog> {
-  late final TextEditingController _name = TextEditingController(
-    text: widget.existing?.name ?? '',
-  );
-  late final TextEditingController _url = TextEditingController(
-    text: widget.existing?.baseUrl ?? '',
-  );
-  late final TextEditingController _token = TextEditingController(
-    text: widget.existing?.accessToken ?? '',
-  );
-  String? _error;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _url.dispose();
-    _token.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final raw = _url.text.trim();
-    final uri = Uri.tryParse(raw);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        uri.query.isNotEmpty ||
-        uri.fragment.isNotEmpty) {
-      setState(() => _error = '请输入不含查询参数的 HTTPS 地址');
-      return;
-    }
-    final normalized = uri
-        .replace(
-          path: uri.path.endsWith('/')
-              ? uri.path.substring(0, uri.path.length - 1)
-              : uri.path,
-        )
-        .toString();
-    Navigator.pop(
-      context,
-      ServerProfile(
-        id:
-            widget.existing?.id ??
-            '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
-        name: _name.text.trim().isEmpty ? uri.host : _name.text.trim(),
-        baseUrl: normalized,
-        accessToken: _token.text.trim(),
-        instanceId: widget.existing?.instanceId,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.existing == null ? '添加服务器' : '编辑服务器'),
-    content: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: '名称（可选）'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _url,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            decoration: InputDecoration(
-              labelText: 'HTTPS 地址',
-              hintText: 'https://talk.example.com',
-              errorText: _error,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _token,
-            obscureText: true,
-            autocorrect: false,
-            decoration: const InputDecoration(labelText: '服务器访问凭证（私有服务器）'),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            '凭证使用 Android 安全存储保存，不会写入日志。',
-            style: TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(onPressed: _submit, child: const Text('保存并连接')),
-    ],
   );
 }
 

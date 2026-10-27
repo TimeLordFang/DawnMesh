@@ -326,7 +326,19 @@ class _InternetRoomPageState extends State<InternetRoomPage>
             if (!keyboardOpen)
               RoomSettingsButton(
                 listenable: session,
+                lockedServerId: session.roomEnded ? null : session.profile.id,
                 items: (sheetContext) => [
+                  if (!session.roomEnded)
+                    ListTile(
+                      title: const Text('语音质量'),
+                      trailing: _InternetAudioProfileMenu(
+                        key: const ValueKey('internet-audio-profile-button'),
+                        session: session,
+                        isNight: widget.isNight,
+                        accent: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+
                   if (!session.roomEnded && session.isHost)
                     ListTile(
                       title: const Text('成员离线／退出提示'),
@@ -535,12 +547,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                             ? AppTheme.darkTextPrimary
                             : AppTheme.lightTextPrimary,
                         compact: true,
-                      ),
-                      _InternetAudioProfileMenu(
-                        key: const ValueKey('internet-audio-profile-button'),
-                        session: session,
-                        isNight: widget.isNight,
-                        accent: accent,
                       ),
                       RoomControlButton(
                         icon: Icons.call_end_rounded,

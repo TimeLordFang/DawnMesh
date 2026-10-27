@@ -229,6 +229,16 @@ class _SessionStageState extends State<SessionStage>
     setState(() => _internetSession = session);
   }
 
+  String? get _lockedServerId {
+    final internet = _internetSession;
+    if (internet != null && !internet.roomEnded) return internet.profile.id;
+    final nearby = _session;
+    final transport = nearby?.transport;
+    return nearby != null && !nearby.roomEnded && transport is FusionTransport
+        ? transport.profile?.id
+        : null;
+  }
+
   void _showDiagnostics() {
     final session = _session;
     if (session == null) return;
@@ -469,6 +479,7 @@ class _SessionStageState extends State<SessionStage>
           RoomSettingsButton(
             color: Colors.white,
             session: _session,
+            lockedServerId: _lockedServerId,
             dismissEvents: _session?.stateStream.where(
               (state) => state == RoomState.ended,
             ),
@@ -635,6 +646,7 @@ class _SessionStageState extends State<SessionStage>
               (state) => state == RoomState.ended,
             ),
             session: session,
+            lockedServerId: _lockedServerId,
             items: (sheetContext) => _roomSettingsItems(sheetContext, session),
           ),
           from: -16,

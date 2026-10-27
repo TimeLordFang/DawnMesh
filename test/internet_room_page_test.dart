@@ -299,9 +299,16 @@ void main() {
         final controlsTop = tester.getTopLeft(find.byType(RoomControlsBar)).dy;
         expect(controlsTop - pttBottom, lessThanOrEqualTo(12));
         expect(find.byType(RoomControlsBar), findsOneWidget);
-        expect(find.byType(RoomControlButton), findsNWidgets(4));
+        expect(find.byType(RoomControlButton), findsNWidgets(3));
         expect(tester.takeException(), isNull);
 
+        await tester.tap(find.byKey(const ValueKey('room-settings-button')));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('internet-audio-profile-button')),
+          160,
+        );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('internet-audio-profile-button')),
         );
@@ -343,7 +350,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(RoomControlsBar), findsOneWidget);
-    expect(find.byType(RoomControlButton), findsNWidgets(4));
+    expect(find.byType(RoomControlButton), findsNWidgets(3));
     expect(tester.takeException(), isNull);
   });
 }

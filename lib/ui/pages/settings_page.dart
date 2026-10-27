@@ -7,6 +7,7 @@ import '../widgets/noise_reduction_control.dart';
 import 'about_page.dart';
 import 'courier_page.dart';
 import 'debug_log_page.dart';
+import 'server_settings_page.dart';
 
 /// Shared settings destination for the home screen and every room type.
 class SettingsPage extends StatelessWidget {
@@ -15,10 +16,12 @@ class SettingsPage extends StatelessWidget {
     this.roomItems,
     this.listenable,
     this.session,
+    this.lockedServerId,
   });
   final List<Widget> Function(BuildContext)? roomItems;
   final Listenable? listenable;
   final RoomSession? session;
+  final String? lockedServerId;
 
   @override
   Widget build(BuildContext context) => listenable == null
@@ -99,6 +102,22 @@ class SettingsPage extends StatelessWidget {
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => open(CourierPage(session: session)),
+              ),
+            ]),
+            _section(context, tr('连接', 'Connections'), [
+              ListTile(
+                key: const ValueKey('settings-servers'),
+                leading: const Icon(Icons.dns_outlined),
+                title: Text(tr('服务器', 'Servers')),
+                subtitle: Text(
+                  tr(
+                    '统一管理公网房与融合房的服务器',
+                    'Manage servers for public and fusion rooms',
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () =>
+                    open(ServerSettingsPage(lockedServerId: lockedServerId)),
               ),
             ]),
             if (room.isNotEmpty)

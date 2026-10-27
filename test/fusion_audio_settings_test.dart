@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('quality choices fit the narrow room settings sheet and apply', (
+  testWidgets('quality choices fit the narrow settings page and apply', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(360, 640);
@@ -39,6 +39,8 @@ void main() {
     await tester.pumpAndSettle();
     for (final profile in InternetAudioProfile.values) {
       final chip = find.byKey(ValueKey('fusion-audio-${profile.name}'));
+      await tester.scrollUntilVisible(chip, 160);
+      await tester.pumpAndSettle();
       await tester.tap(chip);
       await tester.pumpAndSettle();
       expect(tester.widget<ChoiceChip>(chip).selected, true);

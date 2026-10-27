@@ -82,7 +82,7 @@ class AudioControlsBar extends StatelessWidget {
   }
 }
 
-/// Identical four-slot control geometry for nearby and internet rooms.
+/// Evenly spaced active-call controls for nearby and internet rooms.
 class RoomControlsBar extends StatelessWidget {
   const RoomControlsBar({
     super.key,
@@ -95,7 +95,7 @@ class RoomControlsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    assert(children.length == 4);
+    assert(children.isNotEmpty);
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 13, vertical: compact ? 4 : 18),
       child: Row(
