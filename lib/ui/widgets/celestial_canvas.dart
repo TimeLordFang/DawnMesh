@@ -12,6 +12,9 @@ class CelestialCanvas extends StatefulWidget {
   /// 画布高度。进房转场时由 [SessionStage] 在首页高度与房间高度之间插值。
   final double height;
 
+  /// 日轮/月轮圆心的横向位置，取值为宽度的比例。
+  final double celestialCenterFactorX;
+
   /// 日轮/月轮圆心的纵向位置，取值为高度的比例。
   final double celestialCenterFactorY;
 
@@ -26,6 +29,7 @@ class CelestialCanvas extends StatefulWidget {
     required this.isNight,
     this.waveIntensity = 0.0,
     this.height = 260,
+    this.celestialCenterFactorX = 0.5,
     this.celestialCenterFactorY = 0.42,
     this.celestialRadius = 52,
     this.waterLineFactor = 0.76,
@@ -65,6 +69,7 @@ class _CelestialCanvasState extends State<CelestialCanvas>
             isNight: widget.isNight,
             wavePhase: _animController.value * 2 * math.pi,
             waveIntensity: widget.waveIntensity,
+            celestialCenterFactorX: widget.celestialCenterFactorX,
             celestialCenterFactorY: widget.celestialCenterFactorY,
             celestialRadius: widget.celestialRadius,
             waterLineFactor: widget.waterLineFactor,
@@ -79,6 +84,7 @@ class _CelestialPainter extends CustomPainter {
   final bool isNight;
   final double wavePhase;
   final double waveIntensity;
+  final double celestialCenterFactorX;
   final double celestialCenterFactorY;
   final double celestialRadius;
   final double waterLineFactor;
@@ -87,6 +93,7 @@ class _CelestialPainter extends CustomPainter {
     required this.isNight,
     required this.wavePhase,
     required this.waveIntensity,
+    required this.celestialCenterFactorX,
     required this.celestialCenterFactorY,
     required this.celestialRadius,
     required this.waterLineFactor,
@@ -99,20 +106,28 @@ class _CelestialPainter extends CustomPainter {
     // 1. Sky Gradient
     final skyColors = isNight
         ? [AppTheme.brandIndigo, AppTheme.brandNavy, AppTheme.darkBg]
-        : [AppTheme.brandIndigo, AppTheme.brandNavy, const Color(0xFF121A43)];
+        : [
+            const Color(0xFF1A2757),
+            const Color(0xFF424B80),
+            const Color(0xFFCC8C98),
+            const Color(0xFFFFB687),
+            const Color(0xFFFFE4AD),
+            AppTheme.lightBg,
+          ];
 
     final skyPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: skyColors,
+        stops: isNight ? null : const [0, 0.25, 0.44, 0.62, 0.80, 1],
       ).createShader(rect);
 
     canvas.drawRect(rect, skyPaint);
 
     // 2. Sun / Moon (Celestial Body)
     final celestialCenter = Offset(
-      size.width / 2,
+      size.width * celestialCenterFactorX,
       size.height * celestialCenterFactorY,
     );
     final radius = celestialRadius;
@@ -147,6 +162,30 @@ class _CelestialPainter extends CustomPainter {
 
     // 3. Water Surface Ripple Reflections
     final waterY = size.height * waterLineFactor;
+    if (!isNight) {
+      // Broad horizon lines disappear into the same ivory as the page below.
+      final horizonPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..color = AppTheme.warmWhite.withValues(alpha: 0.42);
+      for (var i = 0; i < 2; i++) {
+        final path = Path();
+        for (double x = 0; x <= size.width; x += 4) {
+          final y =
+              waterY +
+              i * 15 +
+              math.sin(x / size.width * math.pi * 2 + wavePhase + i * 0.7) *
+                  (9 + waveIntensity * 6);
+          if (x == 0) {
+            path.moveTo(x, y);
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+        canvas.drawPath(path, horizonPaint);
+      }
+      return;
+    }
     const rippleCount = 5;
     // 波纹跟着天体一起变大，转场时整片背景才像是同一个东西在缩放。
     final rippleScale = radius / 52.0;
@@ -185,6 +224,7 @@ class _CelestialPainter extends CustomPainter {
     return oldDelegate.isNight != isNight ||
         oldDelegate.wavePhase != wavePhase ||
         oldDelegate.waveIntensity != waveIntensity ||
+        oldDelegate.celestialCenterFactorX != celestialCenterFactorX ||
         oldDelegate.celestialCenterFactorY != celestialCenterFactorY ||
         oldDelegate.celestialRadius != celestialRadius ||
         oldDelegate.waterLineFactor != waterLineFactor;

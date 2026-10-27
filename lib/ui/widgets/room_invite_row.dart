@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 class HostRoomInviteRow extends StatelessWidget {
@@ -91,19 +92,23 @@ class _RoomInviteRowState extends State<RoomInviteRow>
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           '邀请码',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 13,
+          ),
         ),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
             _visible ? widget.code : '••••',
-            semanticsLabel:
-                _visible ? '邀请码 ${widget.code.split('').join(' ')}' : '邀请码已隐藏',
+            semanticsLabel: _visible
+                ? '邀请码 ${widget.code.split('').join(' ')}'
+                : '邀请码已隐藏',
             maxLines: 1,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontFamily: 'monospace',
               fontSize: 20,
               fontWeight: FontWeight.w600,
@@ -119,7 +124,7 @@ class _RoomInviteRowState extends State<RoomInviteRow>
             _visible
                 ? Icons.visibility_off_outlined
                 : Icons.visibility_outlined,
-            color: Colors.white70,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ],

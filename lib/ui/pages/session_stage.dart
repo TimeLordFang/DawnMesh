@@ -15,6 +15,7 @@ import '../../core/session/member.dart';
 import '../../core/session/room_session.dart';
 import '../transitions/stage_choreography.dart';
 import '../widgets/celestial_canvas.dart';
+import '../theme/app_theme.dart';
 import 'home_page.dart';
 import 'room_page.dart';
 import 'diagnostics_sheet.dart';
@@ -54,7 +55,7 @@ class SessionStage extends StatefulWidget {
 class _SessionStageState extends State<SessionStage>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // 背景在首页与房间两种形态下的几何参数，转场时在两者之间插值。
-  static const double _homeCelestialY = 0.42;
+  static const double _homeCelestialY = 0.46;
   static const double _roomCelestialY = 0.38;
   static const double _homeCelestialRadius = 52;
   static const double _roomCelestialRadius = 70;
@@ -278,7 +279,9 @@ class _SessionStageState extends State<SessionStage>
   Widget build(BuildContext context) {
     final session = _session;
     final screenHeight = MediaQuery.of(context).size.height;
-    final homeHeader = _homeHeaderFor(screenHeight);
+    final homeHeader =
+        _homeHeaderFor(screenHeight) +
+        (MediaQuery.textScalerOf(context).scale(15) - 15).clamp(0.0, 30.0) * 8;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final roomHeader = keyboardOpen && _roomVisible
         ? 108.0
@@ -411,7 +414,7 @@ class _SessionStageState extends State<SessionStage>
               ),
             ),
           ),
-          ..._buildHomeHeaderOverlay(stage),
+          ..._buildHomeHeaderOverlay(stage, homeHeader),
           if (session != null) ..._buildRoomHeaderOverlay(session, stage),
         ],
       ),
@@ -427,7 +430,7 @@ class _SessionStageState extends State<SessionStage>
   ) {
     // 天体半径跟着画布一起缩，矮屏上日轮不会显得撑满整片天。
     final radius = lerpDouble(
-      _homeCelestialRadius * (homeHeader / 260.0),
+      _homeCelestialRadius * (homeHeader / 260.0).clamp(0.75, 1.0),
       _roomCelestialRadius * (roomHeader / 348.0),
       bg,
     );
@@ -436,6 +439,7 @@ class _SessionStageState extends State<SessionStage>
       isNight: widget.isNight,
       waveIntensity: waveIntensity,
       height: headerHeight,
+      celestialCenterFactorX: lerpDouble(0.79, 0.5, bg),
       celestialCenterFactorY: lerpDouble(_homeCelestialY, _roomCelestialY, bg),
       celestialRadius: radius,
       waterLineFactor: lerpDouble(_homeWaterLine, _roomWaterLine, bg),
@@ -452,7 +456,7 @@ class _SessionStageState extends State<SessionStage>
     );
   }
 
-  List<Widget> _buildHomeHeaderOverlay(double stage) {
+  List<Widget> _buildHomeHeaderOverlay(double stage, double homeHeader) {
     final s = AppStrings.of(context);
     // 标题随首页元素顺畅淡出抽走
     final t = const Interval(
@@ -473,7 +477,7 @@ class _SessionStageState extends State<SessionStage>
 
     return [
       Positioned(
-        top: 40,
+        top: (MediaQuery.paddingOf(context).top + 4).clamp(40.0, 100.0),
         right: 8,
         child: fade(
           RoomSettingsButton(
@@ -490,30 +494,36 @@ class _SessionStageState extends State<SessionStage>
         ),
       ),
       Positioned(
-        bottom: 18,
+        top: homeHeader * 0.44,
         left: 28,
-        right: 28,
+        right: MediaQuery.sizeOf(context).width * 0.40,
         child: fade(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                s.appName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  s.appName,
+                  style: TextStyle(
+                    color: widget.isNight ? Colors.white : AppTheme.brandNavy,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 s.appSubheading,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.88),
+                  color: widget.isNight
+                      ? Colors.white.withValues(alpha: 0.88)
+                      : AppTheme.lightTextPrimary,
                   fontSize: 15,
                 ),
               ),
@@ -610,8 +620,8 @@ class _SessionStageState extends State<SessionStage>
               _roomName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: widget.isNight ? Colors.white : AppTheme.brandNavy,
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
@@ -623,7 +633,7 @@ class _SessionStageState extends State<SessionStage>
 
     return [
       Positioned(
-        top: 40,
+        top: (MediaQuery.paddingOf(context).top + 4).clamp(40.0, 100.0),
         left: 8,
         child: rise(
           IconButton(
@@ -637,7 +647,7 @@ class _SessionStageState extends State<SessionStage>
         ),
       ),
       Positioned(
-        top: 40,
+        top: (MediaQuery.paddingOf(context).top + 4).clamp(40.0, 100.0),
         right: 8,
         child: rise(
           RoomSettingsButton(
@@ -665,8 +675,8 @@ class _SessionStageState extends State<SessionStage>
                 _roomName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: widget.isNight ? Colors.white : AppTheme.brandNavy,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.6,
@@ -694,19 +704,23 @@ class _SessionStageState extends State<SessionStage>
                   return Row(
                     children: [
                       if (reconnecting)
-                        const SizedBox(
+                        SizedBox(
                           width: 13,
                           height: 13,
                           child: CircularProgressIndicator(
                             strokeWidth: 1.8,
-                            color: Colors.white,
+                            color: widget.isNight
+                                ? Colors.white
+                                : AppTheme.brandNavy,
                           ),
                         )
                       else if (disconnected)
-                        const Icon(
+                        Icon(
                           Icons.link_off_rounded,
                           size: 15,
-                          color: Colors.white,
+                          color: widget.isNight
+                              ? Colors.white
+                              : AppTheme.brandNavy,
                         ),
                       if (reconnecting || disconnected)
                         const SizedBox(width: 7),
@@ -716,7 +730,9 @@ class _SessionStageState extends State<SessionStage>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.88),
+                            color: widget.isNight
+                                ? Colors.white.withValues(alpha: 0.88)
+                                : AppTheme.lightTextSecondary,
                             fontSize: 15,
                           ),
                         ),

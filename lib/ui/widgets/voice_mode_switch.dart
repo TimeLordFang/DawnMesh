@@ -149,7 +149,7 @@ class VoiceModeSwitch extends StatelessWidget {
       ? const [AppTheme.brandGold, AppTheme.brandOrange]
       : isNight
       ? const [AppTheme.brandIndigo, AppTheme.brandNavy]
-      : const [AppTheme.lightPrimary, AppTheme.lightAccent];
+      : const [AppTheme.brandIndigo, AppTheme.brandNavy];
 
   Color _accent(bool automatic) => automatic
       ? AppTheme.brandOrange

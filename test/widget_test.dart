@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dawn_mesh/main.dart';
+import 'package:dawn_mesh/ui/widgets/celestial_canvas.dart';
 
 void main() {
   const audioChannel = MethodChannel('dev.dawnmesh.intercom/audio');
@@ -43,6 +44,61 @@ void main() {
   // 首页 initState 会发起一次扫描，里面有 2 秒的 Future.delayed；
   // 不把假时钟推过去，测试结束时会因为「还有未完成的 Timer」而失败。
   const scanSettle = Duration(seconds: 3);
+
+  for (final locale in [const Locale('zh'), const Locale('en')]) {
+    for (final night in [false, true]) {
+      for (final layout in [
+        (size: const Size(320, 640), scale: 1.0, top: 24.0),
+        (size: const Size(360, 640), scale: 2.0, top: 24.0),
+        (size: const Size(390, 844), scale: 1.0, top: 59.0),
+      ]) {
+        testWidgets('首页晨光布局 ${locale.languageCode} $night $layout', (
+          tester,
+        ) async {
+          tester.view.physicalSize = layout.size;
+          tester.view.devicePixelRatio = 1;
+          tester.view.padding = FakeViewPadding(top: layout.top);
+          tester.platformDispatcher.localesTestValue = [locale];
+          tester.platformDispatcher.platformBrightnessTestValue = night
+              ? Brightness.dark
+              : Brightness.light;
+          tester.platformDispatcher.textScaleFactorTestValue = layout.scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearAllTestValues);
+          await tester.pumpWidget(const DawnMeshApp());
+          await tester.pump(scanSettle);
+          expect(tester.takeException(), isNull);
+          final canvasFinder = find.byType(CelestialCanvas);
+          final canvas = tester.widget<CelestialCanvas>(canvasFinder);
+          final bounds = tester.getRect(canvasFinder);
+          final sunLeft =
+              bounds.left +
+              bounds.width * canvas.celestialCenterFactorX -
+              canvas.celestialRadius;
+          final title = find.text(
+            locale.languageCode == 'zh' ? '曙光之声' : 'DawnMesh',
+          );
+          final caption = find.text(
+            locale.languageCode == 'zh'
+                ? '越过地平线，让声音相遇。'
+                : 'Beyond the horizon, let voices meet.',
+          );
+          expect(tester.getRect(title).right, lessThan(sunLeft));
+          expect(tester.getRect(caption).right, lessThan(sunLeft));
+          expect(
+            tester.getRect(caption).bottom,
+            lessThanOrEqualTo(bounds.bottom),
+          );
+          final settings = tester.getRect(
+            find.byKey(const ValueKey('room-settings-button')),
+          );
+          expect(settings.top, greaterThanOrEqualTo(layout.top));
+          await tester.pumpWidget(const SizedBox());
+          await tester.pump(scanSettle);
+        });
+      }
+    }
+  }
 
   testWidgets('首页能正常渲染并显示输入框与建房按钮', (WidgetTester tester) async {
     await tester.pumpWidget(const DawnMeshApp());

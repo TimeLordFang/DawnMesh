@@ -8,8 +8,8 @@ class AppTheme {
   static const brandGold = Color(0xFFFFD587);
   static const warmWhite = Color(0xFFFFF3DC);
 
-  static const lightPrimary = Color(0xFFA63E1F);
-  static const lightAccent = Color(0xFFB64B23);
+  static const lightPrimary = brandNavy;
+  static const lightAccent = Color(0xFFBB4721);
   static const lightBg = Color(0xFFFFF8EF);
   static const lightCardBg = Color(0xFFFFFFFF);
   static const lightTextPrimary = Color(0xFF17213F);

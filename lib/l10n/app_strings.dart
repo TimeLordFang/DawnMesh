@@ -279,7 +279,8 @@ class AppStrings {
   String get themeDark => isEn ? 'Moonlit sea' : '月色入海';
 
   // Home & Stage
-  String get appSubheading => isEn ? 'Never Meant.' : '越过地平线，看海洋辽阔的延绵。';
+  String get appSubheading =>
+      isEn ? 'Beyond the horizon, let voices meet.' : '越过地平线，让声音相遇。';
   String get defaultNickname => isEn ? 'Explorer' : '探索者';
   String get nicknameValidationEmpty =>
       isEn ? 'Leave a nickname first' : '先留个称呼吧';
