@@ -164,3 +164,5 @@ DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Fl
 1.2.1 与 iOS 统一为 1.2.1+62，修复繁忙融合房的握手等待、并发连接结果及超时/退出清理，详见 [发布说明](docs/RELEASE_1.2.1.md)。
 
 1.2.2 与 iOS 统一为 1.2.2+63，补齐认证和入房报文丢失后的有界恢复，并阻止旧握手重放占用新的认证，详见 [发布说明](docs/RELEASE_1.2.2.md)。
+
+开发与发布请先阅读 [候选版本和本地预检流程](docs/RELEASING.md)。

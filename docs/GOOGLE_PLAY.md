@@ -2,6 +2,8 @@
 
 核对日期：2026-10-27。项目包名 `dev.dawnmesh.intercom`，当前版本 `1.2.2+63`。
 
+正式上架版本先按 [本地预检与候选发布](RELEASING.md) 验证，再创建正式标签；不通过连续递增版本解决 CI 问题。
+
 ## 本机打包
 
 项目已在 `android/app/build.gradle.kts` 配置 release 签名，并对 `bundleRelease` 强制检查签名配置。使用现有的 `android/key.properties` 或 `DAWNMESH_*` 签名环境变量即可；不要把密钥或口令提交到 Git。

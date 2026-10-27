@@ -42,3 +42,6 @@ android/key.properties
 # Local Android/Flutter development toolchain
 .tools/
 artifacts/
+
+# Local Python tooling caches
+__pycache__/
