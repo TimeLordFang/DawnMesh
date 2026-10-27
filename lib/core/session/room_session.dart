@@ -352,6 +352,7 @@ class RoomSession {
   int _incomingBatchCount = 0;
   int _outgoingBatchCount = 0;
   int _membershipTicks = 0;
+  int _pendingJoinRetries = 0;
   void Function(Frame frame, {bool realtime})? _transportSend;
 
   Future<void> protectWithInvite(
@@ -381,7 +382,10 @@ class RoomSession {
       onReady: (codec) async {
         if (_closed) return;
         secureCodec = codec;
-        if (!_isHost && !_admitted) await _sendJoinRequest();
+        if (!_isHost && !_admitted) {
+          _pendingJoinRetries = 0;
+          await _sendJoinRequest();
+        }
       },
     );
   }
@@ -631,6 +635,7 @@ class RoomSession {
     _members.clear();
 
     _updateState(RoomState.connecting);
+    _pendingJoinRetries = 0;
 
     if (_admission != null) {
       _admission!.startClient();
@@ -1485,6 +1490,18 @@ class RoomSession {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!_closed &&
+          !_isHost &&
+          roomInvite != null &&
+          (_state == RoomState.connecting ||
+              _state == RoomState.reconnecting)) {
+        if (secureCodec == null) {
+          _admission?.retryPendingHandshake();
+        } else if (_pendingJoinRetries < 5) {
+          _pendingJoinRetries++;
+          unawaited(_sendJoinRequest());
+        }
+      }
       if (_state == RoomState.inRoom) {
         _reliableChat.tick();
         unawaited(courierLink?.tick());

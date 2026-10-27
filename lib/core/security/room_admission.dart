@@ -36,6 +36,10 @@ class RoomAdmission {
   final Map<String, _Pending> _pending = {};
   final List<DateTime> _attempts = [];
   int _totalAttempts = 0;
+  int _wireSequence = 0;
+  Frame? _outboundHandshake;
+  int _handshakeRetries = 0;
+  final _completed = <String, _CompletedAdmission>{};
 
   RoomAdmission({
     required this.passwordScalar,
@@ -83,16 +87,44 @@ class RoomAdmission {
     _emit(1, _attemptToken!, _client!.message);
   }
 
-  void _emit(int kind, Uint8List id, List<int> body) {
-    if (_closed) return;
-    send(
-      Frame(
-        type: kind <= 2 ? FrameType.handshakeHello : FrameType.handshakeConfirm,
-        senderId: _host ? 1 : 0,
-        seq: identity == null ? 0 : RelayBudget.maximum << 8,
-        payload: Uint8List.fromList([_version, kind, ...id, ...body]),
-      ),
+  int _nextWireSequence() =>
+      (identity == null ? 0 : RelayBudget.maximum << 8) |
+      (_wireSequence++ & 255);
+
+  Frame? _emit(int kind, Uint8List id, List<int> body) {
+    if (_closed) return null;
+    final frame = Frame(
+      type: kind <= 2 ? FrameType.handshakeHello : FrameType.handshakeConfirm,
+      senderId: _host ? 1 : 0,
+      seq: _nextWireSequence(),
+      payload: Uint8List.fromList([_version, kind, ...id, ...body]),
     );
+    if (!_host && (kind == 1 || kind == 3)) {
+      _outboundHandshake = frame;
+      _handshakeRetries = 0;
+    }
+    send(frame);
+    return frame;
+  }
+
+  void _resend(Frame frame) => send(
+    Frame(
+      type: frame.type,
+      senderId: frame.senderId,
+      seq: _nextWireSequence(),
+      payload: frame.payload,
+    ),
+  );
+
+  /// Called by the existing two-second heartbeat. Retransmit the same PAKE
+  /// transcript, with a fresh transport id, without creating another guess.
+  void retryPendingHandshake() {
+    final frame = _outboundHandshake;
+    if (_closed || _host || _ready || frame == null || _handshakeRetries >= 5) {
+      return;
+    }
+    _handshakeRetries++;
+    _resend(frame);
   }
 
   (Uint8List, Uint8List) _identities(Uint8List id) => (
@@ -124,13 +156,27 @@ class RoomAdmission {
     if (_host) {
       if (frame.senderId != 0) return;
       final now = DateTime.now();
+      _completed.removeWhere(
+        (_, item) => now.difference(item.created).inSeconds >= 30,
+      );
+      final transcript = base64Encode(p);
+      final completed = _completed[transcript];
+      if (kind == 3 && completed != null) {
+        _resend(completed.response);
+        return;
+      }
       _pending.removeWhere(
         (_, pending) => now.difference(pending.created).inSeconds >= 12,
       );
       if (kind == 1 && body.length == 65) {
+        if (_completed.values.any((item) => item.hello == transcript)) return;
+        final pending = _pending[index];
+        if (pending != null) {
+          if (pending.hello == transcript) _emit(2, id, pending.challenge);
+          return;
+        }
         _attempts.removeWhere((time) => now.difference(time).inSeconds >= 60);
-        if (_pending.containsKey(index) ||
-            _pending.length >= maxPending ||
+        if (_pending.length >= maxPending ||
             _attempts.length >= max(10, maxPending * 2) ||
             _totalAttempts >= 120) {
           return;
@@ -139,8 +185,12 @@ class RoomAdmission {
         _totalAttempts++;
         final server = Spake2(isA: false, passwordScalar: passwordScalar);
         final keys = server.finish(body, a: a, b: b);
-        _pending[index] = _Pending(keys, now);
-        _emit(2, id, [...server.message, ...keys.confirmB]);
+        final challenge = Uint8List.fromList([
+          ...server.message,
+          ...keys.confirmB,
+        ]);
+        _pending[index] = _Pending(keys, now, transcript, challenge);
+        _emit(2, id, challenge);
       } else if (kind == 3 && body.length == (identity == null ? 32 : 204)) {
         final pending = _pending.remove(
           index,
@@ -177,6 +227,7 @@ class RoomAdmission {
             member,
           );
         }
+        final grantEpoch = _epoch;
         final grant = identity == null
             ? _trafficKey!
             : Uint8List.fromList([
@@ -197,7 +248,20 @@ class RoomAdmission {
           certifiedGrant,
           associatedData: id,
         );
-        _emit(4, id, [...encrypted.nonce, ...encrypted.ciphertext]);
+        final response = _emit(4, id, [
+          ...encrypted.nonce,
+          ...encrypted.ciphertext,
+        ]);
+        if (response != null && grantEpoch == _epoch) {
+          while (_completed.length >= max(10, maxPending * 2)) {
+            _completed.remove(_completed.keys.first);
+          }
+          _completed[transcript] = _CompletedAdmission(
+            pending.hello,
+            response,
+            now,
+          );
+        }
       }
     } else {
       if (frame.senderId != 1 ||
@@ -287,6 +351,7 @@ class RoomAdmission {
         // response replace the current attempt's codec or finish admission.
         if (_closed || !Spake2Keys.equal(id, _attemptToken ?? token)) return;
         _ready = true;
+        _outboundHandshake = null;
         _clientKeys = null;
         // PAKE restores admission, not a new traffic-key epoch. Preserve both
         // replay windows and our nonce counter when the host returns the same
@@ -373,6 +438,7 @@ class RoomAdmission {
       );
     }
     if (_closed) return;
+    _completed.clear();
     _epoch = epoch;
     _trafficKey?.fillRange(0, _trafficKey!.length, 0);
     _trafficKey = key;
@@ -470,6 +536,8 @@ class RoomAdmission {
     _trafficKey = null;
     _trafficCodec = null;
     _pending.clear();
+    _completed.clear();
+    _outboundHandshake = null;
     _keyGrants.clear();
     _authentication = null;
     _client = null;
@@ -480,5 +548,14 @@ class RoomAdmission {
 class _Pending {
   final Spake2Keys keys;
   final DateTime created;
-  _Pending(this.keys, this.created);
+  final String hello;
+  final Uint8List challenge;
+  _Pending(this.keys, this.created, this.hello, this.challenge);
+}
+
+class _CompletedAdmission {
+  final String hello;
+  final Frame response;
+  final DateTime created;
+  _CompletedAdmission(this.hello, this.response, this.created);
 }

@@ -1,6 +1,6 @@
 # Google Play 发布与 AAB 构建
 
-核对日期：2026-10-27。项目包名 `dev.dawnmesh.intercom`，当前版本 `1.2.1+62`。
+核对日期：2026-10-27。项目包名 `dev.dawnmesh.intercom`，当前版本 `1.2.2+63`。
 
 ## 本机打包
 
@@ -17,7 +17,7 @@
 
 产物通常为 `build/app/outputs/bundle/release/app-release.aab`，以构建末尾打印的路径为准。AAB 是上传给 Play 的发布包，不可像 APK 一样直接安装；通过 Play 内部测试或 bundletool 生成设备 APK 进行安装验证。
 
-后续更新必须使用大于 Play 已上传版本的 `versionCode`。在 `pubspec.yaml` 中修改 `version: 版本名+构建号`，例如后续 `1.2.2+63`；若 Play 已使用对应构建号，则继续递增。仅重新上传设计候选不需要改应用版本；将选定图标接入应用后需重新打包。
+后续更新必须使用大于 Play 已上传版本的 `versionCode`。在 `pubspec.yaml` 中修改 `version: 版本名+构建号`，例如后续 `1.2.3+64`；若 Play 已使用对应构建号，则继续递增。仅重新上传设计候选不需要改应用版本；将选定图标接入应用后需重新打包。
 
 签名检查：
 
@@ -49,6 +49,14 @@ AAB 使用 JAR 签名校验；`apksigner` 用于 APK。自签名证书的信任�
 截至核对日期，新应用和更新要求 target API 至少 36，本项目设置为 37。本项目含 Flutter、WebRTC、RNNoise 等原生库，仍需检查最终产物的全部 64 位库 16 KB 对齐、打包对齐及 16 KB 设备运行情况；高版本 NDK 本身不能证明第三方库全部兼容。
 
 GitHub Actions 的发布工作流现同时构建签名 APK 与 AAB，并发布校验文件；不会自动上传 Google Play。商店图标使用 `assets/branding/google-play-icon.png`。离线转交为新增可选持久化能力，填写隐私与数据安全时应一并说明其密文托管和元数据边界。
+
+## 1.2.2 本地构建记录（2026-10-27）
+
+- AAB：90,018,317 字节；SHA-256 `bb648964c06c5a0628d25587d1bcd61c0a697f21f5f0e6ebc43f462b0b11f758`。
+- APK：108,991,479 字节；SHA-256 `7ff330546e1a9742b9bc3cdd1599c172d54fe8780326946779340a94b6177666`。
+- 包内版本为 1.2.2 / 63；签名、16 KiB ZIP/ELF 对齐、官方 bundletool 结构及 115 个 JAR 签名载荷验证通过。
+- 本地统一产物位于 `artifacts/releases/1.2.2/`；下载 GitHub Release 时使用该次重构建的随包校验文件。
+- 尚未上传 Google Play、没有执行手机安装；按控制台步骤和 [五机验收](MANUAL_ACCEPTANCE.md) 操作。
 
 ## 1.2.1 本地构建记录（2026-10-27）
 

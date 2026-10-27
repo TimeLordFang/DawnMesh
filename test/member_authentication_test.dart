@@ -158,6 +158,17 @@ void main() {
     expect(host.sent, isEmpty);
   });
 
+  test('rekey invalidates cached PAKE grants from the prior epoch', () async {
+    final host = await _Peer.create(1), guest = await _Peer.create(2);
+    await host.admission.startHost();
+    await guest.join(host, 2);
+    final confirmation = guest.sent.last;
+    await host.admission.revoke({2});
+    host.sent.clear();
+    await host.admission.handle(confirmation);
+    expect(host.sent, isEmpty);
+  });
+
   test(
     'certified successor rekeys survivors and admits them after host transfer',
     () async {

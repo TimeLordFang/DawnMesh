@@ -7,7 +7,7 @@
 
 一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
 
-> 当前正式版本：`1.2.1`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
+> 当前正式版本：`1.2.2`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
 
 ## 功能
 
@@ -37,7 +37,7 @@
 
 ## 下载与更新
 
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.2.1-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
+打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.2.2-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
 
 应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
 
@@ -162,3 +162,5 @@ DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Fl
 1.2.0 与 iOS 统一版本和构建号（1.2.0+61），新增可靠文字、独立成员身份、退出换钥、GATT 文字备用、可选语音留言、可选 Wi-Fi Aware 加速与离线密封转交。升级后的近场房间要求所有成员使用新版本；无线与锁屏验收步骤见 [五机验收](docs/MANUAL_ACCEPTANCE.md)，功能与边界见 [发布说明](docs/RELEASE_1.2.0.md)。
 
 1.2.1 与 iOS 统一为 1.2.1+62，修复繁忙融合房的握手等待、并发连接结果及超时/退出清理，详见 [发布说明](docs/RELEASE_1.2.1.md)。
+
+1.2.2 与 iOS 统一为 1.2.2+63，补齐认证和入房报文丢失后的有界恢复，并阻止旧握手重放占用新的认证，详见 [发布说明](docs/RELEASE_1.2.2.md)。

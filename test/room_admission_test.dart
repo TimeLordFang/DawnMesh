@@ -141,7 +141,12 @@ void main() {
           ),
         );
       }
-      expect(sent.length, 10);
+      expect(sent.length, 20); // Ten guesses, each with one cached retry.
+      for (var i = 0; i < sent.length; i += 2) {
+        expect(sent[i + 1].payload, sent[i].payload);
+        expect(sent[i + 1].seq, isNot(sent[i].seq));
+      }
+      expect(sent.map((f) => f.payload.toString()).toSet(), hasLength(10));
       expect(sent.every((f) => f.payload[1] == 2), isTrue); // No key grant.
     },
   );
