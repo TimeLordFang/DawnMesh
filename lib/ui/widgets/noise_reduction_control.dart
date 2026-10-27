@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/audio/noise_reduction.dart';
+import '../theme/app_theme.dart';
 
 class NoiseReductionControl extends StatelessWidget {
   const NoiseReductionControl({super.key, required this.isNight});
@@ -70,7 +71,7 @@ class NoiseReductionControl extends StatelessWidget {
                   Icon(
                     Icons.record_voice_over_rounded,
                     size: 21,
-                    color: isNight ? Colors.white70 : const Color(0xFF7E3947),
+                    color: isNight ? Colors.white70 : AppTheme.lightPrimary,
                   ),
                   Text(
                     english ? 'Noise' : '降噪',
@@ -78,7 +79,7 @@ class NoiseReductionControl extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 10,
-                      color: isNight ? Colors.white70 : const Color(0xFF7E3947),
+                      color: isNight ? Colors.white70 : AppTheme.lightPrimary,
                     ),
                   ),
                 ],

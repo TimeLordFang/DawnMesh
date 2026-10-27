@@ -20,7 +20,24 @@ async function main() {
     for (const [density, size] of Object.entries({mdpi:48,hdpi:72,xhdpi:96,xxhdpi:144,xxxhdpi:192})) {
       await render(path.join(android, `mipmap-${density}/ic_launcher.png`), size, true);
     }
-    await render(path.join(android, 'drawable-nodpi/dawnmesh_icon.png'), 1024);
+    // Adaptive foreground has a real 108dp intrinsic size at every density.
+    // A nodpi 1024px bitmap inside LayerDrawable can be cropped by OEM launchers
+    // while they animate the individual adaptive layers on return to home.
+    for (const [density, scale] of Object.entries({mdpi:1,hdpi:1.5,xhdpi:2,xxhdpi:3,xxxhdpi:4})) {
+      const size = Math.round(108 * scale);
+      const inset = Math.round(18 * scale);
+      const output = path.join(android, `drawable-${density}/ic_launcher_foreground.png`);
+      await fs.mkdir(path.dirname(output), { recursive: true });
+      await sharp(brand).resize(size - 2 * inset, size - 2 * inset)
+        .extend({ top: inset, bottom: inset, left: inset, right: inset,
+          background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png().toFile(output);
+    }
+    // No duplicate night variant: the brand mark must remain identical.
+    for (const variant of ['drawable/ic_launcher_foreground.xml',
+      'drawable-night/ic_launcher_foreground.xml', 'drawable-nodpi/dawnmesh_icon.png']) {
+      await fs.rm(path.join(android, variant), { force: true });
+    }
   }
   const assets = path.join(root, 'ios/Runner/Assets.xcassets');
   const ios = path.join(assets, 'AppIcon.appiconset');

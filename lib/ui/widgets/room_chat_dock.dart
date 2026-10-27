@@ -83,9 +83,7 @@ class _RoomChatDockState extends State<RoomChatDock> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final accent = widget.isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnBurgundy;
+    final accent = widget.isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     final primary = widget.isNight
         ? AppTheme.darkTextPrimary
         : AppTheme.lightTextPrimary;
@@ -151,8 +149,8 @@ class _RoomChatDockState extends State<RoomChatDock> {
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
                           color: widget.isNight
-                              ? AppTheme.darkLeaveRosePink
-                              : AppTheme.dawnCoral,
+                              ? AppTheme.darkDanger
+                              : AppTheme.lightAccent,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -271,8 +269,8 @@ class _RoomChatDockState extends State<RoomChatDock> {
                       isDense: true,
                       filled: true,
                       fillColor: widget.isNight
-                          ? const Color(0xFF121B2B)
-                          : const Color(0xFFF1ECE5),
+                          ? AppTheme.darkBg
+                          : AppTheme.lightBg,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 9,

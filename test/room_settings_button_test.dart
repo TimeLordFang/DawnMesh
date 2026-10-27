@@ -43,6 +43,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(find.text('设置 7'), 180);
+      await tester.pumpAndSettle();
       expect(find.text('设置 7').hitTestable(), findsOneWidget);
       ended.add(null);
       await tester.pumpAndSettle();

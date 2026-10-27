@@ -7,8 +7,8 @@ publish_to: 'none'
 version: 1.2.2+63
 
 environment:
-  sdk: '>=3.13.0 <4.0.0'
-  flutter: ">=3.47.0"
+  sdk: '>=3.13.7 <4.0.0'
+  flutter: ">=3.47.8"
 
 dependencies:
   flutter:
@@ -16,11 +16,11 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   cryptography: ^2.9.0
-  crypto: ^3.0.7
+  crypto: ^3.0.8
   pointycastle: ^4.0.0
   http: ^1.6.0
-  livekit_client: ^2.13.1
-  flutter_webrtc: ^1.6.2+hotfix.4
+  livekit_client: ^2.13.2
+  flutter_webrtc: ^1.6.3
   connectivity_plus: ^7.3.2
   flutter_secure_storage: ^11.2.0
   image_picker: ^1.2.4

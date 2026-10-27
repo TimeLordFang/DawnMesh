@@ -18,8 +18,8 @@
     <style name="LockScreenPanelTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#82E3C8</item>
-        <item name="android:navigationBarColor">#091821</item>
-        <item name="android:statusBarColor">#0D252E</item>
+        <item name="android:colorAccent">#FFBC70</item>
+        <item name="android:navigationBarColor">#080F29</item>
+        <item name="android:statusBarColor">#141E40</item>
     </style>
 </resources>

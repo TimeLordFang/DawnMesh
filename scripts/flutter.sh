@@ -7,7 +7,7 @@ fi
 export CI=true FLUTTER_SUPPRESS_ANALYTICS=true DART_SUPPRESS_ANALYTICS=true
 if [[ -n "${FLUTTER_ROOT:-}" ]]; then
   exec "$FLUTTER_ROOT/bin/flutter" "$@"
-elif [[ -x "$dawnmesh_root/.tools/flutter/bin/flutter" ]]; then
-  exec "$dawnmesh_root/.tools/flutter/bin/flutter" "$@"
+elif [[ -x "$dawnmesh_root/.tools/flutter-3.47.8/bin/flutter" ]]; then
+  exec "$dawnmesh_root/.tools/flutter-3.47.8/bin/flutter" "$@"
 fi
 exec flutter "$@"

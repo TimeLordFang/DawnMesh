@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// One toolbar action leaves room names and live connection status readable.
-/// Settings live in a scrollable sheet so large text never crowds the header.
+import '../../core/session/room_session.dart';
+import '../pages/settings_page.dart';
+
+/// One settings destination from the home screen and all room toolbars.
 class RoomSettingsButton extends StatelessWidget {
   const RoomSettingsButton({
     super.key,
@@ -9,19 +11,21 @@ class RoomSettingsButton extends StatelessWidget {
     this.listenable,
     this.color,
     this.dismissEvents,
+    this.session,
   });
   final List<Widget> Function(BuildContext) items;
   final Listenable? listenable;
   final Color? color;
   final Stream<Object?>? dismissEvents;
+  final RoomSession? session;
 
   @override
   Widget build(BuildContext context) {
     final english = Localizations.localeOf(context).languageCode == 'en';
     return IconButton(
       key: const ValueKey('room-settings-button'),
-      tooltip: english ? 'Room settings' : '房间设置',
-      icon: Icon(Icons.more_horiz_rounded, color: color),
+      tooltip: english ? 'Settings' : '设置',
+      icon: Icon(Icons.settings_outlined, color: color),
       onPressed: () async {
         final parentRoute = ModalRoute.of(context);
         final dismiss = dismissEvents?.listen((_) {
@@ -31,53 +35,15 @@ class RoomSettingsButton extends StatelessWidget {
           }
         });
         try {
-          await showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            useSafeArea: true,
-            showDragHandle: true,
-            constraints: const BoxConstraints(maxWidth: 560),
-            builder: (sheetContext) {
-              Widget content() => SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              english ? 'Room settings' : '房间设置',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: english ? 'Close' : '关闭',
-                            onPressed: () => Navigator.pop(sheetContext),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                      ...items(sheetContext),
-                    ],
-                  ),
-                ),
-              );
-              return ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(sheetContext).height * .85,
-                ),
-                child: listenable == null
-                    ? content()
-                    : AnimatedBuilder(
-                        animation: listenable!,
-                        builder: (_, _) => content(),
-                      ),
-              );
-            },
+          await Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SettingsPage(
+                roomItems: items,
+                listenable: listenable,
+                session: session,
+              ),
+            ),
           );
         } finally {
           await dismiss?.cancel();

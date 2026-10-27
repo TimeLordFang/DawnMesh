@@ -36,9 +36,7 @@ class _ServerProfilePickerState extends State<ServerProfilePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnBurgundy;
+    final accent = widget.isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

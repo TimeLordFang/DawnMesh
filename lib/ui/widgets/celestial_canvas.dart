@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 /// Dynamic Canvas Painter for Dawn Sun / Moonlit Night & Water Wave Ripples.
@@ -95,26 +97,16 @@ class _CelestialPainter extends CustomPainter {
     final rect = Offset.zero & size;
 
     // 1. Sky Gradient
-    final skyColors =
-        isNight
-            ? [
-              AppTheme.nightSkyBlue,
-              AppTheme.nightDeepOcean,
-              AppTheme.nightAbyss,
-            ]
-            : [
-              AppTheme.dawnCoral,
-              AppTheme.dawnBurgundy,
-              AppTheme.dawnDeepPlum,
-            ];
+    final skyColors = isNight
+        ? [AppTheme.brandIndigo, AppTheme.brandNavy, AppTheme.darkBg]
+        : [AppTheme.brandIndigo, AppTheme.brandNavy, const Color(0xFF121A43)];
 
-    final skyPaint =
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: skyColors,
-          ).createShader(rect);
+    final skyPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: skyColors,
+      ).createShader(rect);
 
     canvas.drawRect(rect, skyPaint);
 
@@ -125,14 +117,13 @@ class _CelestialPainter extends CustomPainter {
     );
     final radius = celestialRadius;
 
-    final celestialColor =
-        isNight ? AppTheme.moonSilverWhite : AppTheme.sunWarmYellow;
+    final celestialColor = AppTheme.brandGold;
 
     // Outer Glow: GPU RadialGradient shader instead of expensive MaskFilter.blur
     final glowRadius = radius + 26;
-    final glowPaint =
-        Paint()
-          ..shader = RadialGradient(
+    final glowPaint = Paint()
+      ..shader =
+          RadialGradient(
             colors: [
               celestialColor.withValues(
                 alpha: 0.38 + 0.12 * math.sin(wavePhase),
@@ -146,7 +137,12 @@ class _CelestialPainter extends CustomPainter {
     canvas.drawCircle(celestialCenter, glowRadius, glowPaint);
 
     // Main Circle
-    final mainPaint = Paint()..color = celestialColor;
+    final mainPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [AppTheme.warmWhite, AppTheme.brandGold, AppTheme.brandOrange],
+      ).createShader(Rect.fromCircle(center: celestialCenter, radius: radius));
     canvas.drawCircle(celestialCenter, radius, mainPaint);
 
     // 3. Water Surface Ripple Reflections

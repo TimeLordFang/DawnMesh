@@ -57,7 +57,7 @@ class VoiceModeSwitch extends StatelessWidget {
                 border: Border.all(
                   color: isNight
                       ? Colors.white.withValues(alpha: 0.10)
-                      : AppTheme.dawnBurgundy.withValues(alpha: 0.12),
+                      : AppTheme.lightPrimary.withValues(alpha: 0.12),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -122,9 +122,7 @@ class VoiceModeSwitch extends StatelessWidget {
                           compact: compact,
                           primary: primary,
                           secondary: secondary,
-                          selectedForeground: isNight
-                              ? Colors.white
-                              : AppTheme.lightTextPrimary,
+                          selectedForeground: AppTheme.brandNavy,
                           onTap: () => _select(VoiceMode.automatic),
                         ),
                       ),
@@ -147,23 +145,17 @@ class VoiceModeSwitch extends StatelessWidget {
     onChanged(mode);
   }
 
-  List<Color> _selectedGradient(bool automatic) {
-    if (isNight) {
-      return automatic
-          ? const [Color(0xFF286A71), Color(0xFF4B9A8C)]
-          : const [AppTheme.nightDeepOcean, Color(0xFF5275A9)];
-    }
-    return automatic
-        ? const [AppTheme.dawnCoral, Color(0xFFE4B074)]
-        : const [Color(0xFF7E3947), Color(0xFFA75559)];
-  }
+  List<Color> _selectedGradient(bool automatic) => automatic
+      ? const [AppTheme.brandGold, AppTheme.brandOrange]
+      : isNight
+      ? const [AppTheme.brandIndigo, AppTheme.brandNavy]
+      : const [AppTheme.lightPrimary, AppTheme.lightAccent];
 
-  Color _accent(bool automatic) {
-    if (isNight) {
-      return automatic ? const Color(0xFF4B9A8C) : AppTheme.nightSkyBlue;
-    }
-    return automatic ? const Color(0xFFD99A68) : AppTheme.dawnBurgundy;
-  }
+  Color _accent(bool automatic) => automatic
+      ? AppTheme.brandOrange
+      : isNight
+      ? AppTheme.darkAccent
+      : AppTheme.lightPrimary;
 }
 
 class _ModeOption extends StatelessWidget {

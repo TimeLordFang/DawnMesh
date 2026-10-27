@@ -106,7 +106,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
+      MaterialApp(home: SessionStage(isNight: false)),
     );
     // 首页 initState 会发起扫描，里面有 2 秒的 Future.delayed。
     await tester.pump(const Duration(seconds: 3));
@@ -197,7 +197,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
+      MaterialApp(home: SessionStage(isNight: false)),
     );
     await tester.pump(const Duration(seconds: 3));
 
@@ -237,7 +237,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
+      MaterialApp(home: SessionStage(isNight: false)),
     );
     await tester.pump(const Duration(seconds: 3));
     await tester.runAsync(() async {

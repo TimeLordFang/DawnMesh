@@ -103,7 +103,7 @@ void main() {
     testWidgets('${entry.key} 首页整场（背景+标题+前景）不溢出', (tester) async {
       useSurface(tester, entry.value);
       await tester.pumpWidget(
-        MaterialApp(home: SessionStage(isNight: false, onToggleTheme: () {})),
+        MaterialApp(home: SessionStage(isNight: false)),
       );
       // 首页 initState 会发起扫描，里面有 2 秒的 Future.delayed。
       await tester.pump(const Duration(seconds: 3));
@@ -181,7 +181,6 @@ void main() {
       MaterialApp(
         home: SessionStage(
           isNight: false,
-          onToggleTheme: () {},
           initialInternetSession: session,
         ),
       ),

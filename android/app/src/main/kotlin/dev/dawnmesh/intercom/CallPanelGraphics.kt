@@ -19,8 +19,8 @@ internal data class CallPanelPalette(
     val card: Int,
     val white: Int,
     val secondary: Int,
-    val mint: Int,
-    val blue: Int,
+    val accent: Int,
+    val secondaryAccent: Int,
     val muted: Int,
     val padMuted: Int,
     val padPressed: Int,
@@ -31,37 +31,37 @@ internal data class CallPanelPalette(
 internal object CallPanelColors {
     val night = CallPanelPalette(
         isNight = true,
-        backgroundStart = Color.rgb(13, 37, 46),
-        backgroundEnd = Color.rgb(9, 24, 33),
-        glow = Color.argb(40, 113, 225, 195),
-        ink = Color.rgb(9, 24, 33),
-        card = Color.rgb(24, 45, 56),
-        white = Color.rgb(239, 250, 248),
-        secondary = Color.rgb(157, 181, 187),
-        mint = Color.rgb(130, 227, 200),
-        blue = Color.rgb(153, 206, 251),
-        muted = Color.rgb(211, 164, 152),
-        padMuted = Color.rgb(47, 47, 52),
-        padPressed = Color.rgb(33, 100, 91),
-        padAutomatic = Color.rgb(36, 63, 83),
-        padHold = Color.rgb(27, 66, 66),
+        backgroundStart = Color.rgb(20, 30, 64),
+        backgroundEnd = Color.rgb(8, 15, 41),
+        glow = Color.argb(40, 255, 188, 112),
+        ink = Color.rgb(8, 15, 57),
+        card = Color.rgb(20, 30, 64),
+        white = Color.rgb(255, 243, 226),
+        secondary = Color.rgb(188, 195, 220),
+        accent = Color.rgb(255, 188, 112),
+        secondaryAccent = Color.rgb(255, 116, 70),
+        muted = Color.rgb(255, 139, 155),
+        padMuted = Color.rgb(48, 31, 54),
+        padPressed = Color.rgb(119, 51, 20),
+        padAutomatic = Color.rgb(32, 43, 88),
+        padHold = Color.rgb(39, 40, 70),
     )
     val day = CallPanelPalette(
         isNight = false,
-        backgroundStart = Color.rgb(255, 249, 241),
-        backgroundEnd = Color.rgb(244, 241, 236),
-        glow = Color.argb(66, 243, 220, 170),
-        ink = Color.rgb(57, 40, 50),
-        card = Color.rgb(252, 250, 247),
-        white = Color.rgb(42, 34, 37),
-        secondary = Color.rgb(110, 98, 94),
-        mint = Color.rgb(191, 225, 207),
-        blue = Color.rgb(198, 216, 240),
-        muted = Color.rgb(239, 186, 174),
-        padMuted = Color.rgb(247, 229, 224),
-        padPressed = Color.rgb(176, 91, 93),
-        padAutomatic = Color.rgb(222, 232, 246),
-        padHold = Color.rgb(244, 221, 213),
+        backgroundStart = Color.rgb(255, 248, 239),
+        backgroundEnd = Color.rgb(255, 243, 220),
+        glow = Color.argb(66, 255, 213, 135),
+        ink = Color.rgb(23, 33, 63),
+        card = Color.WHITE,
+        white = Color.rgb(23, 33, 63),
+        secondary = Color.rgb(88, 97, 122),
+        accent = Color.rgb(166, 62, 31),
+        secondaryAccent = Color.rgb(32, 43, 88),
+        muted = Color.rgb(174, 49, 72),
+        padMuted = Color.rgb(255, 232, 227),
+        padPressed = Color.rgb(255, 188, 112),
+        padAutomatic = Color.rgb(225, 230, 246),
+        padHold = Color.rgb(255, 234, 207),
     )
 
     fun resolve(context: Context): CallPanelPalette {
@@ -166,8 +166,8 @@ internal class CallTalkPad(
     private val scaledDensity = resources.displayMetrics.scaledDensity
     private val titleTypeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     private val subtitleTypeface = Typeface.create("sans-serif", Typeface.NORMAL)
-    private val micIcon = CallPanelIcon("mic", palette.mint)
-    private val autoIcon = CallPanelIcon("wave", palette.blue)
+    private val micIcon = CallPanelIcon("mic", palette.accent)
+    private val autoIcon = CallPanelIcon("wave", palette.secondaryAccent)
     private val mutedIcon = CallPanelIcon("mic_off", palette.muted)
     private var fillShader: Shader? = null
 
@@ -239,7 +239,7 @@ internal class CallTalkPad(
         val cx = width / 2f
         val cy = height / 2f
         val radius = min(cx, cy) - 12 * density
-        val accent = when { muted -> palette.muted; automatic -> palette.blue; else -> palette.mint }
+        val accent = when { muted -> palette.muted; automatic -> palette.secondaryAccent; else -> palette.accent }
         paint.shader = null
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = density

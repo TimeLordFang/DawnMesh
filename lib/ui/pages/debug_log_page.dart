@@ -250,11 +250,13 @@ class _DebugLogPageState extends State<DebugLogPage> {
                     draft.maxPlayoutQueueFrames,
                   ].reduce((a, b) => a > b ? a : b).toDouble(),
                   max: 32,
-                  divisions: 32 - [
-                    draft.prebufferFrames,
-                    draft.maxAdaptiveFrames,
-                    draft.maxPlayoutQueueFrames,
-                  ].reduce((a, b) => a > b ? a : b),
+                  divisions:
+                      32 -
+                      [
+                        draft.prebufferFrames,
+                        draft.maxAdaptiveFrames,
+                        draft.maxPlayoutQueueFrames,
+                      ].reduce((a, b) => a > b ? a : b),
                   onChanged: (v) =>
                       update(draft.copyWith(maxBufferFrames: v.round())),
                 ),
@@ -437,10 +439,10 @@ class _DebugLogPageState extends State<DebugLogPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isNight
-                ? const [AppTheme.nightAbyss, AppTheme.darkBg]
+                ? const [AppTheme.brandNavy, AppTheme.darkBg]
                 : [
                     AppTheme.lightBg,
-                    AppTheme.dawnCoral.withValues(alpha: 0.10),
+                    AppTheme.lightAccent.withValues(alpha: 0.10),
                   ],
           ),
         ),
@@ -775,8 +777,8 @@ class _DebugLogPageState extends State<DebugLogPage> {
         selected: selected,
         onSelected: (_) => setState(() => _level = level),
         selectedColor: widget.isNight
-            ? AppTheme.nightSkyBlue
-            : AppTheme.dawnCoral,
+            ? AppTheme.darkAccent
+            : AppTheme.lightAccent,
         backgroundColor: card,
         labelStyle: TextStyle(
           color: selected ? Colors.white : primary,

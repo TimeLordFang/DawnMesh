@@ -351,7 +351,7 @@ class _RoomContentState extends State<RoomContent> {
 
   Widget _buildAutomaticStatus(bool isNight) {
     final s = AppStrings.of(context);
-    final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final activeColor = isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return StreamBuilder<double>(
       key: const ValueKey('automatic-talk-status'),
       stream: widget.session.waveStream,

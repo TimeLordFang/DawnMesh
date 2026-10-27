@@ -47,9 +47,9 @@
 
 | 工具 | 版本 |
 | --- | --- |
-| Flutter / Dart | Flutter **3.47.7** / Dart **3.13.5** |
-| JDK | Temurin **27**，用于运行 Gradle |
-| Gradle / Android Gradle Plugin | **9.8.1** / **9.4.1** |
+| Flutter / Dart | Flutter **3.47.8** / Dart **3.13.7** |
+| JDK | Temurin **27.0.1.0.2+1**，用于运行 Gradle |
+| Gradle / Android Gradle Plugin | **9.8.2** / **9.4.1** |
 | Kotlin | **2.4.21** |
 | Android SDK | compileSdk **37.2** / targetSdk **37** |
 | Android Build-Tools | **37.0.0** |

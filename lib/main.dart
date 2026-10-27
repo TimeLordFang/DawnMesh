@@ -10,6 +10,7 @@ import 'core/platform/native_debug_log_channel.dart';
 import 'core/preferences/debug_log_settings_store.dart';
 import 'ui/pages/session_stage.dart';
 import 'ui/theme/app_theme.dart';
+import 'ui/theme/app_appearance.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,19 +51,6 @@ class DawnMeshApp extends StatefulWidget {
 class _DawnMeshAppState extends State<DawnMeshApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
-  void _toggleTheme() {
-    setState(() {
-      if (_themeMode == ThemeMode.light) {
-        _themeMode = ThemeMode.dark;
-      } else if (_themeMode == ThemeMode.dark) {
-        _themeMode = ThemeMode.light;
-      } else {
-        // From system to dark
-        _themeMode = ThemeMode.dark;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -77,13 +65,18 @@ class _DawnMeshAppState extends State<DawnMeshApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => AppAppearance(
+        mode: _themeMode,
+        onChanged: (mode) => setState(() => _themeMode = mode),
+        child: child!,
+      ),
       home: Builder(
         builder: (context) {
           final isNight =
               _themeMode == ThemeMode.dark ||
               (_themeMode == ThemeMode.system &&
                   MediaQuery.of(context).platformBrightness == Brightness.dark);
-          return SessionStage(isNight: isNight, onToggleTheme: _toggleTheme);
+          return SessionStage(isNight: isNight);
         },
       ),
     );

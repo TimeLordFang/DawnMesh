@@ -504,8 +504,8 @@ class _HomeContentState extends State<HomeContent> {
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                             color: isNight
-                                ? const Color(0xFF283A52)
-                                : const Color(0xFFDCCEC8),
+                                ? AppTheme.darkOutline
+                                : AppTheme.lightOutline,
                             width: 1.2,
                           ),
                         ),
@@ -550,8 +550,8 @@ class _HomeContentState extends State<HomeContent> {
                                 decoration: BoxDecoration(
                                   color:
                                       (isNight
-                                              ? AppTheme.nightSkyBlue
-                                              : AppTheme.dawnCoral)
+                                              ? AppTheme.darkAccent
+                                              : AppTheme.lightAccent)
                                           .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -563,8 +563,8 @@ class _HomeContentState extends State<HomeContent> {
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.8,
                                     color: isNight
-                                        ? AppTheme.nightSkyBlue
-                                        : AppTheme.dawnCoral,
+                                        ? AppTheme.darkAccent
+                                        : AppTheme.lightAccent,
                                   ),
                                 ),
                               ),
@@ -673,9 +673,9 @@ class _HomeContentState extends State<HomeContent> {
                                   : _onCreateRoom,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: isNight
-                                    ? AppTheme.nightSkyBlue
-                                    : AppTheme.dawnBurgundy,
-                                foregroundColor: Colors.white,
+                                    ? AppTheme.darkAccent
+                                    : AppTheme.lightPrimary,
+                                foregroundColor: AppTheme.onAccent(isNight),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 18,
@@ -709,8 +709,8 @@ class _HomeContentState extends State<HomeContent> {
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(
                                   color: isNight
-                                      ? AppTheme.nightSkyBlue
-                                      : AppTheme.dawnCoral,
+                                      ? AppTheme.darkAccent
+                                      : AppTheme.lightAccent,
                                   width: 1.6,
                                 ),
                                 padding: const EdgeInsets.symmetric(
@@ -733,8 +733,8 @@ class _HomeContentState extends State<HomeContent> {
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2.2,
                                           color: isNight
-                                              ? AppTheme.moonSilverWhite
-                                              : AppTheme.dawnCoral,
+                                              ? AppTheme.warmWhite
+                                              : AppTheme.lightAccent,
                                         ),
                                       )
                                     else
@@ -742,8 +742,8 @@ class _HomeContentState extends State<HomeContent> {
                                         Icons.radar,
                                         size: 21,
                                         color: isNight
-                                            ? AppTheme.moonSilverWhite
-                                            : AppTheme.dawnCoral,
+                                            ? AppTheme.warmWhite
+                                            : AppTheme.lightAccent,
                                       ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -752,8 +752,8 @@ class _HomeContentState extends State<HomeContent> {
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
                                         color: isNight
-                                            ? AppTheme.moonSilverWhite
-                                            : AppTheme.dawnCoral,
+                                            ? AppTheme.warmWhite
+                                            : AppTheme.lightAccent,
                                       ),
                                     ),
                                   ],
@@ -795,8 +795,8 @@ class _HomeContentState extends State<HomeContent> {
                               s.detectingRooms,
                               style: TextStyle(
                                 color: isNight
-                                    ? AppTheme.nightSkyBlue
-                                    : AppTheme.dawnCoral,
+                                    ? AppTheme.darkAccent
+                                    : AppTheme.lightAccent,
                                 fontSize: 14,
                               ),
                             ),
@@ -868,8 +868,8 @@ class _HomeContentState extends State<HomeContent> {
                                     borderRadius: BorderRadius.circular(18),
                                     border: Border.all(
                                       color: isNight
-                                          ? const Color(0xFF283A52)
-                                          : const Color(0xFFDCCEC8),
+                                          ? AppTheme.darkOutline
+                                          : AppTheme.lightOutline,
                                     ),
                                   ),
                                   child: Row(
@@ -915,9 +915,11 @@ class _HomeContentState extends State<HomeContent> {
                                             : () => _onJoinRoom(room),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: isNight
-                                              ? AppTheme.nightSkyBlue
-                                              : AppTheme.dawnCoral,
-                                          foregroundColor: Colors.white,
+                                              ? AppTheme.darkAccent
+                                              : AppTheme.lightAccent,
+                                          foregroundColor: AppTheme.onAccent(
+                                            isNight,
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 22,
                                             vertical: 14,
@@ -954,8 +956,8 @@ class _HomeContentState extends State<HomeContent> {
                                     borderRadius: BorderRadius.circular(18),
                                     border: Border.all(
                                       color: isNight
-                                          ? const Color(0xFF283A52)
-                                          : const Color(0xFFDCCEC8),
+                                          ? AppTheme.darkOutline
+                                          : AppTheme.lightOutline,
                                     ),
                                   ),
                                   child: Row(
@@ -994,9 +996,11 @@ class _HomeContentState extends State<HomeContent> {
                                             _onJoinWifiDirectPeer(peer),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: isNight
-                                              ? AppTheme.nightSkyBlue
-                                              : AppTheme.dawnCoral,
-                                          foregroundColor: Colors.white,
+                                              ? AppTheme.darkAccent
+                                              : AppTheme.lightAccent,
+                                          foregroundColor: AppTheme.onAccent(
+                                            isNight,
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 22,
                                             vertical: 14,
@@ -1362,7 +1366,7 @@ class _ActiveRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final accent = isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Card(
@@ -1427,9 +1431,7 @@ class _ActiveRoomCard extends StatelessWidget {
                 ),
                 IconButton(
                   tooltip: s.hangUp,
-                  color: isNight
-                      ? AppTheme.darkLeaveRosePink
-                      : AppTheme.lightLeaveAccent,
+                  color: isNight ? AppTheme.darkDanger : AppTheme.lightDanger,
                   onPressed: onHangUp,
                   icon: const Icon(Icons.call_end_rounded),
                 ),
@@ -1455,7 +1457,7 @@ class _ActiveNetworkRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final accent = isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return ListenableBuilder(
       listenable: session,
       builder: (context, _) => Padding(
@@ -1468,7 +1470,7 @@ class _ActiveNetworkRoomCard extends StatelessWidget {
             onTap: onResume,
             leading: CircleAvatar(
               backgroundColor: accent,
-              foregroundColor: Colors.white,
+              foregroundColor: AppTheme.onAccent(isNight),
               child: const Icon(Icons.public_rounded),
             ),
             title: Text(
@@ -1506,7 +1508,7 @@ class _InternetEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final accent = isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return Material(
       color: isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg,
       shape: RoundedRectangleBorder(
@@ -1584,7 +1586,7 @@ class _ModeSelectChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy;
+    final activeColor = isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     final cardBg = isNight ? AppTheme.darkCardBg : AppTheme.lightCardBg;
     final textPrimary = isNight
         ? AppTheme.darkTextPrimary
@@ -1604,7 +1606,7 @@ class _ModeSelectChip extends StatelessWidget {
           border: Border.all(
             color: isSelected
                 ? activeColor
-                : (isNight ? const Color(0xFF283A52) : const Color(0xFFDCCEC8)),
+                : (isNight ? AppTheme.darkOutline : AppTheme.lightOutline),
             width: isSelected ? 2.0 : 1.0,
           ),
         ),

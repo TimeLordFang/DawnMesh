@@ -89,4 +89,24 @@ void main() {
       findsOneWidget,
     );
   });
+  testWidgets('首页只有设置入口，外观和离线转交收进设置页', (tester) async {
+    await tester.pumpWidget(const DawnMeshApp());
+    await tester.pump(scanSettle);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.mark_email_unread_outlined), findsNothing);
+    expect(find.byIcon(Icons.terminal_rounded), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('room-settings-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-courier')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-debug')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('appearance-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark').last);
+    await tester.pumpAndSettle();
+    final settings = tester.element(
+      find.byKey(const ValueKey('appearance-mode')),
+    );
+    expect(Theme.of(settings).brightness, Brightness.dark);
+    expect(tester.takeException(), isNull);
+  });
 }

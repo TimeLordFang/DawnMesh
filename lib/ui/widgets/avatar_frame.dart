@@ -42,8 +42,8 @@ class AvatarFrameTheme {
     // 0. 夕阳琥珀
     AvatarFrameTheme(
       name: 'DawnAmber',
-      borderGradient: [AppTheme.dawnCoral, Color(0xFFFFA726)],
-      glowColor: AppTheme.dawnCoral,
+      borderGradient: [AppTheme.lightAccent, Color(0xFFFFA726)],
+      glowColor: AppTheme.lightAccent,
     ),
     // 1. 碧海青风
     AvatarFrameTheme(

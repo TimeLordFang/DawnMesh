@@ -1,54 +1,85 @@
 import 'package:flutter/material.dart';
 
-/// DawnMesh Color Palette & Theme Definitions.
+/// Navy, orange and gold from the selected DawnMesh mark.
 class AppTheme {
-  // Light (Dawn Warm)
-  static const Color dawnCoral = Color(0xFFC97C66);
-  static const Color dawnBurgundy = Color(0xFF9B4A52);
-  static const Color dawnDeepPlum = Color(0xFF392832);
-  static const Color sunWarmYellow = Color(0xFFF3DCAA);
-  static const Color lightBg = Color(0xFFF4F1EC);
-  static const Color lightCardBg = Color(0xFFFCFAF7);
-  static const Color lightTextPrimary = Color(0xFF2A2225);
-  static const Color lightTextSecondary = Color(0xFF6E625E);
-  static const Color lightLeaveAccent = Color(0xFFFF9E90);
+  static const brandNavy = Color(0xFF080F39);
+  static const brandIndigo = Color(0xFF202B58);
+  static const brandOrange = Color(0xFFFF7446);
+  static const brandGold = Color(0xFFFFD587);
+  static const warmWhite = Color(0xFFFFF3DC);
 
-  // Dark (Moonlit Deep Ocean)
-  static const Color nightSkyBlue = Color(0xFF3C5A8C);
-  static const Color nightDeepOcean = Color(0xFF24395F);
-  static const Color nightAbyss = Color(0xFF101A2E);
-  static const Color moonSilverWhite = Color(0xFFE9EEF7);
-  static const Color darkBg = Color(0xFF0E1626);
-  static const Color darkCardBg = Color(0xFF182437);
-  static const Color darkTextPrimary = Color(0xFFE4EBF4);
-  static const Color darkTextSecondary = Color(0xFF8FA2BC);
-  static const Color darkLeaveRosePink = Color(
-    0xFFFF7B92,
-  ); // High-contrast (>7.5:1)
+  static const lightPrimary = Color(0xFFA63E1F);
+  static const lightAccent = Color(0xFFB64B23);
+  static const lightBg = Color(0xFFFFF8EF);
+  static const lightCardBg = Color(0xFFFFFFFF);
+  static const lightTextPrimary = Color(0xFF17213F);
+  static const lightTextSecondary = Color(0xFF58617A);
+  static const lightOutline = Color(0xFFD9DCE6);
+  static const lightDanger = Color(0xFFAE3148);
 
-  static ThemeData light() {
+  static const darkAccent = Color(0xFFFFBC70);
+  static const darkBg = Color(0xFF080F29);
+  static const darkCardBg = Color(0xFF141E40);
+  static const darkTextPrimary = Color(0xFFFFF3E2);
+  static const darkTextSecondary = Color(0xFFBCC3DC);
+  static const darkOutline = Color(0xFF344164);
+  static const darkDanger = Color(0xFFFF8B9B);
+
+  static Color onAccent(bool isNight) => isNight ? brandNavy : Colors.white;
+  static ThemeData light() => _theme(Brightness.light);
+  static ThemeData dark() => _theme(Brightness.dark);
+
+  static ThemeData _theme(Brightness brightness) {
+    final night = brightness == Brightness.dark;
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: brandOrange,
+          brightness: brightness,
+        ).copyWith(
+          primary: night ? darkAccent : lightPrimary,
+          onPrimary: onAccent(night),
+          secondary: night ? brandGold : brandIndigo,
+          onSecondary: night ? brandNavy : Colors.white,
+          surface: night ? darkCardBg : lightCardBg,
+          onSurface: night ? darkTextPrimary : lightTextPrimary,
+          primaryContainer: night
+              ? const Color(0xFF4B301D)
+              : const Color(0xFFFFE7CD),
+          onPrimaryContainer: night ? brandGold : const Color(0xFF6E2910),
+          secondaryContainer: night
+              ? const Color(0xFF23305C)
+              : const Color(0xFFE1E7FA),
+          onSecondaryContainer: night ? const Color(0xFFE4EAFE) : brandNavy,
+          surfaceContainerLowest: night ? darkBg : lightCardBg,
+          surfaceContainerLow: night ? darkCardBg : lightCardBg,
+          surfaceContainer: night
+              ? const Color(0xFF1A254B)
+              : const Color(0xFFFFF1DE),
+          surfaceContainerHigh: night
+              ? const Color(0xFF202C53)
+              : const Color(0xFFF7ECDD),
+          surfaceContainerHighest: night
+              ? const Color(0xFF27335C)
+              : const Color(0xFFEFE5D7),
+          outlineVariant: night ? darkOutline : lightOutline,
+          onSurfaceVariant: night ? darkTextSecondary : lightTextSecondary,
+          outline: night ? darkOutline : lightOutline,
+          error: night ? darkDanger : lightDanger,
+        );
     return ThemeData(
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: lightBg,
-      primaryColor: dawnBurgundy,
-      colorScheme: const ColorScheme.light(
-        primary: dawnBurgundy,
-        secondary: dawnCoral,
-        surface: lightCardBg,
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      primaryColor: scheme.primary,
+      scaffoldBackgroundColor: night ? darkBg : lightBg,
+      appBarTheme: AppBarTheme(
+        backgroundColor: night ? darkBg : lightBg,
+        foregroundColor: scheme.onSurface,
+        surfaceTintColor: Colors.transparent,
       ),
-      fontFamily: 'sans-serif',
-    );
-  }
-
-  static ThemeData dark() {
-    return ThemeData(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: darkBg,
-      primaryColor: nightSkyBlue,
-      colorScheme: const ColorScheme.dark(
-        primary: nightSkyBlue,
-        secondary: nightDeepOcean,
-        surface: darkCardBg,
+      cardTheme: CardThemeData(color: scheme.surface, elevation: 0),
+      dividerTheme: DividerThemeData(
+        color: scheme.outline.withValues(alpha: .5),
       ),
       fontFamily: 'sans-serif',
     );

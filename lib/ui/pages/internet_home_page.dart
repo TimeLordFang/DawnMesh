@@ -368,9 +368,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnBurgundy;
+    final accent = widget.isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('网络对讲'),
@@ -404,7 +402,7 @@ class _InternetHomePageState extends State<InternetHomePage> {
                   ? null
                   : _createRoom,
               backgroundColor: accent,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               icon: const Icon(Icons.add_comment_outlined),
               label: const Text('创建房间'),
             ),
@@ -592,7 +590,7 @@ class _ActiveInternetRoomCard extends StatelessWidget {
       onTap: onResume,
       leading: CircleAvatar(
         backgroundColor: accent,
-        foregroundColor: Colors.white,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.call_rounded),
       ),
       title: Text(

@@ -285,7 +285,7 @@ class LockScreenTalkActivity : Activity() {
         for ((button, selected) in listOf(holdMode to !auto, autoMode to auto)) {
             button.isSelected = selected
             button.background = ripple(if (selected) {
-                if (auto) palette.blue else palette.mint
+                if (auto) palette.secondaryAccent else palette.accent
             } else Color.TRANSPARENT, 20f)
             val icon = button.getChildAt(0) as ImageView
             val copy = button.getChildAt(1) as LinearLayout
@@ -303,7 +303,7 @@ class LockScreenTalkActivity : Activity() {
         muteTitle.text = if (muted) "麦克风已静音" else "麦克风已开启"
         muteHint.text = if (muted) "点按恢复发言" else "点按静音，保持收听"
         muteBadge.text = if (muted) "静音" else "开启"
-        muteBadge.background = shape(if (muted) palette.muted else palette.mint, 12f)
+        muteBadge.background = shape(if (muted) palette.muted else palette.accent, 12f)
         mute.contentDescription = if (muted) "麦克风已静音，点按恢复发言" else "麦克风已开启，点按静音"
     }
 

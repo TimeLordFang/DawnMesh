@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../widgets/noise_reduction_control.dart';
 import '../widgets/room_settings_button.dart';
 import '../widgets/presence_announcements_control.dart';
 import '../../core/internet/internet_audio_profile.dart';
@@ -223,7 +222,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
     builder: (_) => _MemberSheet(
       session: widget.session,
       isNight: widget.isNight,
-      accent: widget.isNight ? AppTheme.nightSkyBlue : AppTheme.dawnBurgundy,
+      accent: widget.isNight ? AppTheme.darkAccent : AppTheme.lightPrimary,
     ),
   );
 
@@ -260,9 +259,7 @@ class _InternetRoomPageState extends State<InternetRoomPage>
   Widget build(BuildContext context) {
     final session = widget.session;
     final inviteCode = session.hostInviteCode;
-    final accent = widget.isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnBurgundy;
+    final accent = widget.isNight ? AppTheme.darkAccent : AppTheme.lightPrimary;
     final compactHeight = MediaQuery.sizeOf(context).height < 720;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final stateText = session.roomEnded
@@ -330,12 +327,6 @@ class _InternetRoomPageState extends State<InternetRoomPage>
               RoomSettingsButton(
                 listenable: session,
                 items: (sheetContext) => [
-                  if (!session.roomEnded)
-                    ListTile(
-                      title: const Text('麦克风降噪'),
-                      subtitle: const Text('只影响本机发出的语音'),
-                      trailing: NoiseReductionControl(isNight: widget.isNight),
-                    ),
                   if (!session.roomEnded && session.isHost)
                     ListTile(
                       title: const Text('成员离线／退出提示'),
@@ -558,17 +549,17 @@ class _InternetRoomPageState extends State<InternetRoomPage>
                         onTap: _leave,
                         bgColor:
                             (widget.isNight
-                                    ? AppTheme.darkLeaveRosePink
-                                    : AppTheme.lightLeaveAccent)
+                                    ? AppTheme.darkDanger
+                                    : AppTheme.lightDanger)
                                 .withValues(alpha: .15),
                         borderColor:
                             (widget.isNight
-                                    ? AppTheme.darkLeaveRosePink
-                                    : AppTheme.lightLeaveAccent)
+                                    ? AppTheme.darkDanger
+                                    : AppTheme.lightDanger)
                                 .withValues(alpha: .62),
                         textColor: widget.isNight
-                            ? AppTheme.darkLeaveRosePink
-                            : AppTheme.lightLeaveAccent,
+                            ? AppTheme.darkDanger
+                            : AppTheme.lightDanger,
                         compact: true,
                       ),
                     ],
@@ -992,13 +983,13 @@ class _InternetPttButton extends StatelessWidget {
                 ? Icons.mic_off_rounded
                 : Icons.touch_app_rounded,
             size: 48,
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onPrimary,
           ),
           const SizedBox(height: 10),
           Text(
             session.isPttPressed ? '正在说话' : '按住说话',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 17,
             ),

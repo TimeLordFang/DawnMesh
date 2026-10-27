@@ -100,11 +100,11 @@ class _PttButtonState extends State<PttButton>
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final activeColor = widget.isNight
-        ? AppTheme.nightSkyBlue
-        : AppTheme.dawnBurgundy;
+        ? AppTheme.darkAccent
+        : AppTheme.lightPrimary;
     final pressedColor = widget.isNight
-        ? const Color(0xFF5D85C2)
-        : const Color(0xFFBA5F68);
+        ? AppTheme.brandGold
+        : AppTheme.lightAccent;
 
     return Semantics(
       button: true,
@@ -145,7 +145,7 @@ class _PttButtonState extends State<PttButton>
                       Icon(
                         widget.isPressed ? Icons.mic : Icons.mic_none,
                         size: widget.size * 0.27,
-                        color: Colors.white,
+                        color: AppTheme.onAccent(widget.isNight),
                       ),
                       SizedBox(height: widget.size < 120 ? 6 : 10),
                       Padding(
@@ -158,7 +158,7 @@ class _PttButtonState extends State<PttButton>
                                 : s.pttHoldToTalk,
                             maxLines: 1,
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppTheme.onAccent(widget.isNight),
                               fontSize: (widget.size * 0.09).clamp(14.0, 19.0),
                               fontWeight: FontWeight.w600,
                               letterSpacing: widget.size < 120 ? .5 : 1.2,
