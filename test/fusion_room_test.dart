@@ -17,11 +17,14 @@ import 'package:flutter_test/flutter_test.dart';
 Future<void> _until(
   bool Function() done, {
   String detail = 'fusion state',
+  String Function()? diagnostics,
 }) async {
   final deadline = DateTime.now().add(const Duration(seconds: 8));
   while (!done()) {
     if (DateTime.now().isAfter(deadline)) {
-      throw TimeoutException(detail);
+      throw TimeoutException(
+        diagnostics == null ? detail : '$detail: ${diagnostics()}',
+      );
     }
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
@@ -77,7 +80,15 @@ Future<void> _joinLocal(_Node guest, _Node neighbor) async {
     true,
   );
   await guest.session.joinRoom(startAudio: false);
-  await _until(() => guest.session.state == RoomState.inRoom);
+  await _until(
+    () => guest.session.state == RoomState.inRoom,
+    detail: 'admission of ${guest.session.selfNickname}',
+    diagnostics: () => 'state=${guest.session.state}, '
+        'codec=${guest.session.secureCodec != null}, '
+        'members=${guest.session.members.length}, '
+        'neighborMembers=${neighbor.session.members.length}, '
+        'links=${guest.link.peerCount}, queued=${guest.link.queuedPackets}',
+  );
 }
 
 void main() {
@@ -200,10 +211,14 @@ void main() {
     }
     await _until(
       () => nodes.every((node) => node.session.members.length == 16),
+      detail: 'complete 16-member rosters',
+      diagnostics: () => '${nodes.map((node) => node.session.members.length).toList()}',
     );
     await host.link.synchronize();
     await _until(
       () => nodes.skip(1).every((node) => node.link.signedState?[9] == 16),
+      detail: 'complete signed fusion states',
+      diagnostics: () => '${nodes.skip(1).map((node) => node.link.signedState?[9]).toList()}',
     );
     final state = nodes.last.link.signedState!;
     expect(state.length, greaterThan(512));
@@ -215,6 +230,8 @@ void main() {
     await _until(
       () =>
           nodes.take(15).every((node) => node.audio.submittedFrames.isNotEmpty),
+      detail: 'voice fanout after all 16 members joined',
+      diagnostics: () => '${nodes.take(15).map((node) => node.audio.submittedFrames.length).toList()}',
     );
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(
