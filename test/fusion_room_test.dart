@@ -152,7 +152,8 @@ Future<void> _joinLocal(_Node guest, _Node neighbor) async {
         'codec=${guest.session.secureCodec != null}, '
         'members=${guest.session.members.length}, '
         'neighborMembers=${neighbor.session.members.length}, '
-        'links=${guest.link.peerCount}, queued=${guest.link.queuedPackets}',
+        'links=${guest.link.peerCount}, queued=${guest.link.queuedPackets}, '
+        'injectedLoss=${(neighbor.link as _AdmissionLossTransport).droppedAdmissions}',
   );
 }
 
@@ -258,7 +259,29 @@ void main() {
     expect(host.session.members.length, 1);
   });
 
-  test('16 fusion members recover admission loss with complete signed rosters and deduplicated voice', () async {
+  test(
+    'admission recovers on the final retry after five lost confirmations',
+    () async {
+      final room = await FusionIdentity.create('admission retries');
+      final invite = RoomInvite.parse('1234');
+      final host = await _node(
+        room,
+        invite,
+        1,
+        host: true,
+        loseAtMemberCount: 2,
+      );
+      final guest = await _node(room, invite, 2);
+      await _joinLocal(guest, host);
+      expect((host.link as _AdmissionLossTransport).droppedAdmissions, 5);
+      expect(host.session.members, hasLength(2));
+      expect(guest.session.selfMemberId, 2);
+      expect(guest.session.secureCodec!.authentication!.members, hasLength(2));
+    },
+    timeout: const Timeout(Duration(seconds: 40)),
+  );
+
+  test('16 fusion members receive complete signed long rosters and deduplicated voice', () async {
     final room = await FusionIdentity.create('16-person room');
     final invite = RoomInvite.parse('1234');
     final host = await _node(
@@ -267,20 +290,25 @@ void main() {
       1,
       host: true,
       nickname: '1${'声' * 20}',
-      loseAtMemberCount: 16,
     );
     final nodes = [host];
     for (var id = 2; id <= 16; id++) {
       final guest = await _node(room, invite, id, nickname: '$id${'声' * 20}');
       nodes.add(guest);
       await _joinLocal(guest, host);
+      // All simulated phones share one event loop. Await the current roster
+      // and certified keys before introducing another membership transition.
+      await _until(
+        () => nodes.every(
+          (node) =>
+              node.session.members.length == id &&
+              node.session.secureCodec?.authentication?.members.length == id,
+        ),
+        detail: 'membership convergence after admission $id',
+        diagnostics: () =>
+            '${nodes.map((node) => '${node.session.members.length}/${node.session.secureCodec?.authentication?.members.length}').toList()}',
+      );
     }
-    await _until(
-      () => nodes.every((node) => node.session.members.length == 16),
-      detail: 'complete 16-member rosters',
-      diagnostics: () =>
-          '${nodes.map((node) => node.session.members.length).toList()}',
-    );
     await host.link.synchronize();
     await _until(
       () => nodes.skip(1).every((node) => node.link.signedState?[9] == 16),
@@ -292,7 +320,6 @@ void main() {
     expect(state.length, greaterThan(512));
     expect(await nodes.last.link.identity!.verifyState(state), true);
     expect(host.session.members.last.memberId, 16);
-    expect((host.link as _AdmissionLossTransport).droppedAdmissions, 5);
     await nodes.last.session.startAudio();
     nodes.last.session.setPtt(true);
     nodes.last.audio.emitEncodedFrame(Uint8List.fromList([7, 8, 9]));
