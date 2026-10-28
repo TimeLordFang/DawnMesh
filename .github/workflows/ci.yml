@@ -80,7 +80,7 @@ jobs:
             python3 -m unittest discover -s test -p release_policy_test.py
             flutter pub get --enforce-lockfile
             flutter analyze
-            flutter test --concurrency=1
+            flutter test --concurrency=1 --reporter expanded
             ./android/gradlew -p android :app:testDebugUnitTest :app:lintDebug
             cmake -S native -B /tmp/dawnmesh-native-test -DCMAKE_BUILD_TYPE=Debug \
               -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
@@ -96,8 +96,13 @@ jobs:
             python3 - "$RUNNER_TEMP/dawnmesh-android-checks.log" <<'PYTHON'
           import pathlib, sys
           lines = pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()
+          failed = [i for i, line in enumerate(lines) if '[E]' in line]
+          context = []
+          for i in failed[:2]:
+              context.extend(line[:400] for line in lines[max(0, i - 2):i + 20])
           errors = [line[:400] for line in lines if any(word in line.lower() for word in ['error', 'failed', 'exception', 'unresolved'])]
-          message = '\n'.join(errors[:8] + errors[-4:] + lines[-8:])[:3800]
+          summary = context if context else errors[:8] + errors[-4:]
+          message = '\n'.join(summary + lines[-8:])[:3800]
           print('::error title=Android checks::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           PYTHON
           fi
