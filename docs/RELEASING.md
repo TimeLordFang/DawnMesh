@@ -27,7 +27,7 @@ Android 的本地和标签 CI 共用这个入口，覆盖依赖锁定、静态�
 正式标签必须指向成功候选的同一个提交，不能在候选通过后再修改代码或说明而直接打正式标签。例如：
 
 ```sh
-git tag -a v1.2.3 'v1.2.3-rc.2^{commit}' -m 'DawnMesh 1.2.3'
+git tag -a v1.2.3 'v1.2.3-rc.3^{commit}' -m 'DawnMesh 1.2.3'
 git push github v1.2.3
 ```
 

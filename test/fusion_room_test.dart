@@ -90,10 +90,11 @@ class _AdmissionLossTransport extends FusionTransport
 }
 
 class _Node {
-  _Node(this.session, this.link, this.audio);
+  _Node(this.session, this.link, this.audio, this.zone);
   final RoomSession session;
   final FusionTransport link;
   final MockAudioIo audio;
+  final Zone zone;
 }
 
 Future<_Node> _node(
@@ -105,35 +106,58 @@ Future<_Node> _node(
   DateTime Function()? now,
   String? nickname,
   int? loseAtMemberCount,
+  bool quietMaintenance = false,
 }) async {
-  final audio = MockAudioIo();
-  final proof = base64Encode(List.filled(32, installation));
-  final session = RoomSession(
-    audioIo: audio,
-    selfNickname: nickname ?? 'member$installation',
-    mode: RoomMode.fusion,
-    now: now,
-    sessionToken: FusionIdentity.memberToken(proof, room.roomId),
+  RoomSession? owner;
+  return runZoned<Future<_Node>>(
+    () async {
+      final audio = MockAudioIo();
+      final proof = base64Encode(List.filled(32, installation));
+      final session = RoomSession(
+        audioIo: audio,
+        selfNickname: nickname ?? 'member$installation',
+        mode: RoomMode.fusion,
+        now: now,
+        sessionToken: FusionIdentity.memberToken(proof, room.roomId),
+      );
+      owner = session;
+      final link = _AdmissionLossTransport(
+        owner: session,
+        loseAtMemberCount: loseAtMemberCount,
+        roomId: room.roomId,
+        roomName: room.name,
+        identity: host ? room : null,
+        profile: server,
+        localPort: 0,
+        advertise: false,
+      );
+      await session.protectWithInvite(
+        invite,
+        identity: await MemberIdentity.create(),
+      );
+      session.attachTransport(link, reconnect: link.reconnect);
+      addTearDown(session.dispose);
+      await link.start(session);
+      if (host) await session.createRoom(startAudio: false);
+      return _Node(session, link, audio, Zone.current);
+    },
+    zoneSpecification: quietMaintenance
+        ? ZoneSpecification(
+            createPeriodicTimer: (self, parent, zone, period, callback) =>
+                parent.createPeriodicTimer(zone, period, (timer) {
+                  // The capacity test shares one isolate across 16 simulated phones.
+                  // Keep join retries real, but drive admitted-room state explicitly.
+                  final maintenance =
+                      period == const Duration(seconds: 2) ||
+                      period == const Duration(seconds: 3);
+                  if (maintenance && owner?.state == RoomState.inRoom) {
+                    return;
+                  }
+                  callback(timer);
+                }),
+          )
+        : null,
   );
-  final link = _AdmissionLossTransport(
-    owner: session,
-    loseAtMemberCount: loseAtMemberCount,
-    roomId: room.roomId,
-    roomName: room.name,
-    identity: host ? room : null,
-    profile: server,
-    localPort: 0,
-    advertise: false,
-  );
-  await session.protectWithInvite(
-    invite,
-    identity: await MemberIdentity.create(),
-  );
-  session.attachTransport(link, reconnect: link.reconnect);
-  addTearDown(session.dispose);
-  await link.start(session);
-  if (host) await session.createRoom(startAudio: false);
-  return _Node(session, link, audio);
 }
 
 Future<void> _joinLocal(_Node guest, _Node neighbor) async {
@@ -141,7 +165,7 @@ Future<void> _joinLocal(_Node guest, _Node neighbor) async {
     await guest.link.connectLocal('127.0.0.1', port: neighbor.link.boundPort),
     true,
   );
-  await guest.session.joinRoom(startAudio: false);
+  await guest.zone.run(() => guest.session.joinRoom(startAudio: false));
   await _until(
     () => guest.session.state == RoomState.inRoom,
     // Five two-second heartbeat retries must fit even on a busy CI runner.
@@ -290,10 +314,17 @@ void main() {
       1,
       host: true,
       nickname: '1${'声' * 20}',
+      quietMaintenance: true,
     );
     final nodes = [host];
     for (var id = 2; id <= 16; id++) {
-      final guest = await _node(room, invite, id, nickname: '$id${'声' * 20}');
+      final guest = await _node(
+        room,
+        invite,
+        id,
+        nickname: '$id${'声' * 20}',
+        quietMaintenance: true,
+      );
       nodes.add(guest);
       await _joinLocal(guest, host);
       // All simulated phones share one event loop. Await the current roster
@@ -371,7 +402,7 @@ void main() {
       );
     }
     nodes.last.session.setPtt(false);
-    final extra = await _node(room, invite, 17);
+    final extra = await _node(room, invite, 17, quietMaintenance: true);
     await extra.link.connectLocal('127.0.0.1', port: host.link.boundPort);
     await extra.session.joinRoom(startAudio: false);
     await Future<void>.delayed(const Duration(milliseconds: 200));
