@@ -2,13 +2,13 @@
 
 更新日期：2026-10-28。当前候选为 **1.2.4+65**，最近正式版本为 **1.2.3+64**。本页保留本轮候选与最近正式版的验证结果和复核入口；历史测试数字、临时排查记录及旧环境结论通过对应 Git 标签和正式版发布说明追溯。
 
-## 1.2.4-rc.1 / 构建 65
+## 1.2.4-rc.2 / 构建 65
 
 候选包含统一弹窗按钮、邀请码滚动和文档合并，未修改传输或加密协议。前置 UI 专项 Android 42 项、iOS 47 项通过，两端静态检查通过；包括 iOS 键盘出现后的三类建房流程。
 
 本轮完整本地预检通过：Android 383 项、iOS 402 项 Flutter 回归，均包含真实本机 Go 中继；iOS 独立建房 3 项也通过。两端静态与原生检查、Android JVM/Lint 和签名 APK/AAB、iOS 普通与 Wi-Fi Aware 变体构建通过。包内版本核对为 `1.2.4 / 65`。
 
-候选云端结果以 [Android 标签任务](https://github.com/TimeLordFang/DawnMesh/actions?query=branch%3Av1.2.4-rc.1)、[iOS 标签任务](https://github.com/TimeLordFang/DawnMeshIOS/actions?query=branch%3Av1.2.4-rc.1) 和各自 Release 附件为准，不沿用下方 1.2.3 的成功结果。
+候选云端结果以 [Android 标签任务](https://github.com/TimeLordFang/DawnMesh/actions?query=branch%3Av1.2.4-rc.2)、[iOS 标签任务](https://github.com/TimeLordFang/DawnMeshIOS/actions?query=branch%3Av1.2.4-rc.2) 和各自 Release 附件为准，不沿用下方 1.2.3 的成功结果。
 
 ## 最近正式发布：1.2.3
 

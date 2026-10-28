@@ -1,6 +1,6 @@
 # 发布：本地预检、候选与正式晋级
 
-当前目标应用版本为 **1.2.4+65**，本轮候选为 **v1.2.4-rc.1**。同一目标内修复使用 `rc.2`、`rc.3` 等轮次，不通过连续增加补丁版本来排查 CI；已发布正式标签和附件不覆盖。
+当前目标应用版本为 **1.2.4+65**，本轮候选为 **v1.2.4-rc.2**。同一目标内修复使用 `rc.2`、`rc.3` 等轮次，不通过连续增加补丁版本来排查 CI；已发布正式标签和附件不覆盖。
 
 ## 本地预检
 
@@ -38,9 +38,9 @@ Play 首次上架、应用签名与上传密钥见 [Google Play](GOOGLE_PLAY.md)
 3. 推送主分支与未占用的候选标签。当前示例：
 
 ```sh
-git tag -a v1.2.4-rc.1 -m 'DawnMesh 1.2.4 build 65 candidate 1'
-git push github main v1.2.4-rc.1
-git push origin main v1.2.4-rc.1
+git tag -a v1.2.4-rc.2 -m 'DawnMesh 1.2.4 build 65 candidate 2'
+git push github main v1.2.4-rc.2
+git push origin main v1.2.4-rc.2
 ```
 
 Android GitHub 远程名为 `github`，另同步自建镜像 `origin`；iOS 的 GitHub 远程名为 `origin`。CI 将候选设为 Prerelease、非 Latest。应用内版本保持数字格式，不把 `-rc.N` 写进 iOS 版本字段。若上传 Play/TestFlight，构建号还需满足平台递增规则并同步两端。
@@ -50,7 +50,7 @@ Android GitHub 远程名为 `github`，另同步自建镜像 `origin`；iOS 的 
 两端候选任务成功、附件与校验值齐全并完成相应验收后，正式标签必须指向该候选的同一个提交。源码或说明再有改变，就先验证新的候选。
 
 ```sh
-git tag -a v1.2.4 'v1.2.4-rc.1^{commit}' -m 'DawnMesh 1.2.4'
+git tag -a v1.2.4 'v1.2.4-rc.2^{commit}' -m 'DawnMesh 1.2.4'
 git push github v1.2.4
 git push origin v1.2.4
 ```
