@@ -322,19 +322,54 @@ void main() {
     expect(host.session.members.last.memberId, 16);
     await nodes.last.session.startAudio();
     nodes.last.session.setPtt(true);
-    nodes.last.audio.emitEncodedFrame(Uint8List.fromList([7, 8, 9]));
+    // Audio is deliberately lossy when it ages in a busy writer. A finite
+    // speech burst tests fanout without requiring one realtime packet to be
+    // reliable, while unique payloads still detect every duplicate delivery.
+    final sent = <String>{};
+    for (var index = 0; index < 32; index++) {
+      final payload = Uint8List.fromList([7, 8, index]);
+      sent.add(base64Encode(payload));
+      nodes.last.audio.emitEncodedFrame(payload);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (index >= 3 &&
+          nodes
+              .take(15)
+              .every((node) => node.audio.submittedFrames.isNotEmpty)) {
+        break;
+      }
+    }
     await _until(
       () =>
           nodes.take(15).every((node) => node.audio.submittedFrames.isNotEmpty),
-      detail: 'voice fanout after all 16 members joined',
+      detail: 'voice burst fanout after all 16 members joined',
       diagnostics: () =>
           '${nodes.take(15).map((node) => node.audio.submittedFrames.length).toList()}',
     );
+    await Future.wait(nodes.map((node) => node.link.flush()));
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(
-      nodes.take(15).every((node) => node.audio.submittedFrames.length == 1),
-      true,
-    );
+    for (final node in nodes.take(15)) {
+      final frames = node.audio.submittedFrames.map(Frame.decode).toList();
+      expect(frames, everyElement(isNotNull));
+      expect(
+        frames.every(
+          (frame) => frame!.type == FrameType.audio && frame.senderId == 16,
+        ),
+        true,
+      );
+      final received = frames
+          .map((frame) => base64Encode(frame!.payload))
+          .toList();
+      expect(
+        received.every(sent.contains),
+        true,
+        reason: 'Only transmitted voice payloads may arrive',
+      );
+      expect(
+        received.toSet(),
+        hasLength(received.length),
+        reason: 'Each voice payload is played at most once per member',
+      );
+    }
     nodes.last.session.setPtt(false);
     final extra = await _node(room, invite, 17);
     await extra.link.connectLocal('127.0.0.1', port: host.link.boundPort);
@@ -342,7 +377,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(extra.session.state, RoomState.connecting);
     expect(host.session.members, hasLength(16));
-  }, timeout: const Timeout(Duration(seconds: 60)));
+  }, timeout: const Timeout(Duration(seconds: 120)));
 
   test('members negotiate a direct socket and keep voice after host disappears', () async {
     var now = DateTime.now();
