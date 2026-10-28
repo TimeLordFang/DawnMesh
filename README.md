@@ -35,6 +35,12 @@ DawnMesh（曙光之声）是一款面向附近同伴与远程小组的语音对
 
 Android Wi-Fi Direct 与苹果点对点 Wi-Fi 是不同无线协议，不能直接互联；跨平台本地通信可使用共同 Wi-Fi/热点或支持的蓝牙路径。设备无线容量、耳机共存和锁屏表现需真机验收，协议人数上限不代表硬件保证。
 
+## 已知问题
+
+**蓝牙房与蓝牙耳机同时使用时，通信可能出现严重断续。** 当前测试中，不连接蓝牙耳机时，蓝牙房可以正常通信。这是当前测试观察，不代表所有手机、耳机和系统组合的表现。
+
+遇到断续时，可先断开蓝牙耳机并使用手机音频进行对比测试，记录手机、耳机型号和系统版本。该问题属于手机端蓝牙房使用场景，不能据此判断公网服务端异常。
+
 ## 下载与构建
 
 [Android Releases](https://github.com/TimeLordFang/DawnMesh/releases) 提供签名 APK、Play AAB 与 SHA-256；稳定版见 [Latest](https://github.com/TimeLordFang/DawnMesh/releases/latest)，候选包在 Prerelease 中。AAB 供 Play 分发，不能直接点击安装。
