@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/security/room_invite.dart';
 import 'room_invite_code_field.dart';
+import 'dialog_action_button.dart';
 
 Future<RoomInvite?> requestRoomInvite(
   BuildContext context, {
@@ -40,23 +41,25 @@ class _InviteDialogState extends State<_InviteDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.creating ? '设置房间邀请码' : '输入房间邀请码'),
-    content: RoomInviteCodeField(
-      fieldKey: const ValueKey('room-invite-input'),
-      controller: controller,
-      creating: widget.creating,
-      autofocus: true,
-      errorText: error,
-      onSubmitted: (_) => submit(),
-      onRandomized: () => setState(() => error = null),
+    content: SingleChildScrollView(
+      child: RoomInviteCodeField(
+        fieldKey: const ValueKey('room-invite-input'),
+        controller: controller,
+        creating: widget.creating,
+        autofocus: true,
+        errorText: error,
+        onSubmitted: (_) => submit(),
+        onRandomized: () => setState(() => error = null),
+      ),
     ),
     actions: [
-      TextButton(
+      DialogActionButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('取消'),
       ),
-      TextButton(
+      DialogActionButton.primary(
         onPressed: submit,
-        child: Text(widget.creating ? '创建房间' : '验证并加入'),
+        child: Text(widget.creating ? '创建' : '验证并加入'),
       ),
     ],
   );

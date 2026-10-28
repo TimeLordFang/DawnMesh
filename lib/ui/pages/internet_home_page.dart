@@ -15,6 +15,7 @@ import '../widgets/room_invite_dialog.dart';
 import '../widgets/server_profile_picker.dart';
 import 'internet_room_page.dart';
 import 'settings_page.dart';
+import '../widgets/dialog_action_button.dart';
 
 class InternetHomePage extends StatefulWidget {
   const InternetHomePage({
@@ -688,18 +689,18 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
               padding: const EdgeInsets.only(top: 10),
               child: Text(
                 _error!,
-                style: const TextStyle(color: Colors.redAccent),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
         ],
       ),
     ),
     actions: [
-      TextButton(
+      DialogActionButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('取消'),
       ),
-      FilledButton(onPressed: _submit, child: const Text('创建')),
+      DialogActionButton.primary(onPressed: _submit, child: const Text('创建')),
     ],
   );
 }

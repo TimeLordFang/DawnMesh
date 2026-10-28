@@ -4,6 +4,7 @@ import '../../core/internet/internet_models.dart';
 import '../../core/internet/server_profile_store.dart';
 import '../../l10n/app_strings.dart';
 import '../widgets/server_profile_dialog.dart';
+import '../widgets/dialog_action_button.dart';
 
 class ServerSettingsPage extends StatefulWidget {
   const ServerSettingsPage({super.key, this.lockedServerId});
@@ -96,11 +97,11 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
             ),
           ),
           actions: [
-            TextButton(
+            DialogActionButton(
               onPressed: () => Navigator.pop(context, false),
               child: Text(tr('取消', 'Cancel')),
             ),
-            FilledButton(
+            DialogActionButton.destructive(
               onPressed: () => Navigator.pop(context, true),
               child: Text(tr('删除', 'Remove')),
             ),

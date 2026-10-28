@@ -1,6 +1,6 @@
 # Google Play 发布与 AAB 构建
 
-构建记录更新日期：2026-10-28。项目包名 `dev.dawnmesh.intercom`，当前目标版本 `1.2.3+64`。
+构建记录更新日期：2026-10-28。项目包名 `dev.dawnmesh.intercom`，当前目标版本 `1.2.4+65`。
 
 正式上架版本先按 [本地预检与候选发布](RELEASING.md) 验证，再创建正式标签；不通过连续递增版本解决 CI 问题。
 
@@ -19,13 +19,12 @@
 
 产物通常为 `build/app/outputs/bundle/release/app-release.aab`，以构建末尾打印的路径为准。AAB 是上传给 Play 的发布包，不可像 APK 一样直接安装；通过 Play 内部测试或 bundletool 生成设备 APK 进行安装验证。
 
-后续更新必须使用大于 Play 已上传版本的 `versionCode`。在 `pubspec.yaml` 中修改 `version: 版本名+构建号`，例如后续 `1.2.3+64`；若 Play 已使用对应构建号，则继续递增。仅重新上传设计候选不需要改应用版本；将选定图标接入应用后需重新打包。
+后续更新必须使用大于 Play 已上传版本的 `versionCode`。在 `pubspec.yaml` 中修改 `version: 版本名+构建号`，本轮为 `1.2.4+65`；若 Play 已使用该构建号，按平台规则递增并同步两端。
 
 签名检查：
 
 ```sh
-.tools/jdk/Contents/Home/bin/jarsigner -verify \
-  build/app/outputs/bundle/release/app-release.aab
+bash -c 'source scripts/toolchain.sh; jarsigner -verify build/app/outputs/bundle/release/app-release.aab'
 ```
 
 AAB 使用 JAR 签名校验；`apksigner` 用于 APK。自签名证书的信任链提示不等于签名数据校验失败。
@@ -52,41 +51,11 @@ AAB 使用 JAR 签名校验；`apksigner` 用于 APK。自签名证书的信任�
 
 GitHub Actions 的发布工作流现同时构建签名 APK 与 AAB，并发布校验文件；不会自动上传 Google Play。商店图标使用 `assets/branding/google-play-icon.png`。离线转交为新增可选持久化能力，填写隐私与数据安全时应一并说明其密文托管和元数据边界。
 
-## 1.2.2 本地构建记录（2026-10-27）
+## 验证与验收
 
-- AAB：90,018,317 字节；SHA-256 `bb648964c06c5a0628d25587d1bcd61c0a697f21f5f0e6ebc43f462b0b11f758`。
-- APK：108,991,479 字节；SHA-256 `7ff330546e1a9742b9bc3cdd1599c172d54fe8780326946779340a94b6177666`。
-- 包内版本为 1.2.2 / 63；签名、16 KiB ZIP/ELF 对齐、官方 bundletool 结构及 115 个 JAR 签名载荷验证通过。
-- 本地统一产物位于 `artifacts/releases/1.2.2/`；下载 GitHub Release 时使用该次重构建的随包校验文件。
-- 尚未上传 Google Play、没有执行手机安装；按控制台步骤和 [五机验收](MANUAL_ACCEPTANCE.md) 操作。
+每次新包都需核对版本、签名、归档完整性及 16 KiB 对齐，记录统一见 [验证基线](VALIDATION.md)。下载使用对应 Release 随包 SHA-256，不沿用旧版本或其他重构建产物的哈希。
 
-## 1.2.1 本地构建记录（2026-10-27）
-
-- AAB：90,006,481 字节；SHA-256 `5feeec657d9451171f2434e42cd682730cd718197a24c9c12244c550c769f9fb`。
-- APK：108,991,479 字节；SHA-256 `e6154a8723b32aaa8c1bde07e37177c2e4e95073f209bc86f074ab8cd837b8ba`。
-- 当前包内版本为 1.2.1 / 62，签名、16 KiB ZIP/ELF 对齐、官方 bundletool 结构及 JAR 115 个签名载荷验证通过。
-- 本地文件位于 `artifacts/releases/1.2.1/`；GitHub 会从标签重构建，下载 Release 时采用随包校验文件。
-- 尚未上传 Google Play，也未进行手机安装；按上方控制台步骤和 [五机验收](MANUAL_ACCEPTANCE.md) 操作。
-
-## 1.2.0 本地构建记录（2026-10-27）
-
-- AAB：89,977,165 字节；SHA-256 `058afcf6c6e627c36d41df2b28ff180339714076092211181bcbf6982d43b0d8`。
-- APK：108,958,711 字节；SHA-256 `4b7541f73dfa98c9e8f41bfdefe89ce80abab2aa19cdb80659aadc6e4c7aa255`。
-- APK 包信息确认为 `dev.dawnmesh.intercom`、1.2.0 / 61、min API 26、target API 37；APK v2 签名与 ZIP/ELF 16 KiB 检查通过。
-- AAB 经官方 bundletool 1.18.3 验证；JarFile 逐项验证 115 个签名载荷，ZIP CRC 和 64 位 ELF 对齐通过。jarsigner 的自签名、时间戳和流式读取告警保留说明于 [验证记录](VALIDATION.md)。
-- 本地统一产物位于 `artifacts/releases/1.2.0/`。GitHub Actions 会从标签重新构建，Release 下载应采用该次发布随包的 SHA-256；不把本地哈希当作所有重构建产物的固定值。
-- 尚未上传 Play 或执行真机安装，按 [五机验收](MANUAL_ACCEPTANCE.md) 操作。
-
-## 历史构建记录（1.1.9，2026-10-26）
-
-- 构建命令：`./scripts/flutter.sh build appbundle --release --no-pub`，使用现有依赖缓存及现有 release 签名配置。
-- 产物：`build/app/outputs/bundle/release/app-release.aab`，87,044,430 字节。
-- SHA-256：`1fcb37367298036aecdbf534c3025b1b5c16dd217d94ca3a62b75600ef0ed03a`。
-- `jarsigner -verify` 返回成功；同时提示自签名证书、无时间戳，以及 ZIP 中签名清单位置导致的 JarInputStream 流式读取提示。不要将其描述为无警告的校验。
-- 另外使用 Java `JarFile` 验证全部载荷内容：117 个载荷条目均有签名，未签名载荷为 0。
-- ZIP CRC 检查通过；包内 12 个 64 位 `.so` 的所有 PT_LOAD 段对齐均至少 16,384 字节。
-- 尚未上传 Play，未执行 Play 生成 APK 的 ZIP 对齐验证或 16 KB 设备运行测试；本次未修改应用逻辑，未重跑完整功能测试。
-- 上述旧产物使用原图标；1.2.0 已选用第一个“曙光声波”方案，新产物记录见 [1.2.0 发布说明](RELEASE_1.2.0.md)。
+Play 内部测试、分发后的 APK 对齐和设备运行仍需通过控制台与 [真机验收](MANUAL_ACCEPTANCE.md) 完成；具体上架要求以官方当前规则为准。
 
 ## 官方资料
 

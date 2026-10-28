@@ -37,11 +37,11 @@ void main() {
         matches(r'^\d{4}$'),
       );
       await tester.enterText(input, '123');
-      await tester.tap(find.text('创建房间'));
+      await tester.tap(find.text('创建'));
       await tester.pump();
       expect(find.byType(AlertDialog), findsOneWidget);
       await tester.enterText(input, code);
-      await tester.tap(find.text('创建房间'));
+      await tester.tap(find.text('创建'));
       await tester.pumpAndSettle();
       expect(chosen?.code, code);
     }

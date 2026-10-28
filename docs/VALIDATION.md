@@ -1,97 +1,49 @@
-# 验证基线与设备验收
+# 当前验证基线与设备验收
 
-整理日期：2026-10-28。各小节仅对应所标版本；自动化验证与真机验收分别记录。
+更新日期：2026-10-28。当前候选为 **1.2.4+65**，最近正式版本为 **1.2.3+64**。本页保留本轮候选与最近正式版的验证结果和复核入口；历史测试数字、临时排查记录及旧环境结论通过对应 Git 标签和正式版发布说明追溯。
 
-## 1.2.3 / 构建 64（2026-10-28）
+## 1.2.4-rc.1 / 构建 65
 
-- 发布准备前，Android `02d333b` 与 iOS `11c5e71` 的 GitHub Actions 均成功，包含完整测试、原生检查及平台构建。对应 [Android 运行](https://github.com/TimeLordFang/DawnMesh/actions/runs/40617582638) 与 [iOS 运行](https://github.com/TimeLordFang/DawnMeshIOS/actions/runs/40617316553)。
-- 两端版本统一至 `1.2.3+64` 后，本地 Android 383 项、iOS 402 项 Flutter 全量回归通过，均启用真实本机 Go 中继，无跳过；iOS 独立入房专项 3 项也通过，两端静态检查无问题。
-- Android 发布预检覆盖原生 ASan/UBSan、JVM 与 Lint、签名 APK/AAB 及 16 KiB ZIP/ELF 对齐。包内版本核对为 `1.2.3 / 64`，两个归档 CRC 通过。
-- iOS 原生 C++、Swift 与苹果点对点 TCP 回归通过；普通版和 Wi-Fi Aware 版设备目标构建均通过，包内版本均为 `1.2.3 / 64`，Aware 开关分别为 `NO` 与 `YES`。
-- 融合回归独立验证确认丢包后的最后一次重试，以及满员名单/密钥逐步收敛。实时语音用有限连续帧检查可达性、来源、内容和逐帧去重，保留既有的过期音频丢弃策略。
-- 满员容量用例只隔离已入房会话的周期维护，显式驱动名单和签名状态同步；连接中的重试仍按真实定时器运行。正常心跳、重连与成员直连另由独立用例覆盖，避免将 16 台设备的维护开销集中到一个测试事件循环后误判超时。生产定时器与队列不变。
-- 在临时源码副本中为每次成员签名验证增加 5ms，复现原满员夹具的入房超时；隔离周期维护后的夹具在相同开销下通过。耗时注入和副本不进入正式源码或发布包。
-- 发布按候选标签验证后再提升相同提交为正式 `v1.2.3`。标签任务会再次构建和校验；下载时以对应 Release 的附件及随包 SHA-256 为准，不混用其他构建的校验值。
-- iOS 发布附件未签名。射频互通、设备配对、功耗与锁屏仍按 [手动清单](MANUAL_ACCEPTANCE.md) 验收，自动化结果不替代真机结果。
+候选包含统一弹窗按钮、邀请码滚动和文档合并，未修改传输或加密协议。前置 UI 专项 Android 42 项、iOS 47 项通过，两端静态检查通过；包括 iOS 键盘出现后的三类建房流程。
 
-## 1.2.2 / 构建 63（2026-10-27）
+本轮完整本地预检通过：Android 383 项、iOS 402 项 Flutter 回归，均包含真实本机 Go 中继；iOS 独立建房 3 项也通过。两端静态与原生检查、Android JVM/Lint 和签名 APK/AAB、iOS 普通与 Wi-Fi Aware 变体构建通过。包内版本核对为 `1.2.4 / 65`。
 
-- Android 361 项、iOS 380 项 Flutter 全量回归通过，均启用真实本机 Go 中继，无跳过；两端静态检查无问题。
-- 新增 9 项回归：四阶段 PAKE 丢包、认证后入房请求/确认丢失、完成握手重放、补发上限/新传输编号、换钥后缓存失效。最初五个丢包/重放用例在旧实现稳定失败；修复后的认证专项 21 项通过。原有猜测限流仍约束唯一挑战，重复请求只返回同一缓存挑战。
-- 本地最终 Android 签名 APK/AAB 和 iOS Release 均编译通过，包内版本 1.2.2 / 63。APK v2 签名、ZIP 16 KiB 对齐、APK/AAB 全部 64 位 ELF 对齐、官方 bundletool AAB 验证、JAR 115 个签名载荷及三个归档 CRC 检查通过。
-- 本补丁仅改 Dart 认证/入房恢复与发布资料；原生源码未改。原生验证基线见 1.2.0，正式标签另执行自动检查。不同重构建采用各自随包校验文件。
-- iOS 产物未签名；射频、设备配对、功耗及锁屏仍按 [五机验收](MANUAL_ACCEPTANCE.md) 手动确认，没有真机已通过声明。
+候选云端结果以 [Android 标签任务](https://github.com/TimeLordFang/DawnMesh/actions?query=branch%3Av1.2.4-rc.1)、[iOS 标签任务](https://github.com/TimeLordFang/DawnMeshIOS/actions?query=branch%3Av1.2.4-rc.1) 和各自 Release 附件为准，不沿用下方 1.2.3 的成功结果。
 
-## 1.2.1 / 构建 62（2026-10-27）
+## 最近正式发布：1.2.3
 
-- Android 352 项、iOS 371 项 Flutter 全量回归通过；两端均使用真实本机 Go 中继，无跳过。两端静态检查无问题。
-- 新增 6 项回归覆盖并发握手、超过 4 秒的忙碌对端、退出取消、超时释放，以及加解密队列对网络事件的公平调度和顺序。旧实现在这 6 项均失败，修复后通过。
-- 云端隔离分支连续 5 轮融合房测试通过，并完成原生检查与 iOS 编译：[验证运行](https://github.com/TimeLordFang/DawnMeshIOS/actions/runs/40473113690)。修复未通过放宽断言或自动重跑掩盖错误。
-- 两端最终 Release 编译通过，包内版本为 1.2.1 / 62。Android APK v2 签名、ZIP 16 KiB 对齐、APK/AAB 全部 64 位 ELF 对齐、官方 bundletool AAB 验证、115 个 JAR 签名载荷及三个归档 CRC 检查通过。
-- 本补丁仅改 Dart 连接/调度与版本资料；Android JVM、Lint 和原生音频验证沿用下方 1.2.0 对应的未变原生源码结果。iOS 云端再次运行了原生检查。
-- iOS 仍为未签名 App；五台手机的射频、跨平台配对和锁屏验收由用户按 [清单](MANUAL_ACCEPTANCE.md) 执行，没有真机通过声明。构建包哈希以对应本地文件或 Release 随包校验文件为准。
+| 平台 | 发布提交 | 正式任务 | 附件 |
+| --- | --- | --- | --- |
+| Android | `edae629` | [Actions 成功](https://github.com/TimeLordFang/DawnMesh/actions/runs/40641000790) | [签名 APK、AAB 与 SHA-256](https://github.com/TimeLordFang/DawnMesh/releases/tag/v1.2.3) |
+| iOS | `01bdb84` | [Actions 成功](https://github.com/TimeLordFang/DawnMeshIOS/actions/runs/40641006240) | [普通版、Wi-Fi Aware 版未签名 App ZIP 与 SHA-256](https://github.com/TimeLordFang/DawnMeshIOS/releases/tag/v1.2.3) |
 
-## 1.2.0 / 构建 61（2026-10-27）
+两端 main 和 `v1.2.3-rc.3` 共四个校验任务成功后，提升相同提交为正式 `v1.2.3`；正式标签任务也已成功。下载后的四个正式包均核对为版本 `1.2.3`、构建号 `64`，SHA-256 与随包文件一致，ZIP CRC 通过。
 
-- Android：346 项 Flutter 回归全部通过；iOS：365 项全部通过。两端均配置本机真实 Go 中继，覆盖认证停滞备用入口、双网关去重、退出换钥和剩余上行，没有跳过该项。
-- 最后针对文字备用设备过滤实时音频/留言占位，补充步骤在 Android 12 项、iOS 6 项专项测试中通过。
-- 两端 Flutter 静态检查无问题。Android 应用 JVM 49 项通过，应用 Lint 通过（3 项工具版本/兼容图标资源告警，无错误）。
-- 共享原生音频 C++ ASan/UBSan 2 项通过；iOS 原生 3 项、Opus/RNNoise 互操作、Pod 补丁幂等、Swift 190 项协议检查、512 KiB 双向 TCP 代理及断链检查通过。
-- Android 签名 APK 与 AAB 均生成，包内版本 1.2.0 / 61。APK v2 签名、ZIP 16 KiB 对齐、ZIP CRC 与全部 64 位 ELF PT_LOAD 至少 16 KiB 对齐通过；AAB 结构经校验过官方 SHA-256 的 bundletool 1.18.3 验证，通过 CRC、ELF 对齐与 JarFile 115 个载荷逐项签名校验。
-- AAB jarsigner 通过并提示自签名证书、无时间戳及 JarInputStream 读取方式告警；不能描述为无警告验证。JDK 27 对部分验证工具另有弃用 API 提示。
-- iOS Release 设备目标编译通过，Info.plist 确认 1.2.0 / 61；新系统框架为弱链接，旧系统使用能力分支。产物未做发行签名，不能直接安装。
-- 新增手动验收开关、五机步骤和明确的不支持回退。没有连接真实手机，射频、配对互通、功耗和锁屏稳定性仍由 [手动验收](MANUAL_ACCEPTANCE.md) 记录，不能从编译/回环推断通过。
+- Android APK 签名与本地发布证书一致；AAB 的 117 个载荷逐项签名校验通过。APK ZIP 16 KiB 对齐及 APK/AAB 的 64 位 ELF 对齐检查通过。
+- iOS 两种包的 Wi-Fi Aware 开关分别为 `NO` 和 `YES`，无内嵌签名描述文件。未签名 App ZIP 需要适当签名后才能安装。
+- 本地只保留一份对应平台的正式包及校验文件，位于 `artifacts/releases/1.2.3/`。不同构建的二进制哈希可能不同，应使用同一 Release 随包提供的校验文件。
 
-此段为本地构建与测试记录。GitHub Actions 会从发布标签重新构建，下载时使用同一 Release 随包提供的校验文件；不同构建不承诺二进制哈希相同。
+## 自动化覆盖
 
-## 正式版验证摘要
+- 本地 Android 383 项、iOS 402 项 Flutter 全量回归通过，均配置真实本机 Go 中继且无跳过；iOS 独立建房专项 3 项通过，两端静态检查通过。
+- Android 原生 ASan/UBSan、JVM 与 Lint、签名 APK/AAB 发布预检通过；iOS 原生 C++、Swift、插件补丁及苹果点对点 TCP 回归通过，普通版与 Wi-Fi Aware 版设备目标构建通过。
+- 融合回归覆盖确认丢失后的有界入房重试、16 人完整名单与密钥收敛、成员签名、语音可达性与去重，以及第 17 人拒绝。
+- 16 人容量夹具显式驱动已入房会话的同步，避免把 16 台设备的周期维护集中到一个测试事件循环；连接重试仍使用真实计时器，心跳和重连由独立用例覆盖。该夹具不代表完成了 16 台真机同时通话验收。
 
-| Android 版本 | 已记录的验证 | 对应说明 |
-| --- | --- | --- |
-| 1.1.7 | Android Flutter 304 项，JVM 45 项、Lint、静态分析与 Release 构建通过；iOS Flutter 323 项。两端各 1 项真实中继测试按配置跳过 | [同网双向发现](RELEASE_1.1.7.md) |
-| 1.1.6 | Android Flutter 298 项、iOS 317 项；JVM 41 项/Swift 190 项沿用未改动原生部分的前版结果；两端各 1 项中继测试跳过 | [异步 UDP 错误](RELEASE_1.1.6.md) |
-| 1.1.5 | Android Flutter 297 项、JVM 41 项、Lint；iOS Flutter 316 项、Swift 190 项；两端各 1 项中继测试跳过；Release 构建通过 | [蓝牙完整房名](RELEASE_1.1.5.md) |
-| 1.1.4 | Android Flutter 295 项、JVM 39 项、Lint；iOS Flutter 302 项含真实 Go 中继、Swift 186 项和 TCP 回环；两端 Release 构建通过 | [移动端互通](RELEASE_1.1.4.md) |
-| 1.1.3 | Android Flutter 295 项、JVM 37 项、应用 Lint 零问题、原生 sanitizer、Debug APK 与 ELF 对齐 | [构建与资源治理](RELEASE_1.1.3.md) |
-| 1.1.2 | Android 295 项 Dart（含真实 Go 中继）、JVM 37 项、Lint、原生 sanitizer 与 Debug 构建 | [重连安全与生命周期](RELEASE_1.1.2.md) |
-| 1.1.1 | Flutter 295 项（默认跳过 1 项真实中继）、JVM 35 项、Lint、原生 sanitizer、跨端 Opus 与 Debug 构建 | [依赖与工具链明细](RELEASE_1.1.1.md) |
-
-各行属于各版本的历史结果，不能相加或当成当前代码刚刚通过的测试数。1.0.x 的验证与升级条件保留在相应 [正式版说明](README.md#正式版发布说明)。
-
-## 1.1.0 / Server 0.3.0 基线（2026-10-08）
-
-- Wi-Fi/融合房原 6 人限制来自应用的成员号、连接数、名单及签名校验；现统一支持 16 人（含房主）。蓝牙房保持 6 人。通过真实回环套接字验证 16 人加密入房、长昵称完整名单、语音转发/去重、满房身份恢复和 17 人拒绝。
-- 296 项 Flutter 全量回归通过，无跳过，包含与本机 Go 服务端的实际跨端用例。全量 Dart 静态分析通过；原生协议/环形缓冲 ASan/UBSan 检查通过。
-- Android 35 项单元测试及 Release Lint 通过。签名 APK 版本 1.1.0 / 51，签名、ZIP 16 KB 和全部 64 位 ELF 16 KB 对齐通过。SHA-256：`eea05193a4fd7979ca221f6bec0dd26bf7498d945fdd24bb03ebfbd0ae365bfa`。
-- Server 0.3.0：全量 Go 竞态测试、vet、go mod tidy 一致性检查通过；TypeScript/Vite 构建、4 项网页单测、加密向量及 17 项 Chrome 浏览器回归通过，Linux amd64/arm64 编译通过。
-- 新增分片乱序组装、重复/冲突/过期/非法消息拒绝、16 人交接长载荷及成员环路单点失联连通性测试。服务端验证 16 人最大签名状态、17 人拒绝及 16 条真实中继连接。
-- 审阅并统一容量常量、UTF-8 编码和房主命令检查，拒绝半份名单；减少全互连重复转发，调整限流和去重预算。没有提高单帧 512 字节上限，也未改动蓝牙驱动容量。
-- 实际 Wi-Fi Direct 群组容量受系统/驱动限制；未进行 16 台不同品牌手机的射频、同时讲话、系统休眠及道路测试。更新全体客户端和服务端后，仍需真机验收这些设备能力。
-- 保留 SDK/Gradle/npm/Go 依赖缓存；发布仅推送 GitHub 主分支与正式标签，不追踪 Actions、不自动部署服务器。
-
+未配置 `DAWNMESH_FUSION_TEST_URL` 时，真实 Go 中继集成项按测试条件跳过；不能把该情况下的测试成功记作中继验收。多个移动仓库的网络回归应串行执行，避免固定端口冲突。
 
 ## 本地复核入口
 
-在仓库根目录执行：
+在对应仓库根目录执行；真实中继测试需先启动测试服务并设置上述环境变量。
 
 ```sh
-./scripts/check.sh
-./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
+./scripts/preflight-release.sh
 ```
 
-`check.sh` 执行依赖解析、Dart 静态检查、串行 Flutter 测试及可用时的原生 sanitizer。真实 Go 中继集成需要按测试配置提供 `DAWNMESH_FUSION_TEST_URL`；未提供时会跳过，不能记为已验收。多个移动端仓库的网络回归应串行运行，避免固定端口冲突。
+Android 签名与打包见 [发布流程](RELEASING.md) 和 [Google Play 准备](GOOGLE_PLAY.md)。
 
-签名、ZIP/ELF 16 KiB 对齐与产物版本按 [发布工作流](../.github/workflows/release.yml) 检查；历史通过的 APK 不替代新产物校验。
+## 尚需真机验收
 
-## 尚需设备或部署验收
+继续使用 [五机手动验收清单](MANUAL_ACCEPTANCE.md)，记录实际系统版本和安装方式，覆盖同网发现、跨平台 GATT 文字备用、Wi-Fi Aware 配对、耳机与音频中断、房主离线与重连、锁屏后台、多人容量及功耗。
 
-| 场景 | 检查内容 |
-| --- | --- |
-| Android / iOS 同网发现 | 两端前台并授权本地网络，互换房主，检查中文/emoji 房名、邀请码、双向语音、消息和退出；覆盖访客隔离/mDNS 过滤 |
-| 蓝牙与耳机 | 互换房主，长房名/GATT、路由切换、距离断连、重新扫描与 PSM 更新、锁屏恢复；详见 [蓝牙排查](ANDROID16_BLUETOOTH.md) |
-| PTT 恢复 | 成员按下再松开，房主断网、恢复、退出再加入；未按键成员始终不发声，再次按下与自动通话正常 |
-| 音频生命周期 | 来电/导航失焦、后台限制、服务失败、TalkBack 操作、退房取消采集；恢复不绕过静音或禁麦 |
-| 融合与容量 | 多网关、房主不可达、30 分钟恢复、16 台不同品牌手机、P2P/蜂窝并发、无线群组消失后的备用链路 |
-| 声学与部署 | 真实头盔风噪、多人讲话、端到端延迟；实际 nginx/Docker 来源地址、反向代理与媒体连通性 |
-
-共同 Wi-Fi/热点下的跨平台发现不等于无共同网络的 iOS ↔ Android 自动直连。回环、模拟通道和编译成功不能替代射频、道路声学或真实部署结果。
+共同 Wi-Fi/热点下发现成功不能证明无共同网络时可以自动直连；编译、模拟通道和回环测试也不能替代厂商桌面动画、射频互通或道路声学验收。历史构建日志不作为当前版本已通过的证明。

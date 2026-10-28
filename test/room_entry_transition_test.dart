@@ -118,7 +118,7 @@ void main() {
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
       await tester.pump();
-      await tester.tap(find.text('创建房间'));
+      await tester.tap(find.text('创建'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);
@@ -204,7 +204,7 @@ void main() {
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
       await tester.pump();
-      await tester.tap(find.text('创建房间'));
+      await tester.tap(find.text('创建'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);
@@ -243,7 +243,7 @@ void main() {
     await tester.runAsync(() async {
       await tester.tap(findCreateWifi());
       await tester.pump();
-      await tester.tap(find.text('创建房间'));
+      await tester.tap(find.text('创建'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await waitForRoom(tester, true);

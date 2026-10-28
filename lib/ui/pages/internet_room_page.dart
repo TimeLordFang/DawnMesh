@@ -18,6 +18,7 @@ import '../widgets/avatar_frame.dart';
 import '../widgets/chat_image_bubble.dart';
 import '../widgets/room_chat_dock.dart';
 import '../widgets/voice_mode_switch.dart';
+import '../widgets/dialog_action_button.dart';
 
 class InternetRoomPage extends StatefulWidget {
   const InternetRoomPage({
@@ -154,15 +155,15 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           title: const Text('离开网络房间'),
           content: const Text('保留房间时，在线成员可以继续通话；你的房主身份会按建房时设置的时长保留。'),
           actions: [
-            TextButton(
+            DialogActionButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('取消'),
             ),
-            TextButton(
+            DialogActionButton(
               onPressed: () => Navigator.pop(context, 'leave'),
               child: const Text('仅离开'),
             ),
-            FilledButton(
+            DialogActionButton.destructive(
               onPressed: () => Navigator.pop(context, 'end'),
               child: const Text('解散房间'),
             ),
@@ -196,11 +197,11 @@ class _InternetRoomPageState extends State<InternetRoomPage>
           autofocus: true,
         ),
         actions: [
-          TextButton(
+          DialogActionButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
-          FilledButton(
+          DialogActionButton.primary(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('保存'),
           ),
@@ -819,11 +820,11 @@ class _MemberPill extends StatelessWidget {
         title: const Text('移交房主'),
         content: Text('确定将房主移交给“${member.nickname}”吗？'),
         actions: [
-          TextButton(
+          DialogActionButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
-          FilledButton(
+          DialogActionButton.primary(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('确认移交'),
           ),

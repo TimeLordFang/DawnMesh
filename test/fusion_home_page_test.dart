@@ -108,7 +108,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.tap(create);
       await tester.pump();
-      expect(find.text('创建房间'), findsOneWidget);
+      expect(find.text('创建'), findsOneWidget);
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());

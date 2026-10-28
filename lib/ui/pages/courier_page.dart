@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/courier/courier_store.dart';
 import '../../core/session/room_session.dart';
 import '../../l10n/app_strings.dart';
+import '../widgets/dialog_action_button.dart';
 
 class CourierPage extends StatefulWidget {
   const CourierPage({super.key, this.session});
@@ -231,11 +232,11 @@ class _CourierPageState extends State<CourierPage> {
                         ),
                       ),
                       actions: [
-                        TextButton(
+                        DialogActionButton(
                           onPressed: () => Navigator.pop(context, false),
                           child: Text(tr('取消', 'Cancel')),
                         ),
-                        TextButton(
+                        DialogActionButton.destructive(
                           onPressed: () => Navigator.pop(context, true),
                           child: Text(tr('清空', 'Clear')),
                         ),

@@ -1,6 +1,6 @@
 # Android 蓝牙搜房、音频与恢复排查
 
-适用于当前 DawnMesh Flutter 正式版。先记录两端 APK 版本、手机/耳机型号和系统构建号；旧 SunsetRipple Kotlin/RFCOMM 客户端不能视为 BLE L2CAP 兼容客户端。跨端房名/GATT 修复见 [1.1.4](RELEASE_1.1.4.md) 和 [1.1.5](RELEASE_1.1.5.md)。
+适用于当前 DawnMesh Flutter 正式版。先记录两端 APK 版本、手机/耳机型号和系统构建号；旧 SunsetRipple Kotlin/RFCOMM 客户端不能视为 BLE L2CAP 兼容客户端。跨端房名/GATT 修复见 [1.1.4](CHANGELOG.md) 和 [1.1.5](CHANGELOG.md)。
 
 ## 分层排查
 

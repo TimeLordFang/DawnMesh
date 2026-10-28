@@ -17,6 +17,7 @@ import '../widgets/ptt_button.dart';
 import '../widgets/room_chat_dock.dart';
 import '../widgets/voice_mode_switch.dart';
 import '../../l10n/app_strings.dart';
+import '../widgets/dialog_action_button.dart';
 
 Future<bool> showLocalRoomLeaveConfirmation(
   BuildContext context,
@@ -32,12 +33,11 @@ Future<bool> showLocalRoomLeaveConfirmation(
             dissolving ? s.dissolveRoomConfirmation : s.leaveRoomConfirmation,
           ),
           actions: [
-            TextButton(
+            DialogActionButton(
               onPressed: () => Navigator.pop(dialogContext, false),
               child: Text(s.cancel),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            DialogActionButton.destructive(
               onPressed: () => Navigator.pop(dialogContext, true),
               child: Text(
                 dissolving ? s.dissolveRoomAction : s.leaveRoomAction,

@@ -1,170 +1,39 @@
 # 曙光之声 · DawnMesh
 
-[![Android release](https://github.com/TimeLordFang/DawnMesh/actions/workflows/release.yml/badge.svg)](https://github.com/TimeLordFang/DawnMesh/actions/workflows/release.yml)
-[![Latest release](https://img.shields.io/github/v/release/TimeLordFang/DawnMesh?include_prereleases)](https://github.com/TimeLordFang/DawnMesh/releases)
-[![License](https://img.shields.io/github/license/TimeLordFang/DawnMesh)](LICENSE)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#兼容性)
+近场离线通信与自部署公网语音对讲。当前源码 **1.2.4+65**，候选标签 **v1.2.4-rc.1**；本轮统一建房及其他弹窗按钮，并整理文档。详见 [候选说明](docs/RELEASE_1.2.4.md) 与 [更新记录](docs/CHANGELOG.md)。
 
-一款支持近场离线通信和自部署公网房的语音对讲应用。手机可以通过 Wi-Fi 局域网、Wi-Fi Direct 或蓝牙直接通信；需要远距离通话时，也可以连接用户自己部署的 DawnMesh Server。
+## 通信方式
 
-> 当前源码版本：`1.2.3`。安装包请从 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases) 获取。
-
-## 功能
-
-- **三种近场链路**：同一局域网、Wi-Fi Direct、BLE 发现 + L2CAP 数据通道。Wi-Fi 房最多 16 人；蓝牙房保持 6 人。
-- **独立融合房**：最多 16 人，支持离线建房、经附近任一成员入房；任一已入房的联网成员可向同一自部署服务器同步签名名单并中继远程通信，多路数据去重。需 Android 1.1.0 与 Server 0.3.0，详见 [融合房设计与边界](docs/FUSION_ROOMS.md)。
-- **自部署公网房**：可保存并切换多个 HTTPS 服务器，默认 25 人；公网语音使用 LiveKit/WebRTC，语音与聊天均端到端加密。
-- **公网音频三档**：清晰、平衡、省流可在通话中切换；Wi-Fi 默认提高清晰度，移动网络默认使用低码率 Opus 与 DTX 静音抑制。
-- **统一成员头像**：Wi-Fi、蓝牙和公网房均按昵称缩写及设备短码生成轻量头像，正在发言和禁麦状态可以直接辨认。
-- **公网房主管理**：支持修改房间名，并可直接在通话页头像下关闭成员麦克风或移交房主；建房时可设置 1–60 分钟的房主断线保留时间。
-- **两种发言方式**：按住对讲，或检测到语音后自动发送；Wi-Fi 房和蓝牙房均支持。
-- **邀请码加密**：所有房间统一使用 4 位数字，可随机生成或手动修改。近场房通过 PAKE 验证；公网房由服务端验证入房凭据并分发客户端加密封装的随机房间密钥，无需房主在线；语音、消息和控制帧使用 AES-256-GCM。
-- **断线恢复**：链路意外中断后最多自动重试 30 分钟，蓝牙房主重新开启蓝牙后会重建广播、监听端口和动态 PSM。
-- **蓝牙耳机共存**：可选择耳机或手机麦克风；蓝牙互联和耳机同时工作时自动降低 Opus 码率并调整发送与播放缓冲。
-- **锁屏通话**：前台服务、常驻通知和锁屏对讲面板支持后台收发。
-- **本机调试与调参**：可开关、筛选、搜索、复制全链路时延日志，并在运行中调整蓝牙码率、写入策略、抖动缓冲和播放缓冲。
-- **中英文界面**：中文名为“曙光之声”，英文名为 DawnMesh。
-
-## 安全与隐私
-
-房间邀请码仅保存在当前会话内存中，文字聊天退出后从本机内存清除。应用没有账号、预置公网服务或遥测上传。使用公网房时，App 只连接用户选定的自部署服务器。公网房主可在建房时选择是否允许服务器管理员收听；默认关闭，开启后监听状态会在房内持续显示。主动检查更新时会连接 GitHub。
-
-4 位邀请码适合当面口述和临时小组访问控制。它不能抵御持码成员冒名，也不等同于长期高强度密码。请只把邀请码告诉可信成员。
-
-所有房型均支持本地人声降噪，可在房内选择关闭、标准、强力，默认标准。Wi-Fi、蓝牙共存与半小时恢复的本次修复说明见 [1.0.1 发布说明](docs/RELEASE_1.0.1.md)。公网半小时成员与空房保留需要同步升级 DawnMesh Server。
-
-详细设计和已知边界见 [安全审查](docs/SECURITY_REVIEW.md)。发现安全问题时，请避免在公开 Issue 中附带邀请码、设备地址、签名材料或完整原始日志。
-
-## 下载与更新
-
-打开 [GitHub Releases](https://github.com/TimeLordFang/DawnMesh/releases)，下载 `DawnMesh-1.2.3-release.apk`。每个 Release 同时提供 SHA-256 校验文件。
-
-应用内“关于曙光之声 → 看看有没有更新”会读取本仓库最近的公开 Releases，包括 prerelease。发现更高版本后，可直接打开对应 GitHub Release 页面。应用不会静默下载或安装 APK。
-
-## 从源码构建
-
-项目只提交源码和 Gradle Wrapper。以下组合已用于当前 Android 构建：
-
-| 工具 | 版本 |
+| 房型 | 能力与边界 |
 | --- | --- |
-| Flutter / Dart | Flutter **3.47.8** / Dart **3.13.7** |
-| JDK | Temurin **27.0.1.0.2+1**，用于运行 Gradle |
-| Gradle / Android Gradle Plugin | **9.8.2** / **9.4.1** |
-| Kotlin | **2.4.21** |
-| Android SDK | compileSdk **37.2** / targetSdk **37** |
-| Android Build-Tools | **37.0.0** |
-| Android NDK | **30.0.16248370** |
-| CMake | **4.1.2** |
+| Wi-Fi | 同一 Wi-Fi/热点下跨平台通信，协议上限 16 人。Android 可用 Wi-Fi Direct，iOS 可用苹果点对点 Wi-Fi，两种原生无线协议不能直接互联。 |
+| 蓝牙 | L2CAP 语音优先，必要时使用 GATT 仅文字备用；协议上限 6 人，首次发现保持房主前台。 |
+| 融合 | 协议上限 16 人，可离线建房并经已入房成员连接；联网成员可桥接同一自部署服务器，公网断开时保留已有本地连接。 |
+| 公网 | 使用所选 HTTPS 服务器及 LiveKit，默认 25 人并由服务器配置控制；支持 Android、iOS 和网页同房。 |
 
-Gradle 使用 JDK 27 运行，但 Android Java/Kotlin 字节码目标保持为 Java 17，JDK 版本不会提高应用的 Android 系统要求。
+支持按住对讲/自动发言、文字与图片、降噪、房主管理和有界断线恢复。可靠文字、独立成员签名及退出换钥要求近场全体成员使用 1.2.0 或更新客户端。语音留言、离线密封转交默认关闭；Wi-Fi Aware 为需要设备、系统、系统配对和签名能力的可选加速，不能据编译成功宣称无线互通已验收。
 
-安装 Android SDK 组件：
+## 下载与构建
+
+[Android Releases](https://github.com/TimeLordFang/DawnMesh/releases) 提供签名 APK、Play AAB 与 SHA-256；稳定版见 [Latest](https://github.com/TimeLordFang/DawnMesh/releases/latest)，候选包在 Prerelease 中。AAB 供 Play 分发，不能直接点击安装。
 
 ```sh
-sdkmanager \
-  "platform-tools" \
-  "platforms;android-37.2" \
-  "build-tools;37.0.0" \
-  "ndk;30.0.16248370" \
-  "cmake;4.1.2"
-flutter doctor --android-licenses
-```
-
-在项目根目录执行：
-
-```sh
-flutter pub get
-flutter analyze
-flutter test --concurrency=1
-flutter build apk --debug
-```
-
-仓库中的 `scripts/flutter.sh`、`scripts/gradle.sh` 和 `scripts/check.sh` 会自动使用 `.tools/` 下的本地工具链：
-
-```sh
-./scripts/check.sh
-./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
+./scripts/flutter.sh pub get --enforce-lockfile
 ./scripts/flutter.sh build apk --debug
 ```
 
-调试 APK 位于 `build/app/outputs/flutter-apk/app-debug.apk`。
+Android 8.0+；BLE L2CAP 语音需要 Android 10+。构建依赖见 [开发指南](docs/DEVELOPMENT.md)，JKS/CI 签名见 [发布流程](docs/RELEASING.md)，上架见 [Google Play](docs/GOOGLE_PLAY.md)。缺少 release 签名时构建失败，不回退 debug 签名。
 
-## 发布签名
+## 安全、数据与验收
 
-发布构建必须提供自己的 JKS，缺少完整配置时构建会失败，不会回退为 debug 签名：
+无预置公网服务和遥测；公网使用用户所选服务器，主动检查更新会连接对应 GitHub 仓库。管理员收听默认关闭，仅建房时授权的房间允许托管相应密钥并显示监听状态。
 
-```sh
-mkdir -p android/keystore
-keytool -genkeypair -v \
-  -keystore android/keystore/dawnmesh.jks \
-  -alias dawnmesh \
-  -keyalg RSA \
-  -keysize 3072 \
-  -validity 10000
-cp android/key.properties.example android/key.properties
-# 编辑 android/key.properties 后执行：
-flutter build apk --release
-```
+四位邀请码适合临时可信小组，不等于高熵密码。近场 v3 验证独立成员签名并在成员变化时换钥；合法参与者仍能读取、录制或转发共享内容。普通聊天和可选语音留言在会话内存中；主动开启离线转交后会持久化密文与联系人。安全存储、元数据及密码学边界见 [安全模型](docs/SECURITY_REVIEW.md)。
 
-签名发生在 Android Gradle 的 `packageRelease` 任务内。配置位于 [`android/app/build.gradle.kts`](android/app/build.gradle.kts)：它从未提交的 `android/key.properties` 读取本地密钥信息，或从 `DAWNMESH_KEYSTORE_PATH`、`DAWNMESH_STORE_PASSWORD`、`DAWNMESH_KEY_ALIAS`、`DAWNMESH_KEY_PASSWORD` 环境变量读取 CI 配置。Gradle 完成资源打包、zipalign 和 APK Signature Scheme 签名后，才写出 `build/app/outputs/flutter-apk/app-release.apk`。
+自动化与发布证据见 [验证基线](docs/VALIDATION.md)。发现、真实无线容量、耳机共存、后台和锁屏需按 [手动清单](docs/MANUAL_ACCEPTANCE.md) 验收，不能由回环或未签名编译推断通过。
 
-GitHub Actions 在 [`.github/workflows/release.yml`](.github/workflows/release.yml) 中把 JKS Secret 临时还原到 Runner，调用 `flutter build apk --release`，随后用 `apksigner verify` 做只读校验，再复制并重命名到 `dist/` 上传 Release。复制和重命名不会再次签名。配置方法见 [GitHub 自动发布](docs/GITHUB_RELEASES.md)。
+## 文档与来源
 
-请永久备份 keystore 和密码。Android 要求后续升级包继续使用同一签名；密钥丢失后，现有安装通常无法直接覆盖升级。
+[完整文档入口](docs/README.md) · [发布与候选规则](docs/RELEASING.md) · [来源与第三方许可](docs/UPSTREAM.md)
 
-完整文档入口见 [文档索引](docs/README.md)。
-
-## 项目结构
-
-```text
-android/   Android 宿主、BLE/L2CAP、Wi-Fi Direct、音频与前台服务
-lib/       Flutter 界面、近场/公网会话、发现、传输、加密和调试日志
-native/    C++ 帧协议、环形缓冲和 PCM 处理
-test/      Dart/Flutter 回归测试
-docs/      安全审查、兼容性、验证记录和发布说明
-scripts/   本机工具链与校验脚本
-```
-
-公网控制服务和 LiveKit Compose 部署文件位于独立的同级项目 `DawnMeshServer`，其 README 包含 Nginx、媒体端口、备份和升级说明。
-
-## 兼容性
-
-- minSdk 26（Android 8.0）；BLE L2CAP 房需要 Android 10 / API 29 或更高版本。
-- Android 14 及以上声明麦克风与连接设备前台服务类型。
-- Xiaomi、OnePlus 等系统可能需要手动允许后台运行、锁屏通知和电池优化豁免。
-- 蓝牙互联与蓝牙耳机共用同一控制器时，实际延迟和稳定性仍受手机射频、厂商蓝牙栈及现场 2.4 GHz 干扰影响。
-
-蓝牙复测建议见 [Android 蓝牙测试](docs/ANDROID16_BLUETOOTH.md)，已执行的自动化和 APK 校验见 [验证记录](docs/VALIDATION.md)。
-
-## 参与开发
-
-欢迎提交 Issue 和 Pull Request。改动前请先运行：
-
-```sh
-./scripts/check.sh
-./scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug
-```
-
-涉及传输协议、邀请码或加密格式的修改，请同时补充互操作和失败路径测试，并在 PR 中说明是否与旧版兼容。
-
-## 许可与来源
-
-DawnMesh 使用 [Apache License 2.0](LICENSE)。项目基于 SunsetRipple 的 Flutter 主线独立开发，保留原作者版权和许可信息；来源提交与差异说明见 [UPSTREAM.md](docs/UPSTREAM.md)。
-
-1.1.6 修复广播无路由时的异步发现错误，配套 iOS 1.0.5；详见 [发布说明](docs/RELEASE_1.1.6.md)。
-
-1.1.5 补全安卓房主供 iOS 读取的蓝牙房名，修复邀请码输入期间名称更新和入房后的缺名标题。配套 iOS 1.0.4；详见 [1.1.5 发布说明](docs/RELEASE_1.1.5.md)。
-
-1.1.4 新增通过 GATT 发现 iOS 蓝牙房主，兼容 iOS 1.0.3 建房并保留旧安卓发现；统一备用图标。详见 [1.1.4 发布说明](docs/RELEASE_1.1.4.md)。
-
-1.1.0 正式版整合融合房离线通话、成员互连、音质选择、降噪与 30 分钟重连。Wi-Fi 和融合房扩至 16 人，补齐加密长名单分片并减少重复转发。所有成员需更新 APK，融合房服务端配套升级至 0.3.0。实际 Wi-Fi Direct 群组容量取决于设备。详见 [正式版发布说明](docs/RELEASE_1.1.0.md)、[融合房设计](docs/FUSION_ROOMS.md) 与 [验证记录](docs/VALIDATION.md)。
-
-1.2.0 与 iOS 统一版本和构建号（1.2.0+61），新增可靠文字、独立成员身份、退出换钥、GATT 文字备用、可选语音留言、可选 Wi-Fi Aware 加速与离线密封转交。升级后的近场房间要求所有成员使用新版本；无线与锁屏验收步骤见 [五机验收](docs/MANUAL_ACCEPTANCE.md)，功能与边界见 [发布说明](docs/RELEASE_1.2.0.md)。
-
-1.2.1 与 iOS 统一为 1.2.1+62，修复繁忙融合房的握手等待、并发连接结果及超时/退出清理，详见 [发布说明](docs/RELEASE_1.2.1.md)。
-
-1.2.2 与 iOS 统一为 1.2.2+63，补齐认证和入房报文丢失后的有界恢复，并阻止旧握手重放占用新的认证，详见 [发布说明](docs/RELEASE_1.2.2.md)。
-
-1.2.3 与 iOS 统一为 1.2.3+64，统一晨光主题、设置入口与服务器管理，改进自适应图标资源并加强融合房与发布验证，详见 [发布说明](docs/RELEASE_1.2.3.md)。
-
-开发与发布请先阅读 [候选版本和本地预检流程](docs/RELEASING.md)。
+本项目保留 [Apache-2.0](LICENSE) 与原作者版权；Opus、RNNoise 等第三方许可保留在各自源码中。服务端与网页位于独立的 DawnMeshServer 仓库，部署及升级以该仓库说明为准。

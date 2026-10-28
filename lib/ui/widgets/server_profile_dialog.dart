@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/internet/internet_models.dart';
+import 'dialog_action_button.dart';
 
 class ServerProfileDialog extends StatefulWidget {
   const ServerProfileDialog({super.key, this.existing});
@@ -95,18 +96,18 @@ class _ServerProfileDialogState extends State<ServerProfileDialog> {
           ),
           const SizedBox(height: 10),
           const Text(
-            '凭证使用 Android 安全存储保存，不会写入日志。',
+            '凭证仅保存在这台设备的安全存储中，不会写入日志。',
             style: TextStyle(fontSize: 12),
           ),
         ],
       ),
     ),
     actions: [
-      TextButton(
+      DialogActionButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('取消'),
       ),
-      FilledButton(onPressed: _submit, child: const Text('保存')),
+      DialogActionButton.primary(onPressed: _submit, child: const Text('保存')),
     ],
   );
 }

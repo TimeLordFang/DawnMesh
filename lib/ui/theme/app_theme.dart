@@ -65,6 +65,7 @@ class AppTheme {
           onSurfaceVariant: night ? darkTextSecondary : lightTextSecondary,
           outline: night ? darkOutline : lightOutline,
           error: night ? darkDanger : lightDanger,
+          onError: night ? brandNavy : Colors.white,
         );
     return ThemeData(
       useMaterial3: true,

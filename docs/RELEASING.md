@@ -1,38 +1,60 @@
-# 发布流程：先预检和候选，再正式发布
+# 发布：本地预检、候选与正式晋级
 
-当前目标版本为 `1.2.3+64`；候选轮次保持此应用版本和构建号。不要为调试、重试 CI 或修改构建配置连续递增正式版本；已发布标签和正式附件不覆盖。
+当前目标应用版本为 **1.2.4+65**，本轮候选为 **v1.2.4-rc.1**。同一目标内修复使用 `rc.2`、`rc.3` 等轮次，不通过连续增加补丁版本来排查 CI；已发布正式标签和附件不覆盖。
 
 ## 本地预检
+
+先按 [开发指南](DEVELOPMENT.md) 准备工具链，再执行：
 
 ```sh
 ./scripts/preflight-release.sh
 ```
 
-Android 的本地和标签 CI 共用这个入口，覆盖依赖锁定、静态检查、Flutter、原生 sanitizer、应用 JVM/Lint、签名 APK/AAB、签名及 16 KiB 对齐。需配置原有发布签名，密钥不进 Git。
+真实中继用例需启动测试服务并设置 `DAWNMESH_FUSION_TEST_URL`；未配置时该项跳过，不能计为已验收。两端网络回归串行执行。
 
-真实中继用例需设置 `DAWNMESH_FUSION_TEST_URL`。未设置时该项跳过，不能将结果记为完整中继验收。两个移动端仓库的网络测试串行执行，避免固定端口冲突。签名描述文件和无线真机能力另按设备验收。
+Android 的本地与标签 CI 共用同一预检入口，覆盖 Flutter、原生 sanitizer、JVM/Lint、签名 APK/AAB 及 16 KiB 对齐。
 
-## 同一目标版本的候选
+## Android 签名配置
 
-本次目标版本只设置一次 `1.2.3+64`；Android/iOS 同步应用版本与构建号、更新日志和发布说明。候选轮次用 `rc.N` 区分，正式 `v1.2.3` 只提升两端均验证成功的候选提交。
+发布构建读取被 Git 忽略的 `android/key.properties`，也可读取 `DAWNMESH_KEYSTORE_PATH`、`DAWNMESH_STORE_PASSWORD`、`DAWNMESH_KEY_ALIAS`、`DAWNMESH_KEY_PASSWORD`。配置不完整时失败，不回退 debug 签名。首次配置参考 `android/key.properties.example`；永久备份原 JKS 和密码，更新必须保持签名兼容。
 
-1. 本地预检通过后提交并推送源码。
-2. 使用 `v1.2.3-rc.1`（也支持 `-pre.1`、`-alpha.1`、`-beta.1`）标签触发候选构建。
-3. 候选修复继续使用目标版本 `1.2.3`，以 `-rc.2`、`-rc.3` 区分；不要用 `1.2.4`、`1.2.5` 代替候选轮次。若上传 Play/TestFlight，按平台规则提高构建号，并同步两端。
-4. CI 将候选标记为 Prerelease，并显式设为非 Latest；候选包中的应用版本保持数字格式，符合 iOS 要求。
-5. 验证候选包、签名与设备清单。所有源码、版本和发布说明需在候选验证前准备好。
+GitHub Actions 使用以下仓库 Secrets：
 
-## 提升为正式版本
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | release JKS 的单行 Base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | 密钥别名 |
+| `ANDROID_KEY_PASSWORD` | 密钥密码 |
 
-正式标签必须指向成功候选的同一个提交，不能在候选通过后再修改代码或说明而直接打正式标签。例如：
+Base64 只是编码，不是加密；设置 Secret 后立即删除临时编码文件。JKS、口令、签名描述文件与本机账号配置不提交。签名发生在 Gradle 打包中，后续 `apksigner verify` 和复制重命名不会重新签名。
+
+Play 首次上架、应用签名与上传密钥见 [Google Play](GOOGLE_PLAY.md)。
+
+## 创建候选
+
+1. 同步两端 `pubspec.yaml`、更新服务版本和中英文更新日志，准备 `docs/RELEASE_<版本>.md`。
+2. 完成本地预检，按范围提交源代码和文档；排除个人 Team/Scheme、密钥、缓存及仅本地保存的研究稿。
+3. 推送主分支与未占用的候选标签。当前示例：
 
 ```sh
-git tag -a v1.2.3 'v1.2.3-rc.3^{commit}' -m 'DawnMesh 1.2.3'
-git push github v1.2.3
+git tag -a v1.2.4-rc.1 -m 'DawnMesh 1.2.4 build 65 candidate 1'
+git push github main v1.2.4-rc.1
+git push origin main v1.2.4-rc.1
 ```
 
-本仓库 GitHub 远程名为 `github`；自建镜像另推送 `origin`。iOS 仓库使用其 `origin`。
+Android GitHub 远程名为 `github`，另同步自建镜像 `origin`；iOS 的 GitHub 远程名为 `origin`。CI 将候选设为 Prerelease、非 Latest。应用内版本保持数字格式，不把 `-rc.N` 写进 iOS 版本字段。若上传 Play/TestFlight，构建号还需满足平台递增规则并同步两端。
 
-发布门禁会核实：候选非草稿、带 Prerelease 标记、包和校验文件齐备、候选与正式标签提交完全相同，以及该候选最近一次标签检查成功。失败或仍在运行的重试不能借用更早的成功结果。未满足条件时停止发布，不以递增正式版本绕过检查。
+## 同一提交提升为正式版
 
-正式标签仍会重新执行检查和打包，因此使用对应 Release 随包的校验文件。之后使用新工作流的正式版本不再覆盖既有附件；历史标签保持原样。
+两端候选任务成功、附件与校验值齐全并完成相应验收后，正式标签必须指向该候选的同一个提交。源码或说明再有改变，就先验证新的候选。
+
+```sh
+git tag -a v1.2.4 'v1.2.4-rc.1^{commit}' -m 'DawnMesh 1.2.4'
+git push github v1.2.4
+git push origin v1.2.4
+```
+
+发布门禁核对候选不是草稿、具有 Prerelease 标记、包和 SHA-256 齐备、提交相同，且最近一次候选标签校验成功。正式标签仍会重新构建；重构建的哈希可能不同，下载时使用对应 Release 随包的校验文件。
+
+正式 Release 提供 Android 签名 APK/AAB 或 iOS 两种未签名 App ZIP。iOS ZIP 不能直接安装，需相应签名。构建成功不替代 [真机验收](MANUAL_ACCEPTANCE.md)；当前证据见 [验证基线](VALIDATION.md)。
