@@ -1,17 +1,39 @@
-# 曙光之声 · DawnMesh
+<p align="center">
+  <img src="assets/branding/google-play-icon.png" width="144" height="144" alt="DawnMesh 应用 Logo">
+</p>
 
-近场离线通信与自部署公网语音对讲。当前源码 **1.2.4+65**，候选标签 **v1.2.4-rc.2**；本轮统一建房及其他弹窗按钮，并整理文档。详见 [候选说明](docs/RELEASE_1.2.4.md) 与 [更新记录](docs/CHANGELOG.md)。
+# 曙光之声 · DawnMesh Android
 
-## 通信方式
+**越过地平线，让声音相遇。**
 
-| 房型 | 能力与边界 |
+[Android](https://github.com/TimeLordFang/DawnMesh) · [iOS](https://github.com/TimeLordFang/DawnMeshIOS) · [服务端与网页](https://github.com/TimeLordFang/DawnMeshServer)
+
+DawnMesh（曙光之声）是一款面向附近同伴与远程小组的语音对讲应用。没有互联网时，可以通过 Wi-Fi、热点或蓝牙进行本地通话和聊天；需要跨网络交流时，连接自己部署的服务端即可使用公网房或融合中继。
+
+支持按住对讲、自动发言、文字与图片、降噪、房主管理和有界断线恢复。语音留言与离线密封转交默认关闭；Wi-Fi Aware 是需要设备、系统、配对和签名能力的可选加速。近场参与者应使用兼容的同一代客户端。
+
+## 项目与仓库
+
+| 仓库 | 用途 |
 | --- | --- |
-| Wi-Fi | 同一 Wi-Fi/热点下跨平台通信，协议上限 16 人。Android 可用 Wi-Fi Direct，iOS 可用苹果点对点 Wi-Fi，两种原生无线协议不能直接互联。 |
-| 蓝牙 | L2CAP 语音优先，必要时使用 GATT 仅文字备用；协议上限 6 人，首次发现保持房主前台。 |
-| 融合 | 协议上限 16 人，可离线建房并经已入房成员连接；联网成员可桥接同一自部署服务器，公网断开时保留已有本地连接。 |
-| 公网 | 使用所选 HTTPS 服务器及 LiveKit，默认 25 人并由服务器配置控制；支持 Android、iOS 和网页同房。 |
+| [DawnMesh · Android](https://github.com/TimeLordFang/DawnMesh) | Android 手机客户端，支持附近通信和自部署远程房间。 |
+| [DawnMesh · iOS](https://github.com/TimeLordFang/DawnMeshIOS) | iPhone 客户端，与 Android 使用兼容的房间和加密协议。 |
+| [DawnMesh Server · 服务端与网页](https://github.com/TimeLordFang/DawnMeshServer) | 公网房控制服务、融合房目录与加密中继，包含网页客户端和管理后台。 |
 
-支持按住对讲/自动发言、文字与图片、降噪、房主管理和有界断线恢复。可靠文字、独立成员签名及退出换钥要求近场全体成员使用 1.2.0 或更新客户端。语音留言、离线密封转交默认关闭；Wi-Fi Aware 为需要设备、系统、系统配对和签名能力的可选加速，不能据编译成功宣称无线互通已验收。
+## 通信方式与部署依赖
+
+| 使用方式 | 是否需要部署服务端 | 说明 |
+| --- | --- | --- |
+| 附近 Wi-Fi / 蓝牙房 | 不需要 | 手机间通过本地链路通信，不依赖互联网。Wi-Fi 协议上限 16 人，蓝牙房 6 人。 |
+| 融合房：本地离线通信 | 不需要 | 处于同一 Wi-Fi、热点或支持的本地链路时，可以离线建房、加入和通话。 |
+| 融合房：跨网络发现与远程中继 | 需要 DawnMesh Server | 已入房且联网的成员连接同一服务端，发布签名目录并中继密文；房主可不直接联网，远程参与仍需可用网关。 |
+| 公网房 | 需要 DawnMesh Server 与 LiveKit | 控制服务处理房间与入房权限，LiveKit 承载实时语音；手机和网页需能访问相应服务与媒体端口。 |
+
+应用不内置公共服务器。要使用公网房，或让融合房跨网络互通，请先按 [服务端部署说明](https://github.com/TimeLordFang/DawnMeshServer#使用容器镜像部署) 部署实例，再在客户端 **设置 → 服务器** 中填写 HTTPS 地址，并按实例配置提供访问凭证，让参与者选择同一实例。
+
+公网部署需配置 HTTPS/WSS、反向代理与媒体端口。融合远程中继转发已加密的近场帧，不走公网房的 LiveKit 媒体通道；服务端的默认 Compose 同时部署控制服务与 LiveKit，以支持两种房型。已有本地融合连接不会因公网中断而结束。
+
+Android Wi-Fi Direct 与苹果点对点 Wi-Fi 是不同无线协议，不能直接互联；跨平台本地通信可使用共同 Wi-Fi/热点或支持的蓝牙路径。设备无线容量、耳机共存和锁屏表现需真机验收，协议人数上限不代表硬件保证。
 
 ## 下载与构建
 
@@ -36,4 +58,4 @@ Android 8.0+；BLE L2CAP 语音需要 Android 10+。构建依赖见 [开发指�
 
 [完整文档入口](docs/README.md) · [发布与候选规则](docs/RELEASING.md) · [来源与第三方许可](docs/UPSTREAM.md)
 
-本项目保留 [Apache-2.0](LICENSE) 与原作者版权；Opus、RNNoise 等第三方许可保留在各自源码中。服务端与网页位于独立的 DawnMeshServer 仓库，部署及升级以该仓库说明为准。
+本项目保留 [Apache-2.0](LICENSE) 与原作者版权；Opus、RNNoise 等第三方许可保留在各自源码中。服务端与网页的部署、备份及升级见 [DawnMesh Server](https://github.com/TimeLordFang/DawnMeshServer)。
