@@ -10,16 +10,20 @@ import 'package:dawn_mesh/core/fusion/fusion_identity.dart';
 import 'package:dawn_mesh/core/fusion/fusion_transport.dart';
 import 'package:dawn_mesh/core/internet/internet_models.dart';
 import 'package:dawn_mesh/core/security/room_invite.dart';
+import 'package:dawn_mesh/core/protocol/frame.dart';
+import 'package:dawn_mesh/core/protocol/frame_type.dart';
+import 'package:dawn_mesh/core/transport/room_transport.dart';
 import 'package:dawn_mesh/core/session/member.dart';
 import 'package:dawn_mesh/core/session/room_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> _until(
   bool Function() done, {
+  Duration timeout = const Duration(seconds: 8),
   String detail = 'fusion state',
   String Function()? diagnostics,
 }) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 8));
+  final deadline = DateTime.now().add(timeout);
   while (!done()) {
     if (DateTime.now().isAfter(deadline)) {
       throw TimeoutException(
@@ -27,6 +31,61 @@ Future<void> _until(
       );
     }
     await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+}
+
+/// Lose the initial admission and four replies, allowing the last retry.
+/// Use the authenticated inner type while retaining real sockets and relaying.
+class _AdmissionLossTransport extends FusionTransport
+    implements PayloadAwareTransport {
+  _AdmissionLossTransport({
+    required this.owner,
+    required super.roomId,
+    required super.roomName,
+    super.identity,
+    super.profile,
+    required super.localPort,
+    required super.advertise,
+    this.loseAtMemberCount,
+  });
+
+  final RoomSession owner;
+  final int? loseAtMemberCount;
+  int droppedAdmissions = 0;
+  bool _recovered = false;
+
+  @override
+  bool get textOnly => false;
+
+  @override
+  void sendPayload(
+    Frame frame, {
+    required FrameType originalType,
+    bool relay = false,
+  }) {
+    if (!_recovered && owner.members.length == loseAtMemberCount) {
+      if (originalType == FrameType.admission) {
+        if (droppedAdmissions < 5) {
+          droppedAdmissions++;
+          return;
+        }
+        _recovered = true;
+      }
+      if (!_recovered &&
+          (originalType == FrameType.controlFragment ||
+              originalType == FrameType.memberKeys ||
+              originalType == FrameType.roster)) {
+        return;
+      }
+    }
+    if (relay) {
+      super.relayAuthenticated(
+        frame,
+        realtime: originalType == FrameType.audio,
+      );
+    } else {
+      super.send(frame, realtime: originalType == FrameType.audio);
+    }
   }
 }
 
@@ -45,6 +104,7 @@ Future<_Node> _node(
   ServerProfile? server,
   DateTime Function()? now,
   String? nickname,
+  int? loseAtMemberCount,
 }) async {
   final audio = MockAudioIo();
   final proof = base64Encode(List.filled(32, installation));
@@ -55,7 +115,9 @@ Future<_Node> _node(
     now: now,
     sessionToken: FusionIdentity.memberToken(proof, room.roomId),
   );
-  final link = FusionTransport(
+  final link = _AdmissionLossTransport(
+    owner: session,
+    loseAtMemberCount: loseAtMemberCount,
     roomId: room.roomId,
     roomName: room.name,
     identity: host ? room : null,
@@ -82,8 +144,11 @@ Future<void> _joinLocal(_Node guest, _Node neighbor) async {
   await guest.session.joinRoom(startAudio: false);
   await _until(
     () => guest.session.state == RoomState.inRoom,
+    // Five two-second heartbeat retries must fit even on a busy CI runner.
+    timeout: const Duration(seconds: 20),
     detail: 'admission of ${guest.session.selfNickname}',
-    diagnostics: () => 'state=${guest.session.state}, '
+    diagnostics: () =>
+        'state=${guest.session.state}, '
         'codec=${guest.session.secureCodec != null}, '
         'members=${guest.session.members.length}, '
         'neighborMembers=${neighbor.session.members.length}, '
@@ -193,7 +258,7 @@ void main() {
     expect(host.session.members.length, 1);
   });
 
-  test('16 fusion members receive complete signed long rosters and deduplicated voice', () async {
+  test('16 fusion members recover admission loss with complete signed rosters and deduplicated voice', () async {
     final room = await FusionIdentity.create('16-person room');
     final invite = RoomInvite.parse('1234');
     final host = await _node(
@@ -202,6 +267,7 @@ void main() {
       1,
       host: true,
       nickname: '1${'声' * 20}',
+      loseAtMemberCount: 16,
     );
     final nodes = [host];
     for (var id = 2; id <= 16; id++) {
@@ -212,18 +278,21 @@ void main() {
     await _until(
       () => nodes.every((node) => node.session.members.length == 16),
       detail: 'complete 16-member rosters',
-      diagnostics: () => '${nodes.map((node) => node.session.members.length).toList()}',
+      diagnostics: () =>
+          '${nodes.map((node) => node.session.members.length).toList()}',
     );
     await host.link.synchronize();
     await _until(
       () => nodes.skip(1).every((node) => node.link.signedState?[9] == 16),
       detail: 'complete signed fusion states',
-      diagnostics: () => '${nodes.skip(1).map((node) => node.link.signedState?[9]).toList()}',
+      diagnostics: () =>
+          '${nodes.skip(1).map((node) => node.link.signedState?[9]).toList()}',
     );
     final state = nodes.last.link.signedState!;
     expect(state.length, greaterThan(512));
     expect(await nodes.last.link.identity!.verifyState(state), true);
     expect(host.session.members.last.memberId, 16);
+    expect((host.link as _AdmissionLossTransport).droppedAdmissions, 5);
     await nodes.last.session.startAudio();
     nodes.last.session.setPtt(true);
     nodes.last.audio.emitEncodedFrame(Uint8List.fromList([7, 8, 9]));
@@ -231,7 +300,8 @@ void main() {
       () =>
           nodes.take(15).every((node) => node.audio.submittedFrames.isNotEmpty),
       detail: 'voice fanout after all 16 members joined',
-      diagnostics: () => '${nodes.take(15).map((node) => node.audio.submittedFrames.length).toList()}',
+      diagnostics: () =>
+          '${nodes.take(15).map((node) => node.audio.submittedFrames.length).toList()}',
     );
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(
