@@ -4,7 +4,7 @@ class ExternalLinkLauncher {
   ExternalLinkLauncher._();
 
   static const privacyPolicyUrl =
-      'https://timelordfang.github.io/DawnMesh/privacy/';
+      'https://dawnmesh.timelord.info/privacy/';
 
   static const MethodChannel _channel = MethodChannel(
     'dev.dawnmesh.intercom/external_links',

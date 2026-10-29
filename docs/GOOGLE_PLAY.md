@@ -53,7 +53,7 @@ GitHub Actions 的发布工作流现同时构建签名 APK 与 AAB，并发布�
 
 ## 验证与验收
 
-应用主页与隐私政策采用仓库内的 Jekyll 模板，编辑和首次启用 Pages 见 [网站说明](../website/README.md)。部署并确认可公开访问后，在 Play Console 隐私政策字段填写 `https://timelordfang.github.io/DawnMesh/privacy/`。应用内入口位于“设置 → 关于 → 隐私政策”，需在实际上传的版本中包含该入口。政策正文为 `website/privacy.md`，主页文案为 `website/_data/home.yml`。
+应用主页与隐私政策采用仓库内的 Jekyll 模板，编辑、域名配置和首次启用 Pages 见 [网站说明](../website/README.md)。部署并确认可公开访问后，在 Play Console 隐私政策字段填写 `https://dawnmesh.timelord.info/privacy/`。应用内入口位于“设置 → 关于 → 隐私政策”，需在实际上传的版本中包含该入口。政策正文为 `website/privacy.md`，主页文案为 `website/_data/home.yml`。
 
 每次新包都需核对版本、签名、归档完整性及 16 KiB 对齐，记录统一见 [验证基线](VALIDATION.md)。下载使用对应 Release 随包 SHA-256，不沿用旧版本或其他重构建产物的哈希。
 

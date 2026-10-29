@@ -34,7 +34,7 @@ void main() {
 
     expect(received?.method, 'openUrl');
     expect(received?.arguments, {
-      'url': 'https://timelordfang.github.io/DawnMesh/privacy/',
+      'url': 'https://dawnmesh.timelord.info/privacy/',
     });
   });
 

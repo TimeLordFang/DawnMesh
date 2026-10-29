@@ -1,7 +1,7 @@
 title: "曙光之声 · DawnMesh"
 description: "越过地平线，让声音相遇。通过附近设备或自部署服务器，与同伴保持联系。"
-url: "https://timelordfang.github.io"
-baseurl: "/DawnMesh"
+url: "https://dawnmesh.timelord.info"
+baseurl: ""
 lang: zh-CN
 markdown: kramdown
 kramdown:
