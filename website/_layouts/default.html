@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="{{ site.lang | escape }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f39">
+  <title>{% if page.title %}{{ page.title | escape }} · {% endif %}{{ site.title | escape }}</title>
+  <meta name="description" content="{{ page.description | default: site.description | escape }}">
+  <link rel="canonical" href="{{ page.url | absolute_url }}">
+  <link rel="icon" type="image/png" href="{{ '/assets/icon.png' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳至正文</a>
+  <header class="site-header wrap">
+    <a class="brand" href="{{ '/' | relative_url }}" aria-label="曙光之声主页">
+      <img src="{{ '/assets/icon.png' | relative_url }}" width="40" height="40" alt="">
+      <span>DawnMesh<small>曙光之声</small></span>
+    </a>
+    <nav aria-label="主导航">
+      <a href="{{ '/' | relative_url }}#connections">连接方式</a>
+      <a href="{{ '/privacy/' | relative_url }}" {% if page.url == '/privacy/' %}aria-current="page"{% endif %}>隐私政策</a>
+      <a class="nav-source" href="{{ site.repository_url }}">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+  <main id="main">{{ content }}</main>
+  <footer class="site-footer wrap">
+    <div><a class="footer-name" href="{{ '/' | relative_url }}">DawnMesh / 曙光之声</a><p>越过地平线，让声音相遇。</p></div>
+    <div class="footer-links"><a href="{{ '/privacy/' | relative_url }}">隐私政策</a><a href="mailto:{{ site.contact_email | escape }}">联系我们</a><a href="{{ site.repository_url }}">开源项目 ↗</a></div>
+    <p class="copyright">© {{ site.time | date: '%Y' }} {{ site.developer | escape }} · Apache-2.0</p>
+  </footer>
+</body>
+</html>

@@ -8,6 +8,8 @@
 
 [Android](https://github.com/TimeLordFang/DawnMesh) · [iOS](https://github.com/TimeLordFang/DawnMeshIOS) · [服务端与网页](https://github.com/TimeLordFang/DawnMeshServer)
 
+[应用主页](https://timelordfang.github.io/DawnMesh/) · [隐私政策](https://timelordfang.github.io/DawnMesh/privacy/) · [网站编辑与发布](website/README.md)
+
 DawnMesh（曙光之声）是一款面向附近同伴与远程小组的语音对讲应用。没有互联网时，可以通过 Wi-Fi、热点或蓝牙进行本地通话和聊天；需要跨网络交流时，连接自己部署的服务端即可使用公网房或融合中继。
 
 支持按住对讲、自动发言、文字与图片、降噪、房主管理和有界断线恢复。语音留言与离线密封转交默认关闭；Wi-Fi Aware 是需要设备、系统、配对和签名能力的可选加速。近场参与者应使用兼容的同一代客户端。

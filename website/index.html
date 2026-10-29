@@ -1,0 +1,28 @@
+---
+layout: default
+---
+{% assign home = site.data.home %}
+<section class="hero wrap" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <p class="eyebrow">{{ home.eyebrow | escape }}</p>
+    <h1 id="hero-title">{{ home.headline | escape }}<br><span>{{ home.headline_accent | escape }}</span></h1>
+    <p class="hero-intro">{{ home.intro | escape }}</p>
+    <div class="hero-actions"><a class="button primary" href="{{ site.download_url }}">{{ home.download_label | escape }} <span aria-hidden="true">↓</span></a><a class="text-link" href="#connections">了解连接方式 <span aria-hidden="true">↘</span></a></div>
+    <p class="download-note">{{ home.download_note | escape }}</p>
+  </div>
+  <figure class="dawn-scene" aria-label="曙光下，以声波相连的同伴。品牌概念插画。">
+    <div class="scene-grain"></div><div class="scene-orbit orbit-one"></div><div class="scene-orbit orbit-two"></div>
+    <div class="sun"></div><div class="ridge ridge-back"></div><div class="ridge ridge-front"></div>
+    <div class="signal-mark"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <span class="scene-label">A LITTLE CLOSER, BY VOICE.</span>
+    <figcaption><span class="signal-dot"></span> 声音，在这里相遇 <span aria-hidden="true">↗</span></figcaption>
+  </figure>
+</section>
+<div class="intro-strip"><div class="wrap"><span>附近直连</span><span class="strip-plus">＋</span><span>自部署远程</span><span class="strip-plus">＋</span><span>开源可查看</span><a href="{{ '/privacy/' | relative_url }}">了解数据如何处理 ↗</a></div></div>
+<section class="connections wrap section" id="connections" aria-labelledby="connections-title">
+  <div class="section-heading"><p class="eyebrow">01 / 保持连接</p><h2 id="connections-title">{{ home.story_title | escape }}</h2><p>{{ home.story_intro | escape }}</p></div>
+  <div class="mode-list">{% for mode in home.modes %}<article class="mode"><div class="mode-index"><span>{{ mode.number }}</span><small>{{ mode.label }}</small></div><div><h3>{{ mode.title | escape }}</h3><p>{{ mode.body | escape }}</p><span class="mode-note">{{ mode.note | escape }}</span></div><span class="mode-arrow" aria-hidden="true">↗</span></article>{% endfor %}</div>
+</section>
+<section class="details-band"><div class="wrap section"><p class="eyebrow">02 / 自然交流</p><h2>专注于你想说的话。</h2><div class="features">{% for feature in home.features %}<article><span class="feature-line" aria-hidden="true"></span><h3>{{ feature.title | escape }}</h3><p>{{ feature.body | escape }}</p></article>{% endfor %}</div><a class="text-link" href="{{ '/privacy/' | relative_url }}">阅读完整隐私政策 <span aria-hidden="true">↗</span></a></div></section>
+<section class="faq wrap section" aria-labelledby="faq-title"><div><p class="eyebrow">03 / 出发之前</p><h2 id="faq-title">你可能想了解。</h2><a class="text-link" href="{{ site.server_url }}">服务端部署说明 ↗</a></div><div class="faq-list">{% for item in home.faq %}<details><summary>{{ item.question | escape }}<span aria-hidden="true">＋</span></summary><p>{{ item.answer | escape }}</p></details>{% endfor %}</div></section>
+<section class="closing wrap"><p class="eyebrow">STAY WITHIN VOICE.</p><h2>{{ home.closing | escape }}</h2><a class="button primary" href="{{ site.download_url }}">下载 Android 版 <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/TimeLordFang/DawnMeshIOS">查看 iOS 项目 ↗</a></section>

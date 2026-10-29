@@ -43,6 +43,14 @@ class _AboutPageState extends State<AboutPage> {
     );
   }
 
+  Future<void> _openPrivacyPolicy() async {
+    final opened = await ExternalLinkLauncher.openPrivacyPolicy();
+    if (!mounted || opened) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppStrings.of(context).openPrivacyPolicyFailed)),
+    );
+  }
+
   void _showDiagnostics() {
     final s = AppStrings.of(context);
     final report = DiagnosticReport.create(
@@ -329,6 +337,22 @@ class _AboutPageState extends State<AboutPage> {
                     ),
 
                     const SizedBox(height: 24),
+
+                    OutlinedButton.icon(
+                      onPressed: _openPrivacyPolicy,
+                      icon: const Icon(Icons.privacy_tip_outlined, size: 18),
+                      label: Text(s.privacyPolicyLink),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textPrimary,
+                        side: BorderSide(color: borderColor),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
 
                     // Export Diagnostics Button
                     OutlinedButton.icon(

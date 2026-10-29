@@ -81,11 +81,12 @@ class MainActivity : FlutterActivity() {
                 }
                 val rawUrl = call.argument<String>("url")
                 val uri = rawUrl?.let(Uri::parse)
-                val valid = uri != null && uri.scheme == "https" &&
+                val isRelease = uri != null && uri.scheme == "https" &&
                     uri.host.equals("github.com", ignoreCase = true) &&
                     uri.path.orEmpty().startsWith("/TimeLordFang/DawnMesh/releases")
-                if (!valid) {
-                    result.error("INVALID_URL", "只允许打开 DawnMesh GitHub Releases", null)
+                val isPrivacyPolicy = rawUrl == "https://timelordfang.github.io/DawnMesh/privacy/"
+                if (!isRelease && !isPrivacyPolicy) {
+                    result.error("INVALID_URL", "只允许打开 DawnMesh 发布页或隐私政策", null)
                     return@setMethodCallHandler
                 }
                 try {

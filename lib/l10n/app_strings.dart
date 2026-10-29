@@ -268,9 +268,13 @@ class AppStrings {
       ? 'Apache License 2.0\nDawnMesh is based on its original upstream project, under Apache License 2.0.\nhttps://www.apache.org/licenses/LICENSE-2.0'
       : 'Apache License 2.0\n曙光之声基于原始上游项目开发，采用 Apache License 2.0 开源许可证。\nhttps://www.apache.org/licenses/LICENSE-2.0';
   String get privacyTitle => isEn ? 'Messages & privacy' : '关于消息与隐私';
+  String get privacyPolicyLink => isEn ? 'Privacy policy' : '隐私政策';
+  String get openPrivacyPolicyFailed => isEn
+      ? 'Could not open the privacy policy. Please try again in your browser.'
+      : '无法打开隐私政策，请在浏览器中重试。';
   String get privacyBody => isEn
-      ? 'Room voice and messages use nearby devices or your selected server, depending on the room. Ordinary room chat and opt-in PTT voice notes are held in memory and cleared when you leave.\nOffline forwarding is separate and off by default. Enabling it saves encrypted messages and contacts on your device for up to 24 hours; messages are encrypted for the recipient, while carriers can see routing identities and expiry. Turning it off stops exchange; Clear deletes local data. Recall cannot erase already-read content or uncooperative copies.\nPersistent identity keys use device secure storage. Checking for updates connects to GitHub.'
-      : '房间语音和消息按房型通过附近设备或你选择的服务器传输。普通聊天和主动保留的按键语音留言暂存在内存，离开房间后清除。\n离线转交是独立功能，默认关闭。开启后在本机保存加密消息与联系人，消息最长保留 24 小时；正文密封给收件人，转交者可见路由身份和到期时间。关闭会停止交换；“清空”另行删除本机数据。撤回无法抹去已读内容或不合作的副本。\n持久身份密钥保存在设备安全存储。检查更新时连接 GitHub。';
+      ? 'Room voice and messages use nearby devices or your selected server, depending on the room. Ordinary room chat and opt-in PTT voice notes are held in memory and cleared when you leave.\nOffline forwarding is separate and off by default. Enabling it saves encrypted messages and contacts on your device. Messages expire within 24 hours and are purged when the app next runs or exchanges data; contacts remain until deleted. Messages are encrypted for the recipient, while carriers can see routing identities and expiry. Turning it off stops exchange; Clear deletes local data. Recall cannot erase already-read content or uncooperative copies.\nPersistent identity keys use device secure storage. Checking for updates connects to GitHub.'
+      : '房间语音和消息按房型通过附近设备或你选择的服务器传输。普通聊天和主动保留的按键语音留言暂存在内存，离开房间后清除。\n离线转交是独立功能，默认关闭。开启后在本机保存加密消息与联系人；消息最长有效 24 小时，在应用下次运行或交换时清理，联系人保留至主动删除。正文密封给收件人，转交者可见路由身份和到期时间。关闭会停止交换；“清空”另行删除本机数据。撤回无法抹去已读内容或不合作的副本。\n持久身份密钥保存在设备安全存储。检查更新时连接 GitHub。';
 
   // Theme
   String themeDescription(String current) =>

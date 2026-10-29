@@ -1,0 +1,18 @@
+---
+layout: default
+---
+<div class="policy-heading wrap">
+  <a class="back-link" href="{{ '/' | relative_url }}">← 返回应用主页</a>
+  <p class="eyebrow">DAWNMESH / PRIVACY</p>
+  <h1>{{ page.title | escape }}</h1>
+  <p>{{ page.description | escape }}</p>
+  <p class="policy-date">生效及更新日期：{{ page.updated | escape }} · 适用于 DawnMesh Android</p>
+</div>
+<div class="policy-grid wrap">
+  <aside class="policy-aside" aria-label="政策目录">
+    <p>本页内容</p>
+    <a href="#scope">适用范围与联系</a><a href="#data">数据与用途</a><a href="#permissions">设备权限</a><a href="#sharing">数据分享对象</a><a href="#retention">保留与删除</a><a href="#security">安全与选择</a><a href="#website">网站与政策更新</a>
+    <a class="contact-link" href="mailto:{{ site.contact_email | escape }}">联系隐私负责人 ↗</a>
+  </aside>
+  <article class="policy-content">{{ content }}</article>
+</div>

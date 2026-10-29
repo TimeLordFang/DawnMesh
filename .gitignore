@@ -45,3 +45,11 @@ artifacts/
 
 # Local Python tooling caches
 __pycache__/
+
+# Local website previews and Ruby dependencies
+website/_site/
+website/.jekyll-cache/
+website/.jekyll-metadata
+website/.bundle/
+website/vendor/
+website/Gemfile.lock

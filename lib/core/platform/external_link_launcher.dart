@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 class ExternalLinkLauncher {
   ExternalLinkLauncher._();
 
+  static const privacyPolicyUrl =
+      'https://timelordfang.github.io/DawnMesh/privacy/';
+
   static const MethodChannel _channel = MethodChannel(
     'dev.dawnmesh.intercom/external_links',
   );
@@ -15,9 +18,15 @@ class ExternalLinkLauncher {
         !uri.path.startsWith('/TimeLordFang/DawnMesh/releases')) {
       return false;
     }
+    return _open(uri.toString());
+  }
+
+  static Future<bool> openPrivacyPolicy() => _open(privacyPolicyUrl);
+
+  static Future<bool> _open(String url) async {
     try {
       return await _channel.invokeMethod<bool>('openUrl', <String, String>{
-            'url': uri.toString(),
+            'url': url,
           }) ??
           false;
     } on PlatformException {
