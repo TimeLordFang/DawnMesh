@@ -29,6 +29,8 @@
 
 以上为预期地址；只有部署成功并实际访问正常后，才能填写 Google Play。不要提交仓库源文件地址、编辑链接、README 或 PDF 地址。GitHub Pages 无法保证任何运营商和地区的网络可达性，发布后还需从目标地区检查。
 
+地址中的 `timelordfang` 是 GitHub 账号名，`DawnMesh` 是当前项目名，符合 Pages 的默认 `https://账号名.github.io/项目名/` 格式。2026-10-29 检查时，账号默认 Pages 地址还会继承旧自定义域名并跳转到 `http://www.timelord.info/DawnMesh/privacy/`，当时返回 404；仓库尚未启用 Pages，首次工作流在 Configure Pages 步骤失败。启用后需再次核实最终网址、证书及 HTTPS 跳转。根据 [GitHub 官方说明](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/about-custom-domains-and-github-pages)，账号主页的自定义域名会由项目站点继承；若不想继承，需要调整账号主页绑定，或为本项目配置另一个你拥有的自定义域名。修改账号主页域名会影响其他项目，不应为发布此站点直接改动。
+
 后续可以直接在 GitHub 打开上述文件，点击编辑按钮，保存到 `main`，网站便会自动更新。更换仓库、域名时，修改 `_config.yml` 的 `url` 和 `baseurl`，并同步 Android 中的隐私政策固定地址。
 
 ## 本地预览
