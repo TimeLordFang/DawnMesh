@@ -29,7 +29,7 @@ jobs:
           source: ./website
           destination: ./_site
       - name: Upload website
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./_site
   deploy:
