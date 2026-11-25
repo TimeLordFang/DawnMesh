@@ -24,7 +24,7 @@ dependencies:
   connectivity_plus: ^7.3.2
   flutter_secure_storage: ^11.2.0
   image_picker: ^1.2.4
-  gal: ^2.3.3
+  gal: ^3.0.1
 
 dev_dependencies:
   flutter_test:
